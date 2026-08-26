@@ -1,0 +1,42 @@
+name: Sync Hostinger to GitHub
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install sshpass
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Download index.html from Hostinger
+        env:
+          HOST: ${{ secrets.HOSTINGER_HOST }}
+          USER: ${{ secrets.HOSTINGER_USER }}
+          PASSWORD: ${{ secrets.HOSTINGER_PASSWORD }}
+        run: |
+          sshpass -p "$PASSWORD" scp \
+            -o StrictHostKeyChecking=no \
+            -P 65002 \
+            "$USER@$HOST:/home/$USER/domains/waylynq.com/public_html/index.html" \
+            ./index.html
+
+      - name: Commit changes
+        run: |
+          git config user.name "WayLynq Auto Sync"
+          git config user.email "actions@github.com"
+          git add index.html
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto-sync Hostinger index.html"
+            git push
+          fi
