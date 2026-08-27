@@ -21,7 +21,8 @@
      numerals only, where narrower digits mean physically larger figures in
      the same width; everywhere else this is the ordinary platform UI font. */
   --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-ui: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-num: "Roboto Mono", "Roboto", ui-monospace, "SF Mono", Menlo, monospace;
   --font-semi: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --bg: #06121a;
   --surface: rgba(13,31,41,.92);
@@ -1455,7 +1456,7 @@ body.navigating #musicDock { bottom:250px; }
   --sh-lg:0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
   /* The stack most of the web already uses: no download, renders
      natively on every platform, and reads as ordinary rather than trendy. */
-  --f:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --f:"Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
 
   position:fixed; inset:0; z-index:9000; overflow-y:auto; display:none;
   background:var(--p-tint); color:var(--body);
@@ -3508,6 +3509,293 @@ body.fly-open { overflow:hidden; }
   .si-ava { width:40px; height:40px; font-size:.94rem; }
   .si-tile { padding:12px 14px; }
 }
+
+/* ======================================================================
+   THE DRIVING VIEW, REBUILT
+
+   The card was carrying six stacked rows for a single turn: the turn, the
+   road being driven, the next two turns, a traffic bar, a trip line and a
+   destination line. Five of those answer questions nobody asks while
+   actually driving, and together they took a third of the screen.
+
+   One instruction. Lanes when they matter. Everything else is one tap
+   away in the trip sheet, which the card already opens.
+   ====================================================================== */
+#navMode {
+  --nv-ink:#0d1520;              /* card body */
+  --nv-ink-2:#16202e;            /* lane strip */
+  --nv-line:rgba(255,255,255,.10);
+  --nv-text:#ffffff;
+  --nv-dim:rgba(255,255,255,.62);
+  --nv-accent:#4d9bff;
+  --nv-go:#34c759;
+  --nv-pad:16px;
+  --nv-r:18px;
+}
+#navMode, #navMode button, #navMode input, #navMode select { font-family:var(--font-ui); }
+#navMode .num, #navMode #turnDistance, #navMode .nb-stat b { font-family:var(--font-num); font-variant-numeric:tabular-nums; }
+
+/* ---------------- the instruction ---------------- */
+#navTop { top:14px; left:14px; width:auto; max-width:min(34vw, 360px); }
+.nav-card {
+  background:var(--nv-ink) !important;
+  border:none !important;
+  border-radius:var(--nv-r) !important;
+  box-shadow:0 8px 30px rgba(0,0,0,.34) !important;
+  backdrop-filter:none !important;
+  overflow:hidden;
+}
+.nav-card:hover { border:none !important; }
+
+.nav-card-main {
+  display:flex; align-items:center; gap:14px;
+  padding:15px var(--nv-pad);
+}
+#turnArrow {
+  flex-shrink:0; width:40px; height:40px; display:grid; place-items:center;
+  color:var(--nv-accent); font-size:1.9rem; line-height:1;
+}
+#turnArrow .wl-arrow { width:38px; height:38px; }
+.turn-text { flex:1; min-width:0; }
+.turn-dist-row { display:flex; align-items:baseline; gap:9px; }
+#turnDistance {
+  font-size:2.1rem; font-weight:500; letter-spacing:-.02em; line-height:1.05;
+  color:var(--nv-text) !important;
+}
+#turnStreet {
+  margin-top:3px; font-size:1.06rem; font-weight:400; line-height:1.3;
+  color:var(--nv-dim) !important; display:-webkit-box; -webkit-line-clamp:2;
+  -webkit-box-orient:vertical; overflow:hidden;
+}
+#turnStreet b { color:var(--nv-text) !important; font-weight:500; }
+#turnSigns {
+  margin-top:4px; font-size:.84rem; color:rgba(255,255,255,.48);
+  border-left:none; padding-left:0; -webkit-line-clamp:1;
+}
+.exit-badge.inline {
+  background:var(--nv-go); color:#04140a; border:none;
+  padding:3px 9px; font-size:.9rem; font-weight:700; border-radius:6px;
+  font-family:var(--font-num);
+}
+.exit-badge.inline small { display:none; }
+.turn-shield svg { height:28px !important; }
+
+/* the five rows that were competing with the instruction */
+#roadRow, #nextList, #trafficAhead, #tripLine, #destRow { display:none !important; }
+
+/* ---------------- lanes, attached to the card ---------------- */
+#laneBar {
+  margin:0; background:var(--nv-ink-2); border:none;
+  border-top:1px solid var(--nv-line);
+  border-radius:0 0 var(--nv-r) var(--nv-r);
+  padding:11px var(--nv-pad); box-shadow:0 8px 30px rgba(0,0,0,.34);
+  display:flex; gap:15px; align-items:center; justify-content:flex-start;
+}
+#laneBar.hidden { display:none; }
+#navTop:has(#laneBar:not(.hidden)) .nav-card { border-radius:var(--nv-r) var(--nv-r) 0 0 !important; }
+.lane { font-size:1.3rem; line-height:1; color:rgba(255,255,255,.3); min-width:18px; text-align:center; }
+.lane.use { color:var(--nv-text); }
+
+/* ---------------- "then" ---------------- */
+#thenRow {
+  margin:8px 0 0; background:rgba(13,21,32,.92); border:none;
+  border-radius:13px; padding:9px 14px; font-size:.92rem;
+  color:var(--nv-dim); box-shadow:0 6px 20px rgba(0,0,0,.28);
+  backdrop-filter:blur(10px);
+  display:flex; align-items:center; gap:9px;
+  max-width:100%; overflow:hidden;
+}
+#thenRow.hidden { display:none; }
+#thenRow b { color:var(--nv-text); font-weight:500; }
+#thenRow .then-ico { flex-shrink:0; color:var(--nv-accent); display:grid; place-items:center; }
+#thenRow .then-ico .wl-arrow { width:18px; height:18px; }
+
+/* ---------------- the foot bar ---------------- */
+#navBar {
+  background:rgba(13,21,32,.94) !important;
+  border:none !important; border-radius:var(--nv-r) var(--nv-r) 0 0;
+  box-shadow:0 -4px 24px rgba(0,0,0,.3);
+  padding:12px 18px calc(12px + env(safe-area-inset-bottom));
+  gap:14px; align-items:center; backdrop-filter:blur(14px);
+}
+body.light-mode #navBar { background:rgba(255,255,255,.96) !important; }
+#navStats { display:flex; align-items:center; justify-content:center; gap:0; flex:1; }
+.nb-stat { flex:0 0 auto; padding:0 20px; gap:1px; text-align:center; }
+.nb-stat b { font-size:1.32rem; font-weight:500; color:var(--nv-text); letter-spacing:-.01em; line-height:1.15; }
+body.light-mode .nb-stat b { color:#111; }
+.nb-stat span {
+  font-size:.74rem; font-weight:400; letter-spacing:0; text-transform:none;
+  color:rgba(255,255,255,.5);
+}
+body.light-mode .nb-stat span { color:#5f6368; }
+/* the drive time is the number a driver watches */
+#navStats .nb-stat.nb-wide b { color:var(--nv-go); }
+body.light-mode #navStats .nb-stat.nb-wide b { color:#137333; }
+/* next exit already sits on the instruction card as a badge */
+#navStats .nb-stat.nb-opt, #navStats .nb-sep.nb-opt { display:none !important; }
+.nb-sep { width:1px; height:26px; background:var(--nv-line); margin:0; }
+body.light-mode .nb-sep { background:rgba(0,0,0,.1); }
+.bar-btn {
+  width:42px; height:42px; border-radius:12px; font-size:1rem;
+  background:rgba(255,255,255,.07); border:none; color:var(--nv-dim);
+}
+body.light-mode .bar-btn { background:rgba(0,0,0,.05); color:#3c4043; }
+.bar-btn:hover { background:rgba(255,255,255,.14); color:var(--nv-text); }
+
+#barToggle {
+  background:rgba(13,21,32,.92); color:var(--nv-dim); border:none;
+  border-radius:12px; height:28px; padding:0 13px; font-size:.78rem; font-weight:500;
+  box-shadow:0 4px 14px rgba(0,0,0,.28); backdrop-filter:blur(10px);
+}
+body.light-mode #barToggle { background:rgba(255,255,255,.95); color:#3c4043; }
+
+/* ---------------- the aerial preview, no longer clipped ---------------- */
+#turnPreview {
+  right:16px !important; left:auto !important;
+  width:min(19vw, 156px) !important;
+  border-radius:14px; overflow:hidden; border:1px solid var(--nv-line);
+  box-shadow:0 8px 26px rgba(0,0,0,.34);
+}
+#turnPreviewImg { height:88px; }
+#turnPreviewCap {
+  padding:7px 10px; font-size:.78rem; font-weight:500; background:rgba(13,21,32,.94);
+  color:var(--nv-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+#turnPreviewCap .tp-sat { display:none; }   /* the whole tile is the control */
+
+/* ---------------- the round controls ---------------- */
+.fab, #navCompass, .nav-btn {
+  background:rgba(13,21,32,.92) !important; color:var(--nv-text) !important;
+  border:none !important; box-shadow:0 4px 16px rgba(0,0,0,.3) !important;
+  border-radius:14px !important;
+}
+body.light-mode .fab, body.light-mode #navCompass, body.light-mode .nav-btn {
+  background:rgba(255,255,255,.95) !important; color:#202124 !important;
+}
+#recenterFab { background:var(--nv-accent) !important; color:#04121f !important; font-weight:500; }
+
+/* ---------------- speed ---------------- */
+.speed-dial {
+  background:rgba(13,21,32,.92); border:none; box-shadow:0 4px 16px rgba(0,0,0,.3);
+}
+body.light-mode .speed-dial { background:rgba(255,255,255,.95); }
+.speed-dial b { font-family:var(--font-num); font-weight:500; color:var(--nv-text); }
+body.light-mode .speed-dial b { color:#111; }
+.speed-dial small { color:var(--nv-dim); font-weight:400; }
+body.light-mode .speed-dial small { color:#5f6368; }
+
+@media (max-width: 1024px) { #navTop { max-width:min(42vw, 320px); } }
+@media (max-width: 760px) {
+  #navMode { --nv-pad:13px; --nv-r:16px; }
+  #navTop { max-width:calc(100vw - 110px); left:12px; top:12px; }
+  #turnDistance { font-size:1.7rem; }
+  #turnArrow { width:34px; height:34px; font-size:1.6rem; }
+  #turnArrow .wl-arrow { width:32px; height:32px; }
+  #turnStreet { font-size:.98rem; }
+  .nb-stat { padding:0 13px; }
+  .nb-stat b { font-size:1.14rem; }
+  .nb-stat span { font-size:.68rem; }
+  #turnPreview { display:none; }
+}
+@media (max-height: 620px) {
+  #navTop { max-width:min(38vw, 300px); }
+  #turnDistance { font-size:1.6rem; }
+  .nav-card-main { padding:12px var(--nv-pad); }
+}
+
+/* The card opens the full trip. With the trip line gone it needs to say so,
+   quietly, rather than leaving the affordance invisible. */
+.nav-card { position:relative; cursor:pointer; }
+.nav-card::after {
+  content:'\203A'; position:absolute; right:13px; top:50%; margin-top:-13px;
+  font-size:1.4rem; line-height:1; color:rgba(255,255,255,.28);
+  transition:color .15s ease, transform .15s ease;
+}
+#navTop:has(#laneBar:not(.hidden)) .nav-card::after { top:34%; }
+.nav-card:hover::after { color:rgba(255,255,255,.62); transform:translateX(2px); }
+.nav-card-main { padding-right:34px; }
+
+/* ======================================================================
+   THINGS TO DO — cards, not a list
+   ====================================================================== */
+.td-chips { display:flex; gap:7px; overflow-x:auto; padding:0 var(--edge) 12px; scrollbar-width:none; }
+.td-chips::-webkit-scrollbar { display:none; }
+.td-chip {
+  flex:0 0 auto; height:34px; padding:0 13px; border-radius:var(--rad-sm); cursor:pointer;
+  border:1px solid var(--line-soft); background:transparent; color:var(--text);
+  font-family:var(--font-ui); font-size:.86rem; font-weight:500; white-space:nowrap;
+  transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+.td-chip:hover { border-color:var(--line); background:var(--field-bg); }
+.td-chip.on { background:rgba(var(--signal-rgb),.12); border-color:var(--signal); color:var(--signal); font-weight:700; }
+
+.td-grid {
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
+  gap:10px; padding:0 var(--edge) 12px;
+}
+.td-card {
+  display:flex; flex-direction:column; border-radius:var(--rad); overflow:hidden;
+  border:1px solid var(--line-soft); background:var(--surface-solid);
+  text-decoration:none; color:inherit;
+  transition:border-color .15s ease, transform .12s ease;
+}
+.td-card:hover { border-color:var(--signal); transform:translateY(-2px); }
+.td-shot {
+  display:block; height:96px; background:var(--field-bg) center/cover no-repeat;
+  position:relative; flex-shrink:0;
+}
+.td-shot-ph {
+  position:absolute; inset:0; display:grid; place-items:center; font-size:1.7rem; opacity:.4;
+}
+.td-body { display:flex; flex-direction:column; gap:3px; padding:10px 11px 11px; flex:1; min-width:0; }
+.td-body b {
+  font-size:.9rem; font-weight:600; line-height:1.3; color:var(--text-bright);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+}
+.td-meta { font-size:.76rem; color:var(--text-faint); }
+.td-foot { display:flex; align-items:baseline; justify-content:space-between; gap:6px; margin-top:auto; padding-top:6px; }
+.td-price { font-size:.88rem; font-weight:700; color:var(--text-bright); }
+.td-price.none { font-size:.74rem; font-weight:400; color:var(--text-faint); }
+.td-src { font-size:.72rem; color:var(--signal); font-weight:600; white-space:nowrap; }
+.td-load { display:flex; align-items:center; gap:8px; padding:16px var(--edge) 20px; font-size:.9rem; color:var(--text-dim); }
+.td-load .rd-dot { width:6px; height:6px; border-radius:50%; background:var(--signal); animation:rdBlink 1s ease-in-out infinite; }
+.td-load .rd-dot:nth-child(2){ animation-delay:.15s } .td-load .rd-dot:nth-child(3){ animation-delay:.3s }
+.td-empty { padding:14px var(--edge) 18px; font-size:.9rem; color:var(--text-dim); line-height:1.55; }
+.td-note { padding:0 var(--edge) 18px; font-size:.76rem; color:var(--text-faint); line-height:1.6; }
+
+/* ======================================================================
+   THE TURN ICONS IN THE TRIP LIST
+   They were bright blue filled tiles competing with the text beside them.
+   A turn is a direction, not a badge - flat glyph, no chrome.
+   ====================================================================== */
+.ts-ico, .nl-ico {
+  background:transparent !important; border:none !important; box-shadow:none !important;
+  color:var(--text-dim) !important; border-radius:0 !important;
+  display:grid; place-items:center;
+}
+.ts-row.now .ts-ico { color:var(--signal) !important; }
+.ts-ico .wl-arrow, .nl-ico .wl-arrow { width:26px; height:26px; }
+.ts-row { border-bottom:1px solid var(--line-soft); }
+.ts-row.now { background:rgba(var(--signal-rgb),.07); }
+.ts-dist { font-family:var(--font-num); font-weight:500; letter-spacing:-.01em; }
+.ts-instr b { font-weight:600; }
+
+/* ======================================================================
+   THE FOURTH STAT, AND AN EVENLY SPACED BAR
+   Three stats left a hole across the middle of the bar. Traffic fills it
+   and is worth watching anyway.
+   ====================================================================== */
+#navStats { justify-content:space-evenly !important; }
+.nb-stat { padding:0 12px !important; }
+.nb-traffic-val { font-size:1.32rem; font-weight:500; letter-spacing:-.01em; line-height:1.15; }
+.nb-traffic-val.good { color:#34c759; }
+.nb-traffic-val.warn { color:#ffb020; }
+.nb-traffic-val.bad  { color:#ff4d4d; }
+body.light-mode .nb-traffic-val.good { color:#137333; }
+body.light-mode .nb-traffic-val.warn { color:#b06000; }
+body.light-mode .nb-traffic-val.bad  { color:#c5221f; }
+@media (max-width: 900px) { .nb-stat.nb-traffic, #navStats .nb-sep:last-of-type { display:none; } }
+@media (max-width: 420px) { .td-grid { grid-template-columns:1fr 1fr; gap:8px; } .td-shot { height:80px; } }
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;700&display=swap" />
 </head>
@@ -4376,6 +4664,8 @@ body.fly-open { overflow:hidden; }
       <div class="nb-stat"><b id="remainMi" class="num">--</b><span>Miles left</span></div>
       <span class="nb-sep"></span>
       <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Drive time</span></div>
+      <span class="nb-sep"></span>
+      <div class="nb-stat nb-traffic"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
       <span class="nb-sep nb-opt"></span>
       <div class="nb-stat nb-opt"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
       <span class="nb-sep nb-opt" id="dwellSep" style="display:none"></span>
@@ -8217,6 +8507,7 @@ window.onSpotifyIframeApiReady = function (api) {
     navSafe('progress', () => updateProgressBar(tripOdometer + traveledMeters, tripPlannedMeters || totalMeters));
     navSafe('delta', () => updateDelta(remainDur));
     navSafe('limitSay', () => announceLimitChange());
+    navSafe('trafficStat', () => updateTrafficStat());
     renderProgressSplit(trustForProgress ? navDistAlong : proj.distAlong);
   }
 
@@ -9419,7 +9710,7 @@ window.onSpotifyIframeApiReady = function (api) {
         '</span></div>';
     });
 
-    html += nightPanelHtml() + elevationStripHtml() + '<div class="tp-section-head">Road ahead</div>' + roadAheadHtml(active) +
+    html += nightPanelHtml() + elevationStripHtml() + todoHtml() + '<div class="tp-section-head">Road ahead</div>' + roadAheadHtml(active) +
       '<div class="pc-src" style="padding:0 20px 20px">' + (trafficLive ? 'Traffic is live.' : 'No traffic connected, so times assume normal conditions.') + ' Tolls, ferries and places come from OpenStreetMap contributors.</div>';
     scroll.innerHTML = html;
 
@@ -9447,6 +9738,11 @@ window.onSpotifyIframeApiReady = function (api) {
       map.fitBounds(line.getBounds(), { paddingTopLeft: [leftPad, 80], paddingBottomRight: [70, 130] });
     }));
     scroll.querySelectorAll('[data-sdel]').forEach((el) => el.addEventListener('click', () => removeStop(parseInt(el.dataset.sdel, 10))));
+    scroll.querySelectorAll('[data-todo]').forEach((el) => el.addEventListener('click', () => {
+      if (todoCat === el.dataset.todo) return;
+      todoCat = el.dataset.todo; todoFor = '';
+      renderTripPanel();
+    }));
     scroll.querySelectorAll('[data-sug]').forEach((el) => el.addEventListener('click', () => {
       const p = suggestedStops[parseInt(el.dataset.sug, 10)];
       showPlaceCard({ lat: p.lat, lng: p.lng, name: p.tags.name || 'Point of interest', label: titleCase(p.tags.tourism || 'attraction'), category: p.tags.tourism || 'attraction', tags: p.tags, source: 'osm' });
@@ -11184,14 +11480,22 @@ window.onSpotifyIframeApiReady = function (api) {
 
     // traffic across the road still to come, from the same segments the
     // map paints with
+    /* A segment whose level is anything other than these three used to
+       create a fourth key on the tally object. `seen` grew, the three real
+       counters stayed at zero, and the panel reported "Clear for the next
+       0 ft" with 0% across the board. Anything unclassified counts as clear,
+       and a tally that is still empty draws nothing at all. */
     let acc = 0; const tally = { clear: 0, moderate: 0, heavy: 0 }; let seen = 0;
     trafficSegments.forEach((seg) => {
       const len = segMeters(seg), start = acc; acc += len;
       if (acc < traveledMeters) return;
       const usable = Math.min(len, acc - Math.max(start, traveledMeters));
-      tally[seg.level] += usable; seen += usable;
+      if (!(usable > 0)) return;
+      const lvl = Object.prototype.hasOwnProperty.call(tally, seg.level) ? seg.level : 'clear';
+      tally[lvl] += usable; seen += usable;
     });
-    if (seen > 0) {
+    const tallied = tally.clear + tally.moderate + tally.heavy;
+    if (seen > 0 && tallied > 0) {
       const p = (v) => Math.round((v / seen) * 100);
       $('tsTraffic').innerHTML =
         '<div class="tsb">' +
@@ -11443,6 +11747,147 @@ window.onSpotifyIframeApiReady = function (api) {
       }).filter(Boolean).slice(0, 8);
       if (destPhotos.length) renderTripPanel();
     } catch (e) { /* photos are a nicety */ }
+  }
+
+
+  /* ==================================================================
+     THINGS TO DO AT THE FAR END
+     Five categories of real places near the destination, from OpenStreetMap.
+     Photographs come from Wikimedia Commons by coordinate. Links and prices
+     are whatever the place itself records - a website tag, a fee tag - and
+     nothing is filled in where the data does not exist. An invented ticket
+     price would be worse than an empty one.
+  ================================================================== */
+  const TODO_CATS = [
+    { key: 'amusement', label: 'Amusement', emoji: '\u{1F3A1}',
+      filter: '["leisure"~"^(amusement_arcade|water_park)$"]', alt: '["tourism"="theme_park"]' },
+    { key: 'themepark', label: 'Theme parks', emoji: '\u{1F3A2}',
+      filter: '["tourism"="theme_park"]' },
+    { key: 'beach', label: 'Beaches', emoji: '\u{1F3D6}\uFE0F',
+      filter: '["natural"="beach"]' },
+    { key: 'museum', label: 'Museums', emoji: '\u{1F3DB}\uFE0F',
+      filter: '["tourism"~"^(museum|gallery)$"]' },
+    { key: 'attraction', label: 'Attractions', emoji: '\u{1F5FC}',
+      filter: '["tourism"~"^(attraction|viewpoint|zoo|aquarium)$"]' }
+  ];
+  let todoCat = 'attraction', todoFor = '', todoItems = {}, todoBusy = false;
+
+  function todoPriceOf(t) {
+    if (t.fee === 'no' || t.fee === 'free') return 'Free';
+    if (t.charge) return t.charge;
+    if (t['fee:amount']) return t['fee:amount'];
+    if (t.fee === 'yes') return 'Ticketed';
+    return null;
+  }
+  function todoLinkOf(t, name, lat, lng) {
+    const w = t.website || t.url || t['contact:website'];
+    if (w) return { url: w, kind: 'site' };
+    if (t.wikipedia) {
+      const m = String(t.wikipedia).match(/^([a-z-]+):(.+)$/i);
+      const lang = m ? m[1] : 'en', title = m ? m[2] : t.wikipedia;
+      return { url: 'https://' + lang + '.wikipedia.org/wiki/' + encodeURIComponent(title.replace(/ /g, '_')), kind: 'wiki' };
+    }
+    return { url: 'https://www.google.com/maps/search/' + encodeURIComponent(name) +
+      '/@' + lat.toFixed(5) + ',' + lng.toFixed(5) + ',15z', kind: 'maps' };
+  }
+
+  async function todoLoad(cat) {
+    if (!destPlace || todoBusy) return;
+    const key = destPlace.lat.toFixed(2) + ',' + destPlace.lng.toFixed(2) + ':' + cat;
+    if (todoItems[key]) { renderTripPanel(); return; }
+    todoBusy = true;
+    try {
+      const c = TODO_CATS.find((x) => x.key === cat) || TODO_CATS[0];
+      const around = 'around:18000,' + destPlace.lat.toFixed(4) + ',' + destPlace.lng.toFixed(4);
+      const parts = [c.filter].concat(c.alt ? [c.alt] : []);
+      const body = parts.map((f) => 'nwr' + f + '["name"](' + around + ');').join('');
+      const d = await overpassFast('[out:json][timeout:20];(' + body + ');out center 40;');
+      const seen = {};
+      todoItems[key] = (d.elements || []).map((el) => {
+        const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
+        const lng = el.lon != null ? el.lon : (el.center && el.center.lon);
+        const t = el.tags || {};
+        if (!lat || !lng || !t.name || seen[t.name]) return null;
+        seen[t.name] = 1;
+        return {
+          name: t.name, lat: lat, lng: lng,
+          km: haversine(destPlace, { lat: lat, lng: lng }) / 1000,
+          price: todoPriceOf(t),
+          link: todoLinkOf(t, t.name, lat, lng),
+          kind: t.tourism || t.leisure || t.natural || 'place',
+          photo: null
+        };
+      }).filter(Boolean).sort((a, b) => a.km - b.km).slice(0, 6);
+      renderTripPanel();
+      todoPhotos(key);
+    } catch (e) {
+      todoItems[key] = [];
+      renderTripPanel();
+    } finally { todoBusy = false; }
+  }
+
+  /* One Commons lookup per place, in parallel, filled in as they land. */
+  async function todoPhotos(key) {
+    const list = todoItems[key];
+    if (!list || !list.length) return;
+    await Promise.all(list.slice(0, 6).map(async (it) => {
+      try {
+        const url = 'https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*' +
+          '&generator=geosearch&ggsnamespace=6&ggscoord=' + it.lat + '%7C' + it.lng +
+          '&ggsradius=1200&ggslimit=4&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=320';
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const d = await res.json();
+        const pages = (d.query && d.query.pages) || {};
+        const hit = Object.keys(pages).map((k) => {
+          const ii = pages[k].imageinfo && pages[k].imageinfo[0];
+          if (!ii || !ii.thumburl) return null;
+          if (ii.mime && !/^image\/(jpeg|png|webp)$/.test(ii.mime)) return null;
+          return ii.thumburl;
+        }).filter(Boolean)[0];
+        if (hit) it.photo = hit;
+      } catch (e) { /* a card without a photo still works */ }
+    }));
+    renderTripPanel();
+  }
+
+  function todoHtml() {
+    if (!destPlace) return '';
+    const where = String(destPlace.name || destPlace.label).split(',')[0];
+    const key = destPlace.lat.toFixed(2) + ',' + destPlace.lng.toFixed(2) + ':' + todoCat;
+    if (todoFor !== key) { todoFor = key; setTimeout(() => todoLoad(todoCat), 0); }
+    const list = todoItems[key];
+
+    const chips = TODO_CATS.map((c) =>
+      '<button class="td-chip' + (c.key === todoCat ? ' on' : '') + '" data-todo="' + c.key + '" type="button">' +
+      c.emoji + ' ' + esc(c.label) + '</button>').join('');
+
+    let body;
+    if (!list) {
+      body = '<div class="td-load"><span class="rd-dot"></span><span class="rd-dot"></span><span class="rd-dot"></span> Looking around ' + esc(where) + '</div>';
+    } else if (!list.length) {
+      body = '<div class="td-empty">Nothing of that kind is mapped within about 11 miles of ' + esc(where) + '.</div>';
+    } else {
+      body = '<div class="td-grid">' + list.map((it) =>
+        '<a class="td-card" href="' + esc(it.link.url) + '" target="_blank" rel="noopener">' +
+          '<span class="td-shot"' + (it.photo ? ' style="background-image:url(' + esc(it.photo) + ')"' : '') + '>' +
+            (it.photo ? '' : '<span class="td-shot-ph">' + (TODO_CATS.find((c) => c.key === todoCat) || {}).emoji + '</span>') +
+          '</span>' +
+          '<span class="td-body">' +
+            '<b>' + esc(it.name) + '</b>' +
+            '<span class="td-meta">' + it.km.toFixed(1) + ' km from ' + esc(where) + '</span>' +
+            '<span class="td-foot">' +
+              (it.price ? '<span class="td-price">' + esc(it.price) + '</span>' : '<span class="td-price none">Price not listed</span>') +
+              '<span class="td-src">' + (it.link.kind === 'site' ? 'Official site' : it.link.kind === 'wiki' ? 'Wikipedia' : 'On the map') + ' \u2197</span>' +
+            '</span>' +
+          '</span>' +
+        '</a>').join('') + '</div>';
+    }
+
+    return '<div class="tp-section-head">Things to do near ' + esc(where) + '</div>' +
+      '<div class="td-chips">' + chips + '</div>' + body +
+      '<div class="td-note">Places and any listed prices come from OpenStreetMap; photographs from Wikimedia Commons. ' +
+      'Where a price is not recorded it is left blank rather than guessed.</div>';
   }
 
   function destPreviewHtml(place) {
@@ -12985,6 +13430,39 @@ window.onSpotifyIframeApiReady = function (api) {
      TRIP PROGRESS
      A hairline across the very top that fills as the trip is driven.
   ================================================================== */
+  /* Conditions on the road still to come. With a live feed this is measured
+     from the flow segments; without one it is read off how the drive is
+     actually going against the plan, and says so. */
+  function updateTrafficStat() {
+    const v = $('navTrafficVal'), l = $('navTrafficLbl');
+    if (!v || !l) return;
+    let word = null, tone = '';
+    if (trafficLive && trafficSegments.length) {
+      const t = { clear: 0, moderate: 0, heavy: 0 }; let acc = 0, seen = 0;
+      trafficSegments.forEach((seg) => {
+        const len = segMeters(seg), start = acc; acc += len;
+        if (acc < traveledMeters) return;
+        const usable = Math.min(len, acc - Math.max(start, traveledMeters));
+        if (!(usable > 0)) return;
+        const k = Object.prototype.hasOwnProperty.call(t, seg.level) ? seg.level : 'clear';
+        t[k] += usable; seen += usable;
+      });
+      if (seen > 0) {
+        word = t.heavy > seen * 0.2 ? 'Heavy' : t.moderate > seen * 0.25 ? 'Slow' : 'Clear';
+        tone = word === 'Heavy' ? 'bad' : word === 'Slow' ? 'warn' : 'good';
+        l.textContent = 'Traffic \u00b7 live';
+      }
+    }
+    if (!word) {
+      const f = factorSmoothed || trafficMultiplier || 1;
+      word = f > 1.25 ? 'Heavy' : f > 1.08 ? 'Slow' : 'Clear';
+      tone = word === 'Heavy' ? 'bad' : word === 'Slow' ? 'warn' : 'good';
+      l.textContent = 'Traffic \u00b7 estimated';
+    }
+    v.textContent = word;
+    v.className = 'nb-traffic-val ' + tone;
+  }
+
   function updateProgressBar(done, total) {
     const el = $('navProgress');
     if (!el) return;
