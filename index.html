@@ -3856,6 +3856,127 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
 }
 .flash-go:hover { filter:brightness(1.08); }
 </style>
+<style>
+/* ======================================================================
+   LANDING — header layout, six travel modes, one-prompt AI planner.
+   Scoped to #wlShell like the rest of the shell, so none of it can
+   reach the dark map app underneath.
+   ====================================================================== */
+
+/* ---- the bar: bigger mark, everything pulled to the left ---- */
+#wlShell .top-in { max-width:1440px; padding:0 16px 0 12px; height:80px; gap:10px; }
+#wlShell .logo { gap:12px; margin-right:26px; }
+#wlShell .logo-mark { width:48px; height:48px; border-radius:14px; }
+#wlShell .logo-mark svg { width:27px; height:27px; }
+#wlShell .logo b { font-size:1.62rem; letter-spacing:-.025em; }
+#wlShell .top-nav { gap:2px; }
+#wlShell .top-nav button { padding:10px 14px; white-space:nowrap; }
+@media (min-width:1001px) { #wlShell .top-nav { margin:0 auto 0 0; } }
+
+/* the taller bar carries the mobile dropdown down with it */
+@media (max-width:1000px) { #wlShell .top-nav { top:80px; } }
+@media (max-width:620px)  { #wlShell .top-nav { top:70px; } }
+
+/* the menu item that is not here yet */
+#wlShell .top-nav button.soon {
+  display:inline-flex; align-items:center; gap:8px;
+  color:var(--faint); cursor:default; opacity:.9;
+}
+#wlShell .top-nav button.soon:hover { background:none; color:var(--faint); }
+#wlShell .top-nav button.soon em {
+  font-style:normal; font-size:.66rem; font-weight:700; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--p); background:var(--p-soft);
+  padding:3px 8px; border-radius:999px;
+}
+#wlShell .foot-soon { color:#64748b; font-size:.96rem; }
+
+/* ---- six travel modes ---- */
+#wlShell .gmodes { grid-template-columns:repeat(6,1fr); }
+@media (max-width:1200px) { #wlShell .gmodes { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:620px)  { #wlShell .gmodes { grid-template-columns:repeat(2,1fr); } }
+#wlShell .gmodes .tile { padding:24px 14px; }
+
+/* ---- one-prompt AI planner ---- */
+#wlShell .soon-pill {
+  display:inline-block; margin-bottom:14px; padding:7px 15px; border-radius:999px;
+  background:var(--p-soft); color:var(--p-dark);
+  font-size:.78rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+}
+#wlShell .ai-demo {
+  max-width:760px; margin:0 auto; background:#fff; border:1px solid var(--line);
+  border-radius:var(--r-xl); padding:18px; box-shadow:var(--sh);
+}
+#wlShell .ai-demo-bar {
+  display:flex; align-items:center; gap:12px; padding:14px 15px;
+  border:1px solid var(--line-2); border-radius:var(--r-lg); background:var(--p-tint);
+}
+#wlShell .ai-demo-ico { color:var(--p); font-size:1.15rem; flex-shrink:0; }
+#wlShell .ai-demo-txt { flex:1; min-width:0; color:var(--ink); font-size:1rem; }
+#wlShell .ai-demo-go {
+  flex-shrink:0; background:var(--p); color:#fff; font-weight:700; font-size:.9rem;
+  padding:9px 16px; border-radius:var(--r);
+}
+#wlShell .ai-demo-out { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:11px; }
+#wlShell .ai-demo-out li {
+  display:flex; gap:11px; align-items:baseline; text-align:left;
+  font-size:.98rem; color:var(--body); line-height:1.5;
+}
+#wlShell .ai-demo-out li > b:first-child { color:var(--ok); flex-shrink:0; }
+#wlShell .ai-demo-out li b { color:var(--ink); font-weight:700; }
+/* ---- spacing ---- */
+
+/* the hero fills exactly what is left under the taller bar. It was still
+   subtracting the old 74px, which left a few pixels of stray scroll. */
+#wlShell .hero { min-height:calc(100vh - 80px); }
+#wlShell .hero-copy { padding:46px 48px 44px; }
+#wlShell .hero-copy p { margin-bottom:24px; }
+
+/* six chips settle onto two even rows rather than four and a stray two */
+#wlShell .modes { gap:8px; }
+#wlShell .mode-chip { padding:8px 14px; font-size:.9rem; }
+
+/* one rhythm down the page, now that there is another section in it */
+#wlShell .sec { padding:72px 0; }
+#wlShell .sec-h { margin-bottom:40px; }
+
+/* six across is narrower than four, so the gap and the glyph come in */
+#wlShell .gmodes { gap:14px; }
+#wlShell .gmodes .tile .em { font-size:1.8rem; margin-bottom:10px; }
+
+/* the planner breathes with the sections either side of it */
+#wlShell .ai-demo { padding:20px; }
+#wlShell .ai-demo-out { margin-top:18px; }
+#wlShell .ai-demo-tiles { margin-top:28px; }
+
+/* the band reads as words now, not figures, so it wants less height */
+#wlShell .band { padding:48px 0; }
+#wlShell .band b { font-size:1.85rem; margin-bottom:4px; }
+
+/* quieter than the live links, but still legible on the navy */
+#wlShell .foot-soon { color:#7c8b9e; }
+
+/* a long menu item plus a badge crowds the bar on a small laptop, so
+   the badge drops out first and the wording survives */
+@media (max-width:1240px) and (min-width:1001px) {
+  #wlShell .top-nav button.soon em { display:none; }
+  #wlShell .top-nav button { padding:10px 11px; }
+}
+@media (max-width:620px) {
+  #wlShell .top-in { height:70px; }
+  #wlShell .logo-mark { width:40px; height:40px; }
+  #wlShell .logo-mark svg { width:23px; height:23px; }
+  #wlShell .logo b { font-size:1.34rem; }
+  #wlShell .hero { min-height:calc(100vh - 70px); }
+  #wlShell .hero-copy { padding:28px 22px 26px; }
+  #wlShell .sec { padding:56px 0; }
+  #wlShell .sec-h { margin-bottom:30px; }
+  #wlShell .band { padding:40px 0; }
+  #wlShell .band b { font-size:1.7rem; }
+  #wlShell .ai-demo { padding:13px; }
+  #wlShell .ai-demo-bar { flex-wrap:wrap; }
+  #wlShell .ai-demo-go { width:100%; text-align:center; }
+}
+</style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
 </head>
@@ -4088,14 +4209,16 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
 </svg>
 
         <div class="hero-copy">
-          <span class="badge">&#9889; Works in your car&rsquo;s browser</span>
-          <h1>Navigate every journey.</h1>
-          <p>Turn-by-turn guidance that says what matters and nothing more &mdash; by car, bike, on foot, or by air.</p>
+          <span class="badge">&#9889; Works in your vehicle&rsquo;s browser</span>
+          <h1>The First AI Navigation App</h1>
+          <p>Describe the whole trip in one line and WayLynq sets itself up &mdash; route, stops, layers, and voice.</p>
           <div class="modes">
             <span class="mode-chip">&#128663; Car</span>
-            <span class="mode-chip">&#128694; Walk</span>
-            <span class="mode-chip">&#128690; Cycle</span>
+            <span class="mode-chip">&#128652; Bus</span>
+            <span class="mode-chip">&#128646; Train</span>
             <span class="mode-chip">&#9992;&#65039; Flight</span>
+            <span class="mode-chip">&#128690; Cycle</span>
+            <span class="mode-chip">&#128694; Walk</span>
           </div>
         </div>
       </div>
@@ -4144,25 +4267,57 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
 
           <div class="trust">
             <span>&#128274; Stored on your device</span>
-            <span>&#128663; Built for driving</span>
+            <span>&#128663; Build for Navigating</span>
             <span>&#9889; Free to use</span>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- one-prompt AI trip planner -->
+    <section class="sec white" id="aiPlanner">
+      <div class="wrap">
+        <div class="sec-h">
+          <span class="soon-pill">Coming soon</span>
+          <h2>One-Prompt AI Trip Planner</h2>
+          <p>Say the whole journey in a single line. WayLynq finds the route, slots in the stops, sets the travel mode, the map layers and the voice &mdash; then tells you every step it took.</p>
+        </div>
+        <div class="ai-demo">
+          <div class="ai-demo-bar">
+            <span class="ai-demo-ico">&#10022;</span>
+            <span class="ai-demo-txt">Boston tonight, stop for coffee and a charge, well-lit roads, music on</span>
+            <span class="ai-demo-go">Plan it</span>
+          </div>
+          <ul class="ai-demo-out">
+            <li><b>&#10003;</b><span>Routed to <b>Boston, MA</b> &middot; 215 mi &middot; 3 hr 32 min</span></li>
+            <li><b>&#10003;</b><span>Coffee stop added <b>41 mi</b> in</span></li>
+            <li><b>&#10003;</b><span>Fast charger added <b>118 mi</b> in, about 22 min</span></li>
+            <li><b>&#10003;</b><span>Night routing set to <b>well-lit, busier roads</b></span></li>
+            <li><b>&#10003;</b><span>Music playing, paused automatically for spoken directions</span></li>
+          </ul>
+        </div>
+        <div class="grid g3 ai-demo-tiles">
+          <div class="tile"><span class="em">&#128483;&#65039;</span><b>Plain language</b><p>No menus and no forms. Say it the way you would say it to a passenger.</p></div>
+          <div class="tile"><span class="em">&#128203;</span><b>Nothing hidden</b><p>Every step it takes is listed back to you, so nothing happens invisibly.</p></div>
+          <div class="tile"><span class="em">&#9654;&#65039;</span><b>One tap to drive</b><p>When the plan looks right, Start is the only thing left to press.</p></div>
+        </div>
+      </div>
+    </section>
+
     <!-- transport modes -->
     <section class="sec tint">
       <div class="wrap">
         <div class="sec-h">
-          <h2>Every Way You Travel, Covered</h2>
-          <p>WayLynq adapts to how you move &mdash; behind the wheel, on two wheels, or on two feet.</p>
+          <h2>AI Navigates Your Journey</h2>
+          <p>Tell WayLynq where you are going and it works out how &mdash; behind the wheel, on rails, in the air, or on two feet.</p>
         </div>
-        <div class="grid g8">
+        <div class="grid gmodes">
           <div class="tile"><span class="em">&#128663;</span><b>Car</b><p>Turn-by-turn guidance, lane hints, and parking at the far end</p></div>
-          <div class="tile"><span class="em">&#128694;</span><b>Walk</b><p>Footpaths and crossings, with street names as you zoom in</p></div>
-          <div class="tile"><span class="em">&#128690;</span><b>Cycle</b><p>Bike-friendly routing and the climb ahead of you</p></div>
+          <div class="tile"><span class="em">&#128652;</span><b>Bus</b><p>Stops, routes and connections read from open transit data</p></div>
+          <div class="tile"><span class="em">&#128646;</span><b>Train</b><p>Real stations, the services that run the line, and where they call</p></div>
           <div class="tile"><span class="em">&#9992;&#65039;</span><b>Flight</b><p>Nearest airports, great-circle distance, and real booking links</p></div>
+          <div class="tile"><span class="em">&#128690;</span><b>Cycle</b><p>Bike-friendly routing and the climb ahead of you</p></div>
+          <div class="tile"><span class="em">&#128694;</span><b>Walk</b><p>Footpaths and crossings, with street names as you zoom in</p></div>
         </div>
       </div>
     </section>
@@ -4223,10 +4378,10 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
     <div class="band">
       <div class="wrap">
         <div class="grid">
-          <div><b>8</b><span>Ways to travel</span></div>
-          <div><b>1</b><span>File, no install</span></div>
-          <div><b>0</b><span>API keys needed</span></div>
-          <div><b>&#8734;</b><span>Free to use</span></div>
+          <div><b>AI</b><span>One-prompt trip planning</span></div>
+          <div><b>Live</b><span>Traffic, incidents &amp; cameras</span></div>
+          <div><b>Smart</b><span>Fuel, food &amp; charging stops</span></div>
+          <div><b>Night</b><span>Well-lit routing after dark</span></div>
         </div>
       </div>
     </div>
@@ -4246,6 +4401,7 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
             <li><a href="#/planner" data-go="planner">Trip Planner</a></li>
             <li><a href="#/nearby" data-go="nearby">Nearby</a></li>
             <li><a href="#/landing" data-go="landing">Features</a></li>
+            <li><span class="foot-soon">One-Prompt AI Planner &middot; coming soon</span></li>
           </ul></div>
           <div><h4>Built on</h4><ul>
             <li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></li>
@@ -15552,7 +15708,8 @@ window.onSpotifyIframeApiReady = function (api) {
   };
 
   /* ---------------- header ---------------- */
-  var VIEWS = [['maps','Map'], ['planner','Trip Planner'], ['nearby','Nearby'], ['landing','Features']];
+  var VIEWS = [['maps','Map'], ['planner','Trip Planner'], ['nearby','Nearby'], ['landing','Features'],
+               ['ai','One-Prompt AI Planner','soon']];
   var AUTH_HTML = null;
   var MARK_BIG = '<span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></span>';
   var MARK = '<span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></span>';
@@ -15564,6 +15721,12 @@ window.onSpotifyIframeApiReady = function (api) {
       '<span class="logo" data-go="' + (u ? 'maps' : 'landing') + '">' + MARK + '<b>Way<i>Lynq</i></b></span>' +
       '<button class="burger" id="wlBurger" aria-label="Menu">&#9776;</button>' +
       '<nav class="top-nav" id="wlNav">' + VIEWS.map(function (v) {
+        /* No data-go, so the global click router cannot navigate to a page
+           that does not exist yet. It is a label, not a destination. */
+        if (v[2] === 'soon') {
+          return '<button type="button" class="soon" disabled aria-disabled="true" ' +
+            'title="One-Prompt AI Planner \u2014 coming soon">' + v[1] + '<em>Coming soon</em></button>';
+        }
         return '<button type="button" data-go="' + v[0] + '"' + (v[0] === active ? ' class="on"' : '') + '>' + v[1] + '</button>';
       }).join('') + '</nav>' +
       '<div class="top-act">' + (u
@@ -15753,19 +15916,18 @@ window.onSpotifyIframeApiReady = function (api) {
     /* States plainly whether accounts are on the server or on this device,
        so nobody discovers the difference on their second device. */
     findApi().then(function (url) {
-      if (!document.querySelector) return;
+      /* Silent when the server is unreachable. Someone signing in cannot
+         act on that, and sign-in works either way; the one case that
+         actually costs them something - an account that will not follow
+         them to another device - is still said plainly on the form. */
+      if (!url || !document.querySelector) return;
       var box = document.querySelector('#wlShell .trust');
-      if (!box) return;
+      /* and never twice, however often this panel gets wired up */
+      if (!box || box.querySelector('#wlSrvState')) return;
       var span = document.createElement('span');
       span.id = 'wlSrvState';
-      if (url) {
-        span.innerHTML = '\u2601\uFE0F Works on all your devices';
-        span.style.color = '#188038';
-      } else {
-        span.innerHTML = '\u26A0\uFE0F This device only \u2014 server not reachable';
-        span.style.color = '#b06000';
-        span.title = 'Upload the api folder and set config.php to sync accounts across devices.';
-      }
+      span.innerHTML = '\u2601\uFE0F Works on all your devices';
+      span.style.color = '#188038';
       box.appendChild(span);
     });
   }
