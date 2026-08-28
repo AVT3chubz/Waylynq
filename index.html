@@ -21,8 +21,13 @@
      numerals only, where narrower digits mean physically larger figures in
      the same width; everywhere else this is the ordinary platform UI font. */
   --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --font-ui: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-  --font-num: "Roboto Mono", "Roboto", ui-monospace, "SF Mono", Menlo, monospace;
+  /* Inter for reading: the highest-legibility text face there is at small
+     sizes, with true tabular figures so counting numbers do not jitter.
+     Outfit for anything large - distances, times, headings - because it has
+     a shape of its own rather than defaulting to whatever the OS supplies. */
+  --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-display: "Outfit", "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-num: "Outfit", "Inter", ui-monospace, "SF Mono", Menlo, monospace;
   --font-semi: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --bg: #06121a;
   --surface: rgba(13,31,41,.92);
@@ -1456,7 +1461,7 @@ body.navigating #musicDock { bottom:250px; }
   --sh-lg:0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
   /* The stack most of the web already uses: no download, renders
      natively on every platform, and reads as ordinary rather than trendy. */
-  --f:"Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f:"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 
   position:fixed; inset:0; z-index:9000; overflow-y:auto; display:none;
   background:var(--p-tint); color:var(--body);
@@ -3113,8 +3118,8 @@ body.fly-open { overflow:hidden; }
      and it made every readout harder to scan than plain numerals. Roboto
      Mono for figures, Roboto for text - Google's own faces, tabular and
      legible at a glance, the way Google Maps and Waze actually set type. */
-  --fly-face:'Roboto Mono', ui-monospace, 'SF Mono', 'Segoe UI Mono', Menlo, monospace;
-  --fly-body:'Roboto', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  --fly-face:'Outfit', 'Inter', ui-monospace, 'SF Mono', Menlo, monospace;
+  --fly-body:'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
 }
 #flyScreen, #flyScreen button, #flyScreen select { font-family:var(--fly-body); }
 
@@ -3581,7 +3586,30 @@ body.fly-open { overflow:hidden; }
 .turn-shield svg { height:28px !important; }
 
 /* the five rows that were competing with the instruction */
-#roadRow, #nextList, #trafficAhead, #tripLine, #destRow { display:none !important; }
+/* Four of the five rows go. The fifth stays, because it is the one thing
+   that was actually asked for: which highway you are on, and how much of
+   that highway is left - the way Tesla, Google and Waze all show it. */
+#roadRow, #nextList, #trafficAhead, #destRow { display:none !important; }
+#tripLine {
+  display:flex !important; align-items:center; gap:10px;
+  padding:10px var(--nv-pad); margin:0;
+  border-top:1px solid var(--nv-line); background:var(--nv-ink-2);
+  font-size:.92rem; color:var(--nv-dim);
+}
+#tripLine.hidden { display:none !important; }
+#tripLine .tl-shield { flex-shrink:0; display:flex; align-items:center; }
+#tripLine .tl-shield svg { height:22px !important; width:auto; display:block; }
+#tripLine .tl-road {
+  flex:1; min-width:0; font-size:1rem; font-weight:500; color:var(--nv-text);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+#tripLine .tl-left { flex-shrink:0; font-family:var(--font-num); color:var(--nv-dim); font-size:.82rem; }
+#tripLine .tl-left b { font-size:1.12rem; font-weight:500; color:var(--nv-accent); margin-right:3px; }
+#tripLine .tl-more { display:none; }
+/* with the strip present the lane bar rounds the block, not the card */
+#navTop:has(#tripLine:not(.hidden)) .nav-card { border-radius:var(--nv-r) !important; }
+#navTop:has(#laneBar:not(.hidden)) .nav-card { border-radius:var(--nv-r) var(--nv-r) 0 0 !important; }
+.nav-card::after { top:29px; margin-top:0; }
 
 /* ---------------- lanes, attached to the card ---------------- */
 #laneBar {
@@ -3796,8 +3824,40 @@ body.light-mode .nb-traffic-val.warn { color:#b06000; }
 body.light-mode .nb-traffic-val.bad  { color:#c5221f; }
 @media (max-width: 900px) { .nb-stat.nb-traffic, #navStats .nb-sep:last-of-type { display:none; } }
 @media (max-width: 420px) { .td-grid { grid-template-columns:1fr 1fr; gap:8px; } .td-shot { height:80px; } }
+
+/* ======================================================================
+   TYPOGRAPHY
+   Inter reads; Outfit gives the large figures a shape. Both carry true
+   tabular numerals, so a distance counting down does not shuffle sideways
+   with every tick - which is half of why the old readouts felt unsettled.
+   ====================================================================== */
+body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
+.num, #turnDistance, #remainMin, #remainMi, #etaClock, #speedVal, #limitVal,
+.nb-stat b, .ts-dist, .ts-kpi b, .tp-route-dur, .fly-t b, .ts2-time b,
+.si-ava, .fly-brief b, .nb-traffic-val, #tripLine .tl-left b {
+  font-family:var(--font-display);
+  font-variant-numeric:tabular-nums; letter-spacing:-.01em;
+}
+#turnDistance { font-weight:600; }
+.nb-stat b, .nb-traffic-val { font-weight:600; }
+.tp-title, .ts-title, .ts2-title b, .fly-ab-end b, .auth-h, .hero-copy h1,
+.panel-title, .tp-section-head, .si-who b, .td-body b {
+  font-family:var(--font-display);
+}
+.tp-section-head, .panel-title { font-weight:700; }
+.auth-h, .hero-copy h1 { font-weight:700; letter-spacing:-.02em; }
+#turnStreet, .ts-instr, .tp-field, .td-meta, .si-tile-txt small { font-family:var(--font-ui); }
+
+/* the way past a device-only warning, rather than a timer to sit through */
+.flash-go {
+  display:inline-block; margin-top:10px; padding:9px 16px; border:none; border-radius:10px;
+  background:var(--signal, #1a73e8); color:#fff; cursor:pointer;
+  font-family:var(--font-ui); font-size:.9rem; font-weight:600;
+}
+.flash-go:hover { filter:brightness(1.08); }
 </style>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&family=Roboto+Mono:wght@500;700&display=swap" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
 </head>
 <body>
 
@@ -5738,10 +5798,11 @@ window.onSpotifyIframeApiReady = function (api) {
     if (span < 400) return routes;
     const brg = bearing(a, b);
     const at = (f) => ({ lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f });
-    const anchors = span > 6000 ? [at(0.28), at(0.5), at(0.72)] : [at(0.4), at(0.6)];
-    const spreads = span > 6000
-      ? [clamp(span * 0.09, 900, 45000), clamp(span * 0.20, 2200, 90000)]
-      : [clamp(span * 0.18, 260, 3000), clamp(span * 0.38, 500, 6000)];
+    /* Two anchors and one spread is four probes, not twelve. The extra eight
+       were costing whole seconds of routing time for options that were
+       usually rejected as too similar anyway. */
+    const anchors = [at(0.38), at(0.62)];
+    const spreads = [span > 6000 ? clamp(span * 0.14, 1500, 60000) : clamp(span * 0.26, 400, 4000)];
     const vias = [];
     anchors.forEach((pt) => spreads.forEach((off) => {
       vias.push(offsetPoint(pt.lat, pt.lng, brg + 90, off));
@@ -7886,8 +7947,11 @@ window.onSpotifyIframeApiReady = function (api) {
       updateRoadRow();
       updateTrafficAhead(0);
       renderNextList();
-      $('turnExit').classList.add('hidden');
-      $('turnSigns').classList.add('hidden');
+      /* This used to hide the exit badge unconditionally when the route
+         loaded, and nothing put it back until the first GPS fix arrived -
+         so a signed exit was blank for the whole start of the drive. Ask
+         the same function that maintains it during the drive. */
+      updateCardExit();
       $('roadLeft').classList.add('hidden');
     }
     updateDwellStat();
@@ -9555,7 +9619,7 @@ window.onSpotifyIframeApiReady = function (api) {
     for (const m of MODE_TABS) {
       if (m.key === modeSelect.value) { modeEtas[m.key] = allRoutes[activeRouteIndex] ? allRoutes[activeRouteIndex].duration * trafficMultiplier : null; renderModeTabs(); continue; }
       try {
-        const rs = await fetchRoutes([originPlace, destPlace], m.key, 0);
+        const rs = await fetchRoutes([originPlace, destPlace], m.key, 0, { polyline: true, timeout: 9000, light: true });
         if (token !== planToken) return;
         modeEtas[m.key] = rs[0].duration * (m.key === 'driving' ? realismFactor(rs[0]) : 1.06);
       } catch (e) { modeEtas[m.key] = 'na'; }
@@ -11300,7 +11364,22 @@ window.onSpotifyIframeApiReady = function (api) {
     const stopped = Math.max(0, dwellTotalMs() - dwellRemainingMs) / 1000;
     const elapsed = (Date.now() - tripStartMs) / 1000 - stopped;
     if (elapsed <= 0) return trafficMultiplier;
-    return clamp(elapsed / soFar, 0.6, 2.4);
+    /* A position that jumps - coming out of a tunnel, regaining signal in a
+       city, or the app being backgrounded and resumed - implies a speed no
+       car reached. Feeding that into the pace factor would rewrite the whole
+       arrival time off one bad fix, so anything implausible is ignored and
+       the previous estimate stands. */
+    const impliedKmh = elapsed > 0 ? (navDistAlong / 1000) / (elapsed / 3600) : 0;
+    if (!isFinite(impliedKmh) || impliedKmh > 190) return factorSmoothed || trafficMultiplier;
+    const measured = clamp(elapsed / soFar, 0.6, 2.4);
+    /* How much that measurement is actually worth. Over the first 120 m it
+       means almost nothing - pulling away briskly from a junction used to
+       rescale a two-and-a-half-hour drive and knock half an hour off it,
+       which is the jump that made the arrival time look untrustworthy. The
+       router's own estimate is trusted until there is real evidence, and by
+       five kilometres the measured pace has taken over completely. */
+    const confidence = clamp((navDistAlong - 120) / 5000, 0, 1);
+    return trafficMultiplier + (measured - trafficMultiplier) * confidence;
   }
   function stepIndexAt(distAlong) {
     for (let i = 0; i < navStepStart.length; i++) if (navStepStart[i] > distAlong + 3) return i;
@@ -11376,10 +11455,15 @@ window.onSpotifyIframeApiReady = function (api) {
       if (info) { $('roadExitNum').textContent = info.num; rb.classList.remove('hidden'); }
       else rb.classList.add('hidden');
     }
+    /* The card badge only appeared when the exit was the very next thing to
+       do. A signed exit further along was known, written into the badge, and
+       then hidden again - so the number a driver wants early was never on
+       screen. It shows whenever there is one on the road ahead. */
     const badge = $('turnExit'), signs = $('turnSigns');
-    if (info && info.now) {
+    if (info) {
       $('turnExitNum').textContent = info.num;
       badge.classList.remove('hidden');
+      badge.classList.toggle('soon', !!info.now);
     } else badge.classList.add('hidden');
     const s = stepSigns(navSteps[navStepIndex]);
     if (s) { signs.textContent = s; signs.classList.remove('hidden'); }
@@ -14601,7 +14685,7 @@ window.onSpotifyIframeApiReady = function (api) {
     g.stroke();
 
     const label = (x, y, txt, colour, below) => {
-      g.font = "700 12px 'Roboto', system-ui, sans-serif";
+      g.font = "700 12px 'Outfit', 'Inter', system-ui, sans-serif";
       g.textAlign = 'center';
       const wgt = g.measureText(txt).width + 14;
       g.fillStyle = 'rgba(4,10,20,.78)';
@@ -15630,10 +15714,19 @@ window.onSpotifyIframeApiReady = function (api) {
           /* Said now, not discovered later on another device. */
           err.innerHTML = '<b>Account made on this device only.</b><br>' +
             'The server could not be reached, so this sign-in will not work on your other devices yet. ' +
-            'Sign in again here once you are back online and it will be moved across automatically.';
+            'Sign in again here once you are back online and it will be moved across automatically. ' +
+            '<button type="button" id="aGoOn" class="flash-go">Continue to the map \u2192</button>';
           err.classList.add('show');
           btn.disabled = false; btn.innerHTML = was;
-          setTimeout(function () { go('maps'); }, 3200);
+          var onward = function () {
+            if (window.WayLyn && window.WayLyn.accountChanged) window.WayLyn.accountChanged('maps');
+            else go('maps');
+          };
+          var goOn = document.getElementById('aGoOn');
+          if (goOn) goOn.addEventListener('click', onward);
+          /* It still moves on by itself, but nobody is made to wait out a
+             timer they have already read. */
+          setTimeout(onward, 4500);
           return;
         }
         ok.textContent = 'Welcome, ' + u.name.split(' ')[0] + '. ' +
@@ -15650,7 +15743,12 @@ window.onSpotifyIframeApiReady = function (api) {
         btn.disabled = false; btn.innerHTML = was;
       }
     });
-    setMode('up');
+    /* Somebody who has signed in on this device before is far more likely
+       to be signing in again than creating a second account, so the form
+       opens on the tab they actually need. */
+    var seenBefore = false;
+    try { seenBefore = !!(rd(K_CACHE, null) || rd(K_SESS, null) || (rd(K_USERS, null) || []).length); } catch (e) {}
+    setMode(seenBefore ? 'in' : 'up');
 
     /* States plainly whether accounts are on the server or on this device,
        so nobody discovers the difference on their second device. */
