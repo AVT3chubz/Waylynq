@@ -128,7 +128,15 @@ button, input, select { font-family:inherit; }
    flat, which buries POI pins. A light contrast/saturation push separates
    roads from blocks without blowing out labels. */
 body:not(.light-mode) .leaflet-tile-pane { filter: brightness(.62) saturate(.75) contrast(1.12); }
+/* Without a CARTO key there is no dark basemap to ask for, so one is made
+   here: inverting turns paper white to near black, and rotating the hue a
+   half turn puts greens and blues back the right way round afterwards. */
+body:not(.light-mode).osm-base .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(.88) contrast(.92) saturate(.7);
+}
 body:not(.light-mode).satellite-on .leaflet-tile-pane { filter: brightness(.78) saturate(.9); }
+/* satellite imagery is a photograph - inverting it would be nonsense */
+body:not(.light-mode).osm-base.satellite-on .leaflet-tile-pane { filter: brightness(.78) saturate(.9); }
 /* the route, markers and labels sit in overlay panes, so the darkening above
    never touches them */
 body:not(.light-mode) .leaflet-overlay-pane,
@@ -3822,7 +3830,7 @@ body.light-mode .speed-dial small { color:#5f6368; }
 body.light-mode .nb-traffic-val.good { color:#137333; }
 body.light-mode .nb-traffic-val.warn { color:#b06000; }
 body.light-mode .nb-traffic-val.bad  { color:#c5221f; }
-@media (max-width: 900px) { .nb-stat.nb-traffic, #navStats .nb-sep:last-of-type { display:none; } }
+/* traffic leaves with the other optional columns now - see the bar rules below */
 @media (max-width: 420px) { .td-grid { grid-template-columns:1fr 1fr; gap:8px; } .td-shot { height:80px; } }
 
 /* ======================================================================
@@ -3855,6 +3863,77 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
   font-family:var(--font-ui); font-size:.9rem; font-weight:600;
 }
 .flash-go:hover { filter:brightness(1.08); }
+/* ======================================================================
+   THE TRIP BAR IN SEVEN, AND TWO THINGS LIFTED OFF IT
+
+   Four stats left the middle of the bar empty. Seven fill it. The grid
+   divides whatever is actually on show into equal columns by itself, so
+   the eighth slot that appears on a trip with stops in it needs no rule
+   of its own - and neither does a phone showing only three.
+   ====================================================================== */
+#navStats {
+  display:grid !important;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0, 1fr);
+  align-items:center;
+  gap:0 !important;
+  justify-content:stretch !important;
+  min-width:0;
+}
+.nb-stat {
+  flex:none !important;
+  min-width:0; padding:0 4px !important;
+  display:flex; flex-direction:column; justify-content:center; gap:1px;
+}
+/* a hairline between columns rather than divider elements, which in a
+   grid would each have taken a column of their own */
+.nb-stat + .nb-stat { border-left:1px solid var(--nv-line); }
+body.light-mode .nb-stat + .nb-stat { border-left-color:rgba(0,0,0,.1); }
+.nb-stat b, .nb-stat span {
+  display:block; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.nb-stat span { line-height:1.25; }
+
+/* Columns leave in a set order as the screen narrows, least useful first,
+   so a phone keeps arrival, distance and time rather than seven squeezed
+   ones. Nothing is ever half-cut: a column is either legible or gone. */
+@media (max-width:1240px) { #navStats .nb-x1 { display:none !important; } }
+@media (max-width:1080px) { #navStats .nb-x2 { display:none !important; } }
+@media (max-width: 940px) { #navStats .nb-x3 { display:none !important; } }
+@media (max-width: 780px) { #navStats .nb-x4 { display:none !important; } }
+@media (max-width: 560px) {
+  .nb-stat { padding:0 2px !important; }
+  .nb-stat b { font-size:1.02rem; }
+  .nb-stat.nb-eta b { font-size:1.1rem; }
+  .nb-stat span { font-size:.6rem; }
+}
+/* a car screen or a landscape phone is wide but short */
+@media (max-height:560px) {
+  .nb-stat b { font-size:1.05rem; }
+  .nb-stat span { font-size:.62rem; }
+}
+
+/* ---- the rail and the aerial preview, both a step higher ----
+   The rail sat one gap off the round buttons, close enough to read as
+   covering them, and the preview had to share that lane. Each moves up
+   one step, keeping the lane order the rest of the HUD is built on. */
+#dock.nav-shift { bottom:calc(var(--hud-lane2) + 18px) !important; }
+body.bar-hidden #dock.nav-shift {
+  bottom:calc(env(safe-area-inset-bottom) + var(--hud-fab) + var(--hud-gap) * 2 + 18px) !important;
+}
+#turnPreview { bottom:calc(var(--hud-lane3) + 26px) !important; }
+/* on a short screen there is no height to give it, and a preview pushed
+   into the instruction card is worse than one sitting lower */
+@media (max-height:760px) { #turnPreview { bottom:calc(var(--hud-lane3) + 6px) !important; } }
+@media (max-height:600px) { #turnPreview { display:none; } }
+
+/* ---- and the rail itself, down to a phone ---- */
+@media (max-width:560px) {
+  #dock.nav-shift { max-width:calc(100vw - 16px) !important; }
+  .qr-btn { padding:0 10px; }
+  .qr-label { font-size:.72rem; }
+}
 </style>
 <style>
 /* ======================================================================
@@ -3981,6 +4060,28 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
 </head>
 <body>
+
+<script>
+/* ======================================================================
+   BASEMAP KEY  -  the one line to change
+
+   CARTO began requiring an API key on their raster basemaps and now
+   paints "API KEY REQUIRED" across every tile served without one. A key
+   is free up to 5 million tiles a month: https://carto.com/basemaps/apikey
+
+   Paste it between the quotes and the map goes back to exactly the
+   cartography it had before. Leave it empty and the map draws keyless
+   OpenStreetMap tiles instead - no watermark either way.
+
+   Worth knowing before you choose: CARTO are retiring these raster
+   basemaps, so a key is the fix for now rather than forever. And the
+   OpenStreetMap tile servers turn away requests that arrive without a
+   referrer, which is what a page opened straight off the disk sends,
+   so the keyless route wants the file served over http rather than
+   double-clicked. A key works either way.
+   ====================================================================== */
+window.WL_CARTO_KEY = '';
+</script>
 
 <div id="wlShell">
   <header class="top" id="wlTop"></header>
@@ -4876,16 +4977,13 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
     <button id="navBarSearch" class="bar-btn" type="button" title="Search along the way">&#128269;</button>
     <div id="navStats">
       <div class="nb-stat nb-eta"><b id="etaClock" class="num">--</b><span>Arrival <i id="navDelta" class="nav-delta hidden"></i></span></div>
-      <span class="nb-sep"></span>
       <div class="nb-stat"><b id="remainMi" class="num">--</b><span>Miles left</span></div>
-      <span class="nb-sep"></span>
       <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Drive time</span></div>
-      <span class="nb-sep"></span>
-      <div class="nb-stat nb-traffic"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
-      <span class="nb-sep nb-opt"></span>
-      <div class="nb-stat nb-opt"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
-      <span class="nb-sep nb-opt" id="dwellSep" style="display:none"></span>
-      <div class="nb-stat nb-opt" id="dwellStat" style="display:none"><b id="dwellMin" class="num">0</b><span>At stops</span></div>
+      <div class="nb-stat nb-traffic nb-x4"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
+      <div class="nb-stat nb-x3"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
+      <div class="nb-stat nb-x2"><b id="doneMi" class="num">0.0</b><span>Traveled</span></div>
+      <div class="nb-stat nb-x1"><b id="avgMph" class="num">--</b><span>Avg mph</span></div>
+      <div class="nb-stat nb-x3" id="dwellStat" style="display:none"><b id="dwellMin" class="num">0</b><span>At stops</span></div>
     </div>
     <button id="navBarSteps" class="bar-btn" type="button" title="All directions">&#9776;</button>
   </div>
@@ -5140,6 +5238,30 @@ window.onSpotifyIframeApiReady = function (api) {
      top of the imagery so the towns and cities being flown over are readable
      rather than being anonymous terrain. */
   const ESRI_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer';
+
+  /* The basemap, from whichever source is available. Set the key at the
+     top of the file; with one this returns the original CARTO cartography,
+     without one it returns OpenStreetMap and the stylesheet darkens it.
+     maxNativeZoom lets the nav view keep climbing past what the server
+     actually has, upscaling the last tiles rather than stopping at 19. */
+  function baseTiles(light) {
+    const key = (window.WL_CARTO_KEY || '').trim();
+    if (key) {
+      return {
+        url: 'https://{s}.basemaps.cartocdn.com/' +
+             (light ? 'rastertiles/voyager' : 'dark_all') +
+             '/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(key),
+        opts: { maxZoom: 20, subdomains: 'abcd',
+                attribution: '&copy; OpenStreetMap &copy; CARTO' }
+      };
+    }
+    return {
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      opts: { maxZoom: 20, maxNativeZoom: 19,
+              attribution: '&copy; OpenStreetMap contributors' }
+    };
+  }
+
   const AI_MODEL = 'claude-sonnet-4-6';
 
   /* A TomTom Traffic key. It is a browser key, so it is visible in this
@@ -5362,6 +5484,9 @@ window.onSpotifyIframeApiReady = function (api) {
 
   function applyTheme() {
     document.body.classList.toggle('light-mode', lightMode);
+    /* CARTO ships a real dark basemap; OpenStreetMap does not, so the
+       stylesheet has to make one. Marked here rather than guessed at. */
+    document.body.classList.toggle('osm-base', !(window.WL_CARTO_KEY || '').trim());
     $('themeToggle').innerHTML = lightMode ? '&#9728;' : '&#9789;';
     if (tileLayer) map.removeLayer(tileLayer);
     if (satelliteOn) {
@@ -5369,10 +5494,8 @@ window.onSpotifyIframeApiReady = function (api) {
     } else {
       // dark_all is intentionally flat; the CSS contrast lift in the
       // stylesheet does the heavy work of separating roads from blocks.
-      const url = lightMode
-        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-      tileLayer = L.tileLayer(url, { maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+      const bt = baseTiles(lightMode);
+      tileLayer = L.tileLayer(bt.url, bt.opts).addTo(map);
     }
     renderRoutes();
     if (navActive()) renderProgressSplit(traveledMeters);
@@ -8115,8 +8238,30 @@ window.onSpotifyIframeApiReady = function (api) {
   function updateDwellStat() {
     const on = dwellRemainingMs > 0;
     if (on) $('dwellMin').textContent = Math.round(dwellRemainingMs / 60000);
+    /* The bar divides itself into equal columns, so this one appearing
+       needs nothing else moved or re-measured. */
     $('dwellStat').style.display = on ? '' : 'none';
-    $('dwellSep').style.display = on ? '' : 'none';
+  }
+
+  /* Distance covered, and the pace actually managed for it. Both read
+     figures the drive already keeps, so neither adds tracking of its own.
+     Time spent parked at stops comes out of the average - otherwise a
+     twenty minute coffee reads as an hour of very slow driving. */
+  function updateTripStats() {
+    const doneM = tripOdometer + traveledMeters;
+    const dEl = $('doneMi');
+    if (dEl) {
+      const mi = toMiles(doneM);
+      dEl.textContent = mi.toFixed(mi < 10 ? 1 : 0);
+    }
+    const aEl = $('avgMph');
+    if (!aEl) return;
+    /* Below a tenth of a mile the figure is noise, so it stays blank */
+    if (!tripStartMs || doneM < 160) { aEl.textContent = '--'; return; }
+    const stopped = Math.max(0, dwellTotalMs() - dwellRemainingMs);
+    const hrs = (Date.now() - tripStartMs - stopped) / 3600000;
+    const mph = hrs > 0 ? toMiles(doneM) / hrs : 0;
+    aEl.textContent = (isFinite(mph) && mph > 0 && mph < 200) ? String(Math.round(mph)) : '--';
   }
 
   let lastPreviewStep = -1;
@@ -8728,6 +8873,7 @@ window.onSpotifyIframeApiReady = function (api) {
     navSafe('delta', () => updateDelta(remainDur));
     navSafe('limitSay', () => announceLimitChange());
     navSafe('trafficStat', () => updateTrafficStat());
+    navSafe('tripStats', () => updateTripStats());
     renderProgressSplit(trustForProgress ? navDistAlong : proj.distAlong);
   }
 
@@ -16629,8 +16775,12 @@ window.onSpotifyIframeApiReady = function (api) {
     if (!nMap) {
       if (typeof L === 'undefined') { wrap.innerHTML = '<div class="empty">The map library did not load.</div>'; return; }
       nMap = L.map('nMap', { zoomControl: true, attributionControl: true });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(nMap);
+      var nKey = (window.WL_CARTO_KEY || '').trim();
+      L.tileLayer(nKey
+        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(nKey)
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 19, subdomains: nKey ? 'abcd' : 'abc',
+          attribution: nKey ? '&copy; OpenStreetMap &copy; CARTO' : '&copy; OpenStreetMap contributors' }).addTo(nMap);
       nLayer = L.layerGroup().addTo(nMap);
       nMap.setView([20, 0], 2);
     }
