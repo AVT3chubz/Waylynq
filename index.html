@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5424,6 +5423,30 @@ body.navigating #tripLine * {
 }
 </style>
 
+
+<style id="wl-round26-hostinger-deploy">
+/* OpenFreeMap renders its own theme; never apply the old raster-tile filters
+   to the MapLibre canvas. */
+body.openfreemap-base .maplibregl-canvas,
+body.openfreemap-base .maplibregl-canvas-container,
+body.openfreemap-base .leaflet-maplibre-gl {
+  filter:none !important;
+}
+
+/* Keep the canvas fully visible behind Leaflet markers and controls. */
+.leaflet-map-pane .maplibregl-map,
+.leaflet-map-pane .maplibregl-canvas-container,
+.leaflet-map-pane .maplibregl-canvas {
+  opacity:1 !important;
+  visibility:visible !important;
+}
+
+/* If the CDN bridge fails and Esri is used, do not inherit OSM inversion. */
+body.esri-base .leaflet-tile-pane {
+  filter:none !important;
+}
+</style>
+
 </head>
 <body>
 
@@ -6632,6 +6655,45 @@ window.onSpotifyIframeApiReady = function (api) {
     };
   }
 
+  /**
+   * Creates the production basemap.
+   *
+   * OpenFreeMap is preferred because the application already ships MapLibre
+   * and its Leaflet bridge. This avoids depending on the community OSM raster
+   * tile endpoint for the public website.
+   *
+   * Esri World Street Map is a runtime fallback only when the MapLibre bridge
+   * did not load from the CDN.
+   */
+  function createProductionBaseLayer(light) {
+    const openFreeMapStyle = light
+      ? 'https://tiles.openfreemap.org/styles/liberty'
+      : 'https://tiles.openfreemap.org/styles/dark';
+
+    if (typeof L.maplibreGL === 'function' && typeof maplibregl !== 'undefined') {
+      document.body.classList.remove('osm-base');
+      document.body.classList.add('openfreemap-base');
+
+      return L.maplibreGL({
+        style: openFreeMapStyle,
+        interactive: false
+      });
+    }
+
+    document.body.classList.remove('osm-base');
+    document.body.classList.add('esri-base');
+
+    return L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/' +
+      'World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxZoom: 19,
+        attribution:
+          'Tiles &copy; Esri &mdash; Map data &copy; OpenStreetMap contributors'
+      }
+    );
+  }
+
   const AI_MODEL = 'claude-sonnet-4-6';
 
   /* A TomTom Traffic key. It is a browser key, so it is visible in this
@@ -6856,16 +6918,20 @@ window.onSpotifyIframeApiReady = function (api) {
     document.body.classList.toggle('light-mode', lightMode);
     /* CARTO ships a real dark basemap; OpenStreetMap does not, so the
        stylesheet has to make one. Marked here rather than guessed at. */
-    document.body.classList.toggle('osm-base', !(window.WL_CARTO_KEY || '').trim());
+    document.body.classList.remove('osm-base');
     $('themeToggle').innerHTML = lightMode ? '&#9728;' : '&#9789;';
     if (tileLayer) map.removeLayer(tileLayer);
     if (satelliteOn) {
-      tileLayer = L.tileLayer(ESRI_IMAGERY + '/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Imagery &copy; Esri' }).addTo(map);
+      tileLayer = L.tileLayer(
+        ESRI_IMAGERY + '/tile/{z}/{y}/{x}',
+        {
+          maxZoom: 19,
+          attribution: 'Imagery &copy; Esri'
+        }
+      ).addTo(map);
     } else {
-      // dark_all is intentionally flat; the CSS contrast lift in the
-      // stylesheet does the heavy work of separating roads from blocks.
-      const bt = baseTiles(lightMode);
-      tileLayer = L.tileLayer(bt.url, bt.opts).addTo(map);
+      tileLayer = createProductionBaseLayer(lightMode);
+      tileLayer.addTo(map);
     }
     renderRoutes();
     if (navActive()) renderProgressSplit(traveledMeters);
