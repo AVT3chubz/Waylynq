@@ -128,7 +128,15 @@ button, input, select { font-family:inherit; }
    flat, which buries POI pins. A light contrast/saturation push separates
    roads from blocks without blowing out labels. */
 body:not(.light-mode) .leaflet-tile-pane { filter: brightness(.62) saturate(.75) contrast(1.12); }
+/* Without a CARTO key there is no dark basemap to ask for, so one is made
+   here: inverting turns paper white to near black, and rotating the hue a
+   half turn puts greens and blues back the right way round afterwards. */
+body:not(.light-mode).osm-base .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(.88) contrast(.92) saturate(.7);
+}
 body:not(.light-mode).satellite-on .leaflet-tile-pane { filter: brightness(.78) saturate(.9); }
+/* satellite imagery is a photograph - inverting it would be nonsense */
+body:not(.light-mode).osm-base.satellite-on .leaflet-tile-pane { filter: brightness(.78) saturate(.9); }
 /* the route, markers and labels sit in overlay panes, so the darkening above
    never touches them */
 body:not(.light-mode) .leaflet-overlay-pane,
@@ -3822,7 +3830,7 @@ body.light-mode .speed-dial small { color:#5f6368; }
 body.light-mode .nb-traffic-val.good { color:#137333; }
 body.light-mode .nb-traffic-val.warn { color:#b06000; }
 body.light-mode .nb-traffic-val.bad  { color:#c5221f; }
-@media (max-width: 900px) { .nb-stat.nb-traffic, #navStats .nb-sep:last-of-type { display:none; } }
+/* traffic leaves with the other optional columns now - see the bar rules below */
 @media (max-width: 420px) { .td-grid { grid-template-columns:1fr 1fr; gap:8px; } .td-shot { height:80px; } }
 
 /* ======================================================================
@@ -3855,61 +3863,225 @@ body, #wlShell, #navMode { font-feature-settings:"tnum" 1, "cv05" 1; }
   font-family:var(--font-ui); font-size:.9rem; font-weight:600;
 }
 .flash-go:hover { filter:brightness(1.08); }
-
 /* ======================================================================
-   6 — THE TRIP PANEL: DARKER, SMALLER, SAME INFORMATION
-   Transparent charcoal instead of near-white, tightened a little, with
-   every row and control kept exactly where it was.
-   ====================================================================== */
-#navMode { --nv-ink:rgba(24,28,34,.90); --nv-ink-2:rgba(32,37,45,.92); }
-.nav-card { backdrop-filter:blur(16px) !important; -webkit-backdrop-filter:blur(16px); }
-body.light-mode .nav-card { background:rgba(28,32,38,.88) !important; }
-body.light-mode #tripLine { background:rgba(38,43,51,.92) !important; }
-body.light-mode #laneBar { background:rgba(38,43,51,.92); }
-body.light-mode #turnStreet { color:rgba(255,255,255,.66) !important; }
-body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !important; }
+   THE TRIP BAR IN SEVEN, AND TWO THINGS LIFTED OFF IT
 
-/* a shade smaller, without dropping anything */
-#navTop { max-width:min(30vw, 322px); }
-.nav-card-main { padding:12px 14px; gap:12px; }
-#turnArrow { width:34px; height:34px; }
-#turnArrow .wl-arrow { width:33px; height:33px; }
-#turnDistance { font-size:1.82rem; }
-#turnStreet { font-size:.98rem; margin-top:2px; }
-#tripLine { padding:8px 14px; font-size:.86rem; }
-#tripLine .tl-road { font-size:.94rem; }
-#tripLine .tl-left b { font-size:1.02rem; }
-#laneBar { padding:9px 14px; }
-.lane { font-size:1.18rem; }
-
-/* ======================================================================
-   6 + 9 — THE COMPASS, INSIDE THE PANEL, TURNING WITH THE CAR
+   Four stats left the middle of the bar empty. Seven fill it. The grid
+   divides whatever is actually on show into equal columns by itself, so
+   the eighth slot that appears on a trip with stops in it needs no rule
+   of its own - and neither does a phone showing only three.
    ====================================================================== */
-#tripCompass {
-  display:flex; align-items:center; justify-content:flex-end;
-  padding:8px 14px 10px; border-top:1px solid var(--nv-line);
-  background:var(--nv-ink-2);
+#navStats {
+  display:grid !important;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0, 1fr);
+  align-items:center;
+  gap:0 !important;
+  justify-content:stretch !important;
+  min-width:0;
 }
-#tripCompass svg { width:34px; height:34px; display:block; }
-#tripCompassRose { transition:transform .28s cubic-bezier(.22,1,.36,1); }
-.tc-ring { fill:rgba(255,255,255,.05); stroke:rgba(255,255,255,.18); stroke-width:1.5; }
-.tc-n { fill:#ff5d6c; }                       /* was black and unreadable */
-.tc-s { fill:rgba(255,255,255,.45); }
-.tc-lbl { fill:rgba(255,255,255,.75); font:700 8px var(--font-ui); letter-spacing:.06em; }
-#navTop:has(#tripCompass) .nav-card { border-radius:var(--nv-r) !important; }
+.nb-stat {
+  flex:none !important;
+  min-width:0; padding:0 4px !important;
+  display:flex; flex-direction:column; justify-content:center; gap:1px;
+}
+/* a hairline between columns rather than divider elements, which in a
+   grid would each have taken a column of their own */
+.nb-stat + .nb-stat { border-left:1px solid var(--nv-line); }
+body.light-mode .nb-stat + .nb-stat { border-left-color:rgba(0,0,0,.1); }
+.nb-stat b, .nb-stat span {
+  display:block; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.nb-stat span { line-height:1.25; }
 
-/* the exit badge, once it is actually relevant */
-.exit-badge.inline.soon { box-shadow:0 0 0 2px rgba(52,199,89,.35); }
+/* Columns leave in a set order as the screen narrows, least useful first,
+   so a phone keeps arrival, distance and time rather than seven squeezed
+   ones. Nothing is ever half-cut: a column is either legible or gone. */
+@media (max-width:1240px) { #navStats .nb-x1 { display:none !important; } }
+@media (max-width:1080px) { #navStats .nb-x2 { display:none !important; } }
+@media (max-width: 940px) { #navStats .nb-x3 { display:none !important; } }
+@media (max-width: 780px) { #navStats .nb-x4 { display:none !important; } }
+@media (max-width: 560px) {
+  .nb-stat { padding:0 2px !important; }
+  .nb-stat b { font-size:1.02rem; }
+  .nb-stat.nb-eta b { font-size:1.1rem; }
+  .nb-stat span { font-size:.6rem; }
+}
+/* a car screen or a landscape phone is wide but short */
+@media (max-height:560px) {
+  .nb-stat b { font-size:1.05rem; }
+  .nb-stat span { font-size:.62rem; }
+}
 
+/* ---- the rail and the aerial preview, both a step higher ----
+   The rail sat one gap off the round buttons, close enough to read as
+   covering them, and the preview had to share that lane. Each moves up
+   one step, keeping the lane order the rest of the HUD is built on. */
+#dock.nav-shift { bottom:calc(var(--hud-lane2) + 18px) !important; }
+body.bar-hidden #dock.nav-shift {
+  bottom:calc(env(safe-area-inset-bottom) + var(--hud-fab) + var(--hud-gap) * 2 + 18px) !important;
+}
+#turnPreview { bottom:calc(var(--hud-lane3) + 26px) !important; }
+/* on a short screen there is no height to give it, and a preview pushed
+   into the instruction card is worse than one sitting lower */
+@media (max-height:760px) { #turnPreview { bottom:calc(var(--hud-lane3) + 6px) !important; } }
+@media (max-height:600px) { #turnPreview { display:none; } }
+
+/* ---- and the rail itself, down to a phone ---- */
+@media (max-width:560px) {
+  #dock.nav-shift { max-width:calc(100vw - 16px) !important; }
+  .qr-btn { padding:0 10px; }
+  .qr-label { font-size:.72rem; }
+}
+</style>
+<style>
 /* ======================================================================
-   3 — MORE BUILDINGS, AND THEY COME BACK AFTER A THEME CHANGE
+   LANDING — header layout, six travel modes, one-prompt AI planner.
+   Scoped to #wlShell like the rest of the shell, so none of it can
+   reach the dark map app underneath.
    ====================================================================== */
-.maplibregl-canvas { image-rendering:auto; }
+
+/* ---- the bar: bigger mark, everything pulled to the left ---- */
+#wlShell .top-in { max-width:1440px; padding:0 16px 0 12px; height:80px; gap:10px; }
+#wlShell .logo { gap:12px; margin-right:26px; }
+#wlShell .logo-mark { width:48px; height:48px; border-radius:14px; }
+#wlShell .logo-mark svg { width:27px; height:27px; }
+#wlShell .logo b { font-size:1.62rem; letter-spacing:-.025em; }
+#wlShell .top-nav { gap:2px; }
+#wlShell .top-nav button { padding:10px 14px; white-space:nowrap; }
+@media (min-width:1001px) { #wlShell .top-nav { margin:0 auto 0 0; } }
+
+/* the taller bar carries the mobile dropdown down with it */
+@media (max-width:1000px) { #wlShell .top-nav { top:80px; } }
+@media (max-width:620px)  { #wlShell .top-nav { top:70px; } }
+
+/* the menu item that is not here yet */
+#wlShell .top-nav button.soon {
+  display:inline-flex; align-items:center; gap:8px;
+  color:var(--faint); cursor:default; opacity:.9;
+}
+#wlShell .top-nav button.soon:hover { background:none; color:var(--faint); }
+#wlShell .top-nav button.soon em {
+  font-style:normal; font-size:.66rem; font-weight:700; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--p); background:var(--p-soft);
+  padding:3px 8px; border-radius:999px;
+}
+#wlShell .foot-soon { color:#64748b; font-size:.96rem; }
+
+/* ---- six travel modes ---- */
+#wlShell .gmodes { grid-template-columns:repeat(6,1fr); }
+@media (max-width:1200px) { #wlShell .gmodes { grid-template-columns:repeat(3,1fr); } }
+@media (max-width:620px)  { #wlShell .gmodes { grid-template-columns:repeat(2,1fr); } }
+#wlShell .gmodes .tile { padding:24px 14px; }
+
+/* ---- one-prompt AI planner ---- */
+#wlShell .soon-pill {
+  display:inline-block; margin-bottom:14px; padding:7px 15px; border-radius:999px;
+  background:var(--p-soft); color:var(--p-dark);
+  font-size:.78rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase;
+}
+#wlShell .ai-demo {
+  max-width:760px; margin:0 auto; background:#fff; border:1px solid var(--line);
+  border-radius:var(--r-xl); padding:18px; box-shadow:var(--sh);
+}
+#wlShell .ai-demo-bar {
+  display:flex; align-items:center; gap:12px; padding:14px 15px;
+  border:1px solid var(--line-2); border-radius:var(--r-lg); background:var(--p-tint);
+}
+#wlShell .ai-demo-ico { color:var(--p); font-size:1.15rem; flex-shrink:0; }
+#wlShell .ai-demo-txt { flex:1; min-width:0; color:var(--ink); font-size:1rem; }
+#wlShell .ai-demo-go {
+  flex-shrink:0; background:var(--p); color:#fff; font-weight:700; font-size:.9rem;
+  padding:9px 16px; border-radius:var(--r);
+}
+#wlShell .ai-demo-out { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:11px; }
+#wlShell .ai-demo-out li {
+  display:flex; gap:11px; align-items:baseline; text-align:left;
+  font-size:.98rem; color:var(--body); line-height:1.5;
+}
+#wlShell .ai-demo-out li > b:first-child { color:var(--ok); flex-shrink:0; }
+#wlShell .ai-demo-out li b { color:var(--ink); font-weight:700; }
+/* ---- spacing ---- */
+
+/* the hero fills exactly what is left under the taller bar. It was still
+   subtracting the old 74px, which left a few pixels of stray scroll. */
+#wlShell .hero { min-height:calc(100vh - 80px); }
+#wlShell .hero-copy { padding:46px 48px 44px; }
+#wlShell .hero-copy p { margin-bottom:24px; }
+
+/* six chips settle onto two even rows rather than four and a stray two */
+#wlShell .modes { gap:8px; }
+#wlShell .mode-chip { padding:8px 14px; font-size:.9rem; }
+
+/* one rhythm down the page, now that there is another section in it */
+#wlShell .sec { padding:72px 0; }
+#wlShell .sec-h { margin-bottom:40px; }
+
+/* six across is narrower than four, so the gap and the glyph come in */
+#wlShell .gmodes { gap:14px; }
+#wlShell .gmodes .tile .em { font-size:1.8rem; margin-bottom:10px; }
+
+/* the planner breathes with the sections either side of it */
+#wlShell .ai-demo { padding:20px; }
+#wlShell .ai-demo-out { margin-top:18px; }
+#wlShell .ai-demo-tiles { margin-top:28px; }
+
+/* the band reads as words now, not figures, so it wants less height */
+#wlShell .band { padding:48px 0; }
+#wlShell .band b { font-size:1.85rem; margin-bottom:4px; }
+
+/* quieter than the live links, but still legible on the navy */
+#wlShell .foot-soon { color:#7c8b9e; }
+
+/* a long menu item plus a badge crowds the bar on a small laptop, so
+   the badge drops out first and the wording survives */
+@media (max-width:1240px) and (min-width:1001px) {
+  #wlShell .top-nav button.soon em { display:none; }
+  #wlShell .top-nav button { padding:10px 11px; }
+}
+@media (max-width:620px) {
+  #wlShell .top-in { height:70px; }
+  #wlShell .logo-mark { width:40px; height:40px; }
+  #wlShell .logo-mark svg { width:23px; height:23px; }
+  #wlShell .logo b { font-size:1.34rem; }
+  #wlShell .hero { min-height:calc(100vh - 70px); }
+  #wlShell .hero-copy { padding:28px 22px 26px; }
+  #wlShell .sec { padding:56px 0; }
+  #wlShell .sec-h { margin-bottom:30px; }
+  #wlShell .band { padding:40px 0; }
+  #wlShell .band b { font-size:1.7rem; }
+  #wlShell .ai-demo { padding:13px; }
+  #wlShell .ai-demo-bar { flex-wrap:wrap; }
+  #wlShell .ai-demo-go { width:100%; text-align:center; }
+}
 </style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
 </head>
 <body>
+
+<script>
+/* ======================================================================
+   BASEMAP KEY  -  the one line to change
+
+   CARTO began requiring an API key on their raster basemaps and now
+   paints "API KEY REQUIRED" across every tile served without one. A key
+   is free up to 5 million tiles a month: https://carto.com/basemaps/apikey
+
+   Paste it between the quotes and the map goes back to exactly the
+   cartography it had before. Leave it empty and the map draws keyless
+   OpenStreetMap tiles instead - no watermark either way.
+
+   Worth knowing before you choose: CARTO are retiring these raster
+   basemaps, so a key is the fix for now rather than forever. And the
+   OpenStreetMap tile servers turn away requests that arrive without a
+   referrer, which is what a page opened straight off the disk sends,
+   so the keyless route wants the file served over http rather than
+   double-clicked. A key works either way.
+   ====================================================================== */
+window.WL_CARTO_KEY = '';
+</script>
 
 <div id="wlShell">
   <header class="top" id="wlTop"></header>
@@ -4138,14 +4310,16 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
 </svg>
 
         <div class="hero-copy">
-          <span class="badge">&#9889; Works in your car&rsquo;s browser</span>
-          <h1>Navigate every journey.</h1>
-          <p>Turn-by-turn guidance that says what matters and nothing more &mdash; by car, bike, on foot, or by air.</p>
+          <span class="badge">&#9889; Works in your vehicle&rsquo;s browser</span>
+          <h1>The First AI Navigation App</h1>
+          <p>Describe the whole trip in one line and WayLynq sets itself up &mdash; route, stops, layers, and voice.</p>
           <div class="modes">
             <span class="mode-chip">&#128663; Car</span>
-            <span class="mode-chip">&#128694; Walk</span>
-            <span class="mode-chip">&#128690; Cycle</span>
+            <span class="mode-chip">&#128652; Bus</span>
+            <span class="mode-chip">&#128646; Train</span>
             <span class="mode-chip">&#9992;&#65039; Flight</span>
+            <span class="mode-chip">&#128690; Cycle</span>
+            <span class="mode-chip">&#128694; Walk</span>
           </div>
         </div>
       </div>
@@ -4194,25 +4368,57 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
 
           <div class="trust">
             <span>&#128274; Stored on your device</span>
-            <span>&#128663; Built for driving</span>
+            <span>&#128663; Build for Navigating</span>
             <span>&#9889; Free to use</span>
           </div>
         </div>
       </div>
     </div>
 
+    <!-- one-prompt AI trip planner -->
+    <section class="sec white" id="aiPlanner">
+      <div class="wrap">
+        <div class="sec-h">
+          <span class="soon-pill">Coming soon</span>
+          <h2>One-Prompt AI Trip Planner</h2>
+          <p>Say the whole journey in a single line. WayLynq finds the route, slots in the stops, sets the travel mode, the map layers and the voice &mdash; then tells you every step it took.</p>
+        </div>
+        <div class="ai-demo">
+          <div class="ai-demo-bar">
+            <span class="ai-demo-ico">&#10022;</span>
+            <span class="ai-demo-txt">Boston tonight, stop for coffee and a charge, well-lit roads, music on</span>
+            <span class="ai-demo-go">Plan it</span>
+          </div>
+          <ul class="ai-demo-out">
+            <li><b>&#10003;</b><span>Routed to <b>Boston, MA</b> &middot; 215 mi &middot; 3 hr 32 min</span></li>
+            <li><b>&#10003;</b><span>Coffee stop added <b>41 mi</b> in</span></li>
+            <li><b>&#10003;</b><span>Fast charger added <b>118 mi</b> in, about 22 min</span></li>
+            <li><b>&#10003;</b><span>Night routing set to <b>well-lit, busier roads</b></span></li>
+            <li><b>&#10003;</b><span>Music playing, paused automatically for spoken directions</span></li>
+          </ul>
+        </div>
+        <div class="grid g3 ai-demo-tiles">
+          <div class="tile"><span class="em">&#128483;&#65039;</span><b>Plain language</b><p>No menus and no forms. Say it the way you would say it to a passenger.</p></div>
+          <div class="tile"><span class="em">&#128203;</span><b>Nothing hidden</b><p>Every step it takes is listed back to you, so nothing happens invisibly.</p></div>
+          <div class="tile"><span class="em">&#9654;&#65039;</span><b>One tap to drive</b><p>When the plan looks right, Start is the only thing left to press.</p></div>
+        </div>
+      </div>
+    </section>
+
     <!-- transport modes -->
     <section class="sec tint">
       <div class="wrap">
         <div class="sec-h">
-          <h2>Every Way You Travel, Covered</h2>
-          <p>WayLynq adapts to how you move &mdash; behind the wheel, on two wheels, or on two feet.</p>
+          <h2>AI Navigates Your Journey</h2>
+          <p>Tell WayLynq where you are going and it works out how &mdash; behind the wheel, on rails, in the air, or on two feet.</p>
         </div>
-        <div class="grid g8">
+        <div class="grid gmodes">
           <div class="tile"><span class="em">&#128663;</span><b>Car</b><p>Turn-by-turn guidance, lane hints, and parking at the far end</p></div>
-          <div class="tile"><span class="em">&#128694;</span><b>Walk</b><p>Footpaths and crossings, with street names as you zoom in</p></div>
-          <div class="tile"><span class="em">&#128690;</span><b>Cycle</b><p>Bike-friendly routing and the climb ahead of you</p></div>
+          <div class="tile"><span class="em">&#128652;</span><b>Bus</b><p>Stops, routes and connections read from open transit data</p></div>
+          <div class="tile"><span class="em">&#128646;</span><b>Train</b><p>Real stations, the services that run the line, and where they call</p></div>
           <div class="tile"><span class="em">&#9992;&#65039;</span><b>Flight</b><p>Nearest airports, great-circle distance, and real booking links</p></div>
+          <div class="tile"><span class="em">&#128690;</span><b>Cycle</b><p>Bike-friendly routing and the climb ahead of you</p></div>
+          <div class="tile"><span class="em">&#128694;</span><b>Walk</b><p>Footpaths and crossings, with street names as you zoom in</p></div>
         </div>
       </div>
     </section>
@@ -4273,10 +4479,10 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
     <div class="band">
       <div class="wrap">
         <div class="grid">
-          <div><b>8</b><span>Ways to travel</span></div>
-          <div><b>1</b><span>File, no install</span></div>
-          <div><b>0</b><span>API keys needed</span></div>
-          <div><b>&#8734;</b><span>Free to use</span></div>
+          <div><b>AI</b><span>One-prompt trip planning</span></div>
+          <div><b>Live</b><span>Traffic, incidents &amp; cameras</span></div>
+          <div><b>Smart</b><span>Fuel, food &amp; charging stops</span></div>
+          <div><b>Night</b><span>Well-lit routing after dark</span></div>
         </div>
       </div>
     </div>
@@ -4296,6 +4502,7 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
             <li><a href="#/planner" data-go="planner">Trip Planner</a></li>
             <li><a href="#/nearby" data-go="nearby">Nearby</a></li>
             <li><a href="#/landing" data-go="landing">Features</a></li>
+            <li><span class="foot-soon">One-Prompt AI Planner &middot; coming soon</span></li>
           </ul></div>
           <div><h4>Built on</h4><ul>
             <li><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></li>
@@ -4725,25 +4932,15 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
         <span class="tl-more">Trip &#8250;</span>
       </div>
       <div id="destRow"><span class="dr-flag">&#127937;</span><span class="tl-dest" id="destLine">&mdash;</span></div>
-      <div id="tripCompass" title="Heading" aria-label="Compass">
-        <svg viewBox="0 0 40 40" aria-hidden="true">
-          <circle cx="20" cy="20" r="18" class="tc-ring"/>
-          <g id="tripCompassRose">
-            <path d="M20 5 L25 20 L20 17 L15 20 Z" class="tc-n"/>
-            <path d="M20 35 L15 20 L20 23 L25 20 Z" class="tc-s"/>
-          </g>
-          <text x="20" y="12.5" text-anchor="middle" class="tc-lbl">N</text>
-        </svg>
-      </div>
     </div>
     <div id="laneBar" class="hidden"></div>
     <div id="thenRow" class="hidden"><span class="then-ico" id="thenArrow"></span><span id="thenText"></span></div>
   </div>
 
   <div id="navTopRight">
-    <button id="navAlertsBtn" class="nav-btn" type="button" title="Report a hazard ahead" aria-label="Report a hazard"><span>&#9888;&#65039;</span><span class="nav-btn-label">Report</span></button>
-    <button id="navVoiceBtn" class="nav-btn" type="button" title="Voice guide volume" aria-label="Voice guide volume"><span id="navVoiceIco">&#128266;</span><span class="nav-btn-label" id="navVoiceLabel">Max</span></button>
-    <button id="navNorthBtn" class="nav-btn" type="button" title="North up or heading up" aria-label="North up or heading up">&#129517;</button>
+    <button id="navAlertsBtn" class="nav-btn" type="button" title="Report or view alerts"><span>&#9888;&#65039;</span><span class="nav-btn-label">Alerts</span></button>
+    <button id="navVoiceBtn" class="nav-btn" type="button" title="Spoken guidance"><span id="navVoiceIco">&#128266;</span><span class="nav-btn-label" id="navVoiceLabel">Full</span></button>
+    <button id="navNorthBtn" class="nav-btn" type="button" title="North up or heading up">&#129517;</button>
     <button id="navMenuToggle" class="nav-btn" type="button" title="More">&#8942;</button>
     <div id="navMenu" class="hidden">
       <button id="navSat" type="button">&#127758; Satellite view</button>
@@ -4780,16 +4977,13 @@ body.light-mode #turnDistance, body.light-mode #tripLine .tl-road { color:#fff !
     <button id="navBarSearch" class="bar-btn" type="button" title="Search along the way">&#128269;</button>
     <div id="navStats">
       <div class="nb-stat nb-eta"><b id="etaClock" class="num">--</b><span>Arrival <i id="navDelta" class="nav-delta hidden"></i></span></div>
-      <span class="nb-sep"></span>
       <div class="nb-stat"><b id="remainMi" class="num">--</b><span>Miles left</span></div>
-      <span class="nb-sep"></span>
-      <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Time Left</span></div>
-      <span class="nb-sep"></span>
-      <div class="nb-stat nb-traffic"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
-      <span class="nb-sep nb-opt"></span>
-      <div class="nb-stat nb-opt"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
-      <span class="nb-sep nb-opt" id="dwellSep" style="display:none"></span>
-      <div class="nb-stat nb-opt" id="dwellStat" style="display:none"><b id="dwellMin" class="num">0</b><span>At stops</span></div>
+      <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Drive time</span></div>
+      <div class="nb-stat nb-traffic nb-x4"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
+      <div class="nb-stat nb-x3"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
+      <div class="nb-stat nb-x2"><b id="doneMi" class="num">0.0</b><span>Traveled</span></div>
+      <div class="nb-stat nb-x1"><b id="avgMph" class="num">--</b><span>Avg mph</span></div>
+      <div class="nb-stat nb-x3" id="dwellStat" style="display:none"><b id="dwellMin" class="num">0</b><span>At stops</span></div>
     </div>
     <button id="navBarSteps" class="bar-btn" type="button" title="All directions">&#9776;</button>
   </div>
@@ -5044,6 +5238,30 @@ window.onSpotifyIframeApiReady = function (api) {
      top of the imagery so the towns and cities being flown over are readable
      rather than being anonymous terrain. */
   const ESRI_LABELS = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer';
+
+  /* The basemap, from whichever source is available. Set the key at the
+     top of the file; with one this returns the original CARTO cartography,
+     without one it returns OpenStreetMap and the stylesheet darkens it.
+     maxNativeZoom lets the nav view keep climbing past what the server
+     actually has, upscaling the last tiles rather than stopping at 19. */
+  function baseTiles(light) {
+    const key = (window.WL_CARTO_KEY || '').trim();
+    if (key) {
+      return {
+        url: 'https://{s}.basemaps.cartocdn.com/' +
+             (light ? 'rastertiles/voyager' : 'dark_all') +
+             '/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(key),
+        opts: { maxZoom: 20, subdomains: 'abcd',
+                attribution: '&copy; OpenStreetMap &copy; CARTO' }
+      };
+    }
+    return {
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      opts: { maxZoom: 20, maxNativeZoom: 19,
+              attribution: '&copy; OpenStreetMap contributors' }
+    };
+  }
+
   const AI_MODEL = 'claude-sonnet-4-6';
 
   /* A TomTom Traffic key. It is a browser key, so it is visible in this
@@ -5266,6 +5484,9 @@ window.onSpotifyIframeApiReady = function (api) {
 
   function applyTheme() {
     document.body.classList.toggle('light-mode', lightMode);
+    /* CARTO ships a real dark basemap; OpenStreetMap does not, so the
+       stylesheet has to make one. Marked here rather than guessed at. */
+    document.body.classList.toggle('osm-base', !(window.WL_CARTO_KEY || '').trim());
     $('themeToggle').innerHTML = lightMode ? '&#9728;' : '&#9789;';
     if (tileLayer) map.removeLayer(tileLayer);
     if (satelliteOn) {
@@ -5273,10 +5494,8 @@ window.onSpotifyIframeApiReady = function (api) {
     } else {
       // dark_all is intentionally flat; the CSS contrast lift in the
       // stylesheet does the heavy work of separating roads from blocks.
-      const url = lightMode
-        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-      tileLayer = L.tileLayer(url, { maxZoom: 20, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(map);
+      const bt = baseTiles(lightMode);
+      tileLayer = L.tileLayer(bt.url, bt.opts).addTo(map);
     }
     renderRoutes();
     if (navActive()) renderProgressSplit(traveledMeters);
@@ -7696,30 +7915,6 @@ window.onSpotifyIframeApiReady = function (api) {
         if (satelliteOn) toggle3dSatellite(true);
       });
       map3d.on('error', (ev) => console.warn('MapLibre:', ev && ev.error));
-
-      /* Every custom layer lives on top of the provider's style, so a style
-         swap - a theme change, satellite on or off - wipes all of them. The
-         map then renders as bare background, which is the black screen. One
-         handler puts them all back whenever a style finishes loading. */
-      map3d.on('styledata', () => {
-        if (!map3dReady) return;
-        if (map3d._wlRestoring) return;
-        map3d._wlRestoring = true;
-        setTimeout(() => {
-          try {
-            if (!map3d.getLayer('wl-buildings')) style3dBuildings();
-            style3dPalette();
-            boostMajorRoads();
-            if (!map3d.getSource('wl-route')) setup3dRoute();
-            paint3dHighways();
-            ensure3dImages();
-            renderSignals();
-            if (liveIncidents.length) renderLiveIncidents();
-            if (satelliteOn && !map3d.getLayer('wl-sat-layer')) toggle3dSatellite(true);
-          } catch (e) { console.warn('restore after style change', e); }
-          map3d._wlRestoring = false;
-        }, 60);
-      });
     } catch (e) { console.warn('3D view unavailable', e); map3d = null; }
     return map3d;
   }
@@ -7778,44 +7973,18 @@ window.onSpotifyIframeApiReady = function (api) {
 
   function style3dBuildings() {
     if (!map3d || !map3d.getStyle()) return;
-    const style = map3d.getStyle();
-    if (!style || !style.layers) return;
     if (map3d.getLayer('wl-buildings')) map3d.removeLayer('wl-buildings');
-
-    /* The source was hardcoded as 'openmaptiles'. When the style provider
-       names it anything else the layer silently fails to attach and no
-       buildings appear at all - which is why only some of them showed. The
-       vector source is read from the style now, whatever it is called. */
-    const srcName = Object.keys(style.sources || {})
-      .find((k) => style.sources[k].type === 'vector') || 'openmaptiles';
-
     let labelId;
-    for (const l of style.layers) { if (l.type === 'symbol' && l.layout && l.layout['text-field']) { labelId = l.id; break; } }
-    try {
-      map3d.addLayer({
-        id: 'wl-buildings', source: srcName, 'source-layer': 'building', type: 'fill-extrusion',
-        /* was 13, so whole districts were flat until you were almost on top
-           of them. 14 is where the tiles carry building geometry; 12.5 lets
-           the skyline build up as you approach. */
-        minzoom: 12.5,
-        paint: {
-          'fill-extrusion-color': lightMode ? '#d7dfe6' : '#243447',
-          /* real heights where the data has them, a sensible default where
-             it does not, and a floor so nothing renders as a flat sliver */
-          'fill-extrusion-height': ['case',
-            ['has', 'render_height'], ['get', 'render_height'],
-            ['has', 'height'], ['to-number', ['get', 'height'], 8],
-            ['has', 'levels'], ['*', ['to-number', ['get', 'levels'], 2], 3.2],
-            8],
-          'fill-extrusion-base': ['case',
-            ['has', 'render_min_height'], ['get', 'render_min_height'],
-            ['has', 'min_height'], ['to-number', ['get', 'min_height'], 0],
-            0],
-          'fill-extrusion-opacity': 0.92,
-          'fill-extrusion-vertical-gradient': true
-        }
-      }, labelId);
-    } catch (e) { console.warn('building layer', e); }
+    for (const l of map3d.getStyle().layers) { if (l.type === 'symbol' && l.layout && l.layout['text-field']) { labelId = l.id; break; } }
+    map3d.addLayer({
+      id: 'wl-buildings', source: 'openmaptiles', 'source-layer': 'building', type: 'fill-extrusion', minzoom: 13,
+      paint: {
+        'fill-extrusion-color': lightMode ? '#d3dde2' : '#1b3440',
+        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': 0.88
+      }
+    }, labelId);
   }
 
   // Dark mode buries road hierarchy, so major roads get a bright casing
@@ -7953,7 +8122,6 @@ window.onSpotifyIframeApiReady = function (api) {
   let halfwayShown = false, arrivalShown = false;
   let spokenStages = {}, lastSpokenText = null;
   let speedLimitMph = null, limitFetching = false, lastLimitFetch = 0;
-  let backSteps = 0, lastFixStamp = 0;
   let alertedIds = new Set();
   let allStepsOpen = false;
   let progressPast = null, progressAhead = null, progressAheadParts = [];
@@ -8028,11 +8196,6 @@ window.onSpotifyIframeApiReady = function (api) {
     // the new line starts at the car, so bank the miles already covered
     tripOdometer += traveledMeters;
     navStepIndex = 0; traveledMeters = 0; spokenStages = {}; lastSpokenText = null;
-    /* Stale exit information from the previous route must not survive into
-       the new one. */
-    backSteps = 0;
-    const staleExit = $('turnExit'); if (staleExit) staleExit.classList.add('hidden');
-    const staleRoadExit = $('roadExit'); if (staleRoadExit) staleRoadExit.classList.add('hidden');
     seedHud(r); renderProgressSplit(0); renderStepsList();
   }
 
@@ -8075,8 +8238,30 @@ window.onSpotifyIframeApiReady = function (api) {
   function updateDwellStat() {
     const on = dwellRemainingMs > 0;
     if (on) $('dwellMin').textContent = Math.round(dwellRemainingMs / 60000);
+    /* The bar divides itself into equal columns, so this one appearing
+       needs nothing else moved or re-measured. */
     $('dwellStat').style.display = on ? '' : 'none';
-    $('dwellSep').style.display = on ? '' : 'none';
+  }
+
+  /* Distance covered, and the pace actually managed for it. Both read
+     figures the drive already keeps, so neither adds tracking of its own.
+     Time spent parked at stops comes out of the average - otherwise a
+     twenty minute coffee reads as an hour of very slow driving. */
+  function updateTripStats() {
+    const doneM = tripOdometer + traveledMeters;
+    const dEl = $('doneMi');
+    if (dEl) {
+      const mi = toMiles(doneM);
+      dEl.textContent = mi.toFixed(mi < 10 ? 1 : 0);
+    }
+    const aEl = $('avgMph');
+    if (!aEl) return;
+    /* Below a tenth of a mile the figure is noise, so it stays blank */
+    if (!tripStartMs || doneM < 160) { aEl.textContent = '--'; return; }
+    const stopped = Math.max(0, dwellTotalMs() - dwellRemainingMs);
+    const hrs = (Date.now() - tripStartMs - stopped) / 3600000;
+    const mph = hrs > 0 ? toMiles(doneM) / hrs : 0;
+    aEl.textContent = (isFinite(mph) && mph > 0 && mph < 200) ? String(Math.round(mph)) : '--';
   }
 
   let lastPreviewStep = -1;
@@ -8450,12 +8635,6 @@ window.onSpotifyIframeApiReady = function (api) {
   function onNavPosition(pos) {
     // Once you have arrived, nothing may keep counting down.
     if (arrivalShown) return;
-    /* Browsers can deliver a cached or queued reading after a fresher one,
-       especially when the tab has been backgrounded. Accepting it would put
-       the car back where it was several seconds ago. */
-    const stamp = pos.timestamp || Date.now();
-    if (lastFixStamp && stamp < lastFixStamp - 400) return;
-    lastFixStamp = stamp;
     const raw = { lat: pos.coords.latitude, lng: pos.coords.longitude };
     const snapped = snapToRoute(raw, pos.coords.accuracy);
     const cur = snapped;
@@ -8560,20 +8739,7 @@ window.onSpotifyIframeApiReady = function (api) {
          forwards and backwards, so progress only moves forward unless the
          car has genuinely gone back more than 30 m. */
       const prevAlong = navDistAlong || 0;
-      /* One reading landing 30 m behind used to be believed outright, and the
-         car jumped backwards down the route - which is exactly what GPS does
-         under bridges, beside tall buildings and coming out of tunnels.
-         Going back now has to be agreed by three consecutive fixes; a real
-         wrong-way move shows up as off-route well before that and triggers a
-         reroute, which resets progress cleanly. */
-      if (proj.distAlong < prevAlong - 25) {
-        backSteps++;
-        if (backSteps >= 3) { navDistAlong = proj.distAlong; backSteps = 0; }
-        else navDistAlong = prevAlong;
-      } else {
-        backSteps = 0;
-        navDistAlong = Math.max(prevAlong, proj.distAlong);
-      }
+      navDistAlong = proj.distAlong < prevAlong - 30 ? proj.distAlong : Math.max(prevAlong, proj.distAlong);
       matchedAlong = navDistAlong;
     }
     // seed the interpolator from this fix
@@ -8605,11 +8771,7 @@ window.onSpotifyIframeApiReady = function (api) {
       if (allStepsOpen) renderStepsList();
     }
 
-    /* navDistAlong is the guarded, forward-only progress. The raw projection
-       is what jitters, so using it here made the miles and the countdown run
-       backwards even though the tracked position had held its ground. */
-    const alongNow = trustForProgress ? navDistAlong : Math.max(navDistAlong || 0, proj.distAlong);
-    const remainMetersLive = Math.max(0, totalMeters - alongNow);
+    const remainMetersLive = Math.max(0, totalMeters - proj.distAlong);
     const step = navSteps[navStepIndex];
     const loc = step.maneuver && step.maneuver.location;
     let toTurn = Math.max(0, (navStepStart[navStepIndex] != null ? navStepStart[navStepIndex] : proj.distAlong) - proj.distAlong);
@@ -8711,8 +8873,8 @@ window.onSpotifyIframeApiReady = function (api) {
     navSafe('delta', () => updateDelta(remainDur));
     navSafe('limitSay', () => announceLimitChange());
     navSafe('trafficStat', () => updateTrafficStat());
-    navSafe('compass', () => updateTripCompass());
-    renderProgressSplit(alongNow);
+    navSafe('tripStats', () => updateTripStats());
+    renderProgressSplit(trustForProgress ? navDistAlong : proj.distAlong);
   }
 
   function startNavWatch() {
@@ -11363,20 +11525,6 @@ window.onSpotifyIframeApiReady = function (api) {
   // now, which in OSRM is the step you are part-way through, not the one the
   // upcoming maneuver puts you on. Showing the latter simply repeated the
   // street name already in the instruction above it.
-  /* The compass turns with the car, not with the panel. Rotation is eased
-     the short way round the circle so 359 to 1 degrees is a two-degree nudge
-     rather than a full spin, and small GPS wobble is ignored outright. */
-  let compassShown = 0;
-  function updateTripCompass() {
-    const rose = $('tripCompassRose');
-    if (!rose || !isFinite(headingDeg)) return;
-    let delta = ((headingDeg - compassShown + 540) % 360) - 180;
-    if (Math.abs(delta) < 2) return;                 // GPS noise, not a turn
-    compassShown = (compassShown + delta * 0.35 + 360) % 360;
-    rose.style.transform = 'rotate(' + (-compassShown).toFixed(1) + 'deg)';
-    rose.style.transformOrigin = '20px 20px';
-  }
-
   function updateRoadRow() {
     const onNow = navSteps[Math.max(0, navStepIndex - 1)] || navSteps[0];
     const upcoming = navSteps[navStepIndex];
@@ -11586,32 +11734,15 @@ window.onSpotifyIframeApiReady = function (api) {
 
   // The exit for the maneuver being counted down to, plus the next one
   // further along if this turn is not itself an exit.
-  /* An exit is only worth showing once you are on the road that leaves by it
-     and close enough for it to matter. Announcing junction 12 the moment a
-     four-hour drive begins is noise, and it was staying on screen through
-     roads that had nothing to do with it. Within three miles, or the next
-     manoeuvre, and not before. */
-  const EXIT_VISIBLE_M = 4800;
   function upcomingExit() {
     const cur = navSteps[navStepIndex];
     if (cur) {
       const e = stepExit(cur);
-      if (e) return { num: e, dist: 0, signs: stepSigns(cur), road: currentRoadRef(cur) || cur.name || null, now: true };
+      if (e) return { num: e, dist: 0, signs: stepSigns(cur), now: true };
     }
     for (let i = navStepIndex + 1; i < navSteps.length; i++) {
-      const st = navSteps[i];
-      const e = stepExit(st);
-      if (!e) continue;
-      const away = Math.max(0, (navStepStart[i] || 0) - navDistAlong);
-      if (away > EXIT_VISIBLE_M) return null;      // too far off to be useful yet
-      /* and only while actually travelling the road the exit belongs to */
-      const onNow = navSteps[Math.max(0, navStepIndex - 1)] || cur;
-      const onRoad = currentRoadRef(onNow) || (onNow && onNow.name) || '';
-      const exitRoad = currentRoadRef(st) || st.name || '';
-      const sameRoad = !onRoad || !exitRoad || i === navStepIndex + 1 ||
-        String(onRoad).toLowerCase() === String(exitRoad).toLowerCase();
-      if (!sameRoad) return null;
-      return { num: e, dist: away, signs: stepSigns(st), road: onRoad || exitRoad || null, now: false };
+      const e = stepExit(navSteps[i]);
+      if (e) return { num: e, dist: Math.max(0, (navStepStart[i] || 0) - navDistAlong), signs: stepSigns(navSteps[i]), now: false };
     }
     return null;
   }
@@ -11635,9 +11766,7 @@ window.onSpotifyIframeApiReady = function (api) {
       $('turnExitNum').textContent = info.num;
       badge.classList.remove('hidden');
       badge.classList.toggle('soon', !!info.now);
-      badge.title = (info.road ? info.road + ' \u00b7 ' : '') + 'Exit ' + info.num +
-        (info.signs ? ' \u00b7 ' + info.signs : '');
-    } else { badge.classList.add('hidden'); badge.removeAttribute('title'); }
+    } else badge.classList.add('hidden');
     const s = stepSigns(navSteps[navStepIndex]);
     if (s) { signs.textContent = s; signs.classList.remove('hidden'); }
     else signs.classList.add('hidden');
@@ -15725,7 +15854,8 @@ window.onSpotifyIframeApiReady = function (api) {
   };
 
   /* ---------------- header ---------------- */
-  var VIEWS = [['maps','Map'], ['planner','Trip Planner'], ['nearby','Nearby'], ['landing','Features']];
+  var VIEWS = [['maps','Map'], ['planner','Trip Planner'], ['nearby','Nearby'], ['landing','Features'],
+               ['ai','One-Prompt AI Planner','soon']];
   var AUTH_HTML = null;
   var MARK_BIG = '<span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></span>';
   var MARK = '<span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></span>';
@@ -15737,6 +15867,12 @@ window.onSpotifyIframeApiReady = function (api) {
       '<span class="logo" data-go="' + (u ? 'maps' : 'landing') + '">' + MARK + '<b>Way<i>Lynq</i></b></span>' +
       '<button class="burger" id="wlBurger" aria-label="Menu">&#9776;</button>' +
       '<nav class="top-nav" id="wlNav">' + VIEWS.map(function (v) {
+        /* No data-go, so the global click router cannot navigate to a page
+           that does not exist yet. It is a label, not a destination. */
+        if (v[2] === 'soon') {
+          return '<button type="button" class="soon" disabled aria-disabled="true" ' +
+            'title="One-Prompt AI Planner \u2014 coming soon">' + v[1] + '<em>Coming soon</em></button>';
+        }
         return '<button type="button" data-go="' + v[0] + '"' + (v[0] === active ? ' class="on"' : '') + '>' + v[1] + '</button>';
       }).join('') + '</nav>' +
       '<div class="top-act">' + (u
@@ -15926,19 +16062,18 @@ window.onSpotifyIframeApiReady = function (api) {
     /* States plainly whether accounts are on the server or on this device,
        so nobody discovers the difference on their second device. */
     findApi().then(function (url) {
-      if (!document.querySelector) return;
+      /* Silent when the server is unreachable. Someone signing in cannot
+         act on that, and sign-in works either way; the one case that
+         actually costs them something - an account that will not follow
+         them to another device - is still said plainly on the form. */
+      if (!url || !document.querySelector) return;
       var box = document.querySelector('#wlShell .trust');
-      if (!box) return;
+      /* and never twice, however often this panel gets wired up */
+      if (!box || box.querySelector('#wlSrvState')) return;
       var span = document.createElement('span');
       span.id = 'wlSrvState';
-      if (url) {
-        span.innerHTML = '\u2601\uFE0F Works on all your devices';
-        span.style.color = '#188038';
-      } else {
-        span.innerHTML = '\u26A0\uFE0F This device only \u2014 server not reachable';
-        span.style.color = '#b06000';
-        span.title = 'Upload the api folder and set config.php to sync accounts across devices.';
-      }
+      span.innerHTML = '\u2601\uFE0F Works on all your devices';
+      span.style.color = '#188038';
       box.appendChild(span);
     });
   }
@@ -16640,8 +16775,12 @@ window.onSpotifyIframeApiReady = function (api) {
     if (!nMap) {
       if (typeof L === 'undefined') { wrap.innerHTML = '<div class="empty">The map library did not load.</div>'; return; }
       nMap = L.map('nMap', { zoomControl: true, attributionControl: true });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        { maxZoom: 19, attribution: '&copy; OpenStreetMap &copy; CARTO' }).addTo(nMap);
+      var nKey = (window.WL_CARTO_KEY || '').trim();
+      L.tileLayer(nKey
+        ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(nKey)
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        { maxZoom: 19, subdomains: nKey ? 'abcd' : 'abc',
+          attribution: nKey ? '&copy; OpenStreetMap &copy; CARTO' : '&copy; OpenStreetMap contributors' }).addTo(nMap);
       nLayer = L.layerGroup().addTo(nMap);
       nMap.setView([20, 0], 2);
     }
