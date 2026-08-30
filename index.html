@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4058,6 +4059,1371 @@ body.bar-hidden #dock.nav-shift {
 </style>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+
+<style id="waylyn-refined-nav">
+/* Refined 3D navigation pass */
+body:not(.light-mode) {
+  --surface: rgba(9,12,16,.86);
+  --surface-2: rgba(7,10,14,.92);
+  --surface-solid: #0b0f14;
+  --line-soft: rgba(180,195,210,.12);
+  --text: #d2d9e1;
+  --text-dim: #8f9aa7;
+  --text-faint: rgba(151,163,176,.62);
+}
+body:not(.light-mode) .nav-card {
+  background:rgba(38,42,48,.68) !important;
+  border-color:rgba(190,200,210,.13) !important;
+  backdrop-filter:blur(20px) saturate(1.18) !important;
+}
+body:not(.light-mode) #roadRow,
+body:not(.light-mode) #tripLine,
+body:not(.light-mode) #destRow,
+body:not(.light-mode) #trafficAhead {
+  background:rgba(6,9,12,.24) !important;
+}
+#navTop { width:min(88vw,330px) !important; max-width:min(38vw,330px) !important; }
+.nav-card-main { padding:11px 13px 9px !important; }
+#roadRow { padding:8px 13px !important; }
+#tripLine { padding:8px 13px 9px !important; gap:7px !important; }
+#destRow { padding:8px 13px 10px !important; }
+#turnDistance { font-size:2.3rem !important; }
+#turnArrow { width:58px !important; }
+#roadName { font-size:1.12rem !important; }
+
+#navNorthBtn { display:none !important; }
+#tripCompass {
+  flex:0 0 auto; width:34px; height:34px; padding:0; border:0; border-radius:50%;
+  background:rgba(26,34,43,.9); color:#dbe8f7; cursor:pointer; display:grid; place-items:center;
+  box-shadow:inset 0 0 0 1px rgba(125,170,215,.28), 0 3px 10px rgba(0,0,0,.24);
+}
+body.light-mode #tripCompass { background:#e8f0f8; color:#1f4e78; }
+.tc-ring { width:28px; height:28px; border-radius:50%; position:relative; display:block; }
+.tc-n { position:absolute; top:1px; left:50%; transform:translateX(-50%); font-size:8px; font-weight:800; color:#70b7ff; }
+.tc-needle {
+  position:absolute; left:50%; top:7px; width:2px; height:15px; margin-left:-1px;
+  background:linear-gradient(to bottom,#ff6b6b 0 48%,#8bc6ff 48% 100%);
+  transform-origin:50% 7px; border-radius:2px; transition:transform .22s linear;
+}
+#tripCompass:hover { box-shadow:inset 0 0 0 1px rgba(112,183,255,.7),0 3px 12px rgba(0,0,0,.3); }
+
+#laneBar {
+  padding:8px 10px !important; border-radius:13px !important;
+  background:rgba(13,18,24,.78) !important; backdrop-filter:blur(16px);
+  border:1px solid rgba(140,170,200,.14); box-shadow:0 7px 20px rgba(0,0,0,.25);
+}
+#laneBar .lane {
+  min-width:38px; height:42px; border-radius:9px;
+  background:rgba(255,255,255,.055); color:#7d8791; display:inline-grid; place-items:center;
+  border:1px solid rgba(255,255,255,.07);
+}
+#laneBar .lane.use {
+  background:rgba(77,155,255,.22); color:#72b7ff;
+  border-color:rgba(89,168,255,.5); box-shadow:inset 0 -3px 0 rgba(77,155,255,.55);
+}
+
+body.night-plain .wl-poi-chip { filter:saturate(.95) brightness(.95) !important; }
+body:not(.light-mode) #map3d { background:#101923 !important; }
+body:not(.light-mode) .maplibregl-canvas { filter:saturate(1.06) contrast(1.03); }
+
+#navTopRight { gap:8px !important; }
+#navTopRight .nav-btn { background:rgba(13,17,22,.86) !important; color:#cdd6df !important; }
+#navAlertsBtn { color:#ffbf5b !important; }
+#navVoiceBtn { color:#8cc7ff !important; }
+
+@media (max-width:760px) {
+  #navTop { max-width:calc(100vw - 104px) !important; width:calc(100vw - 104px) !important; }
+  #turnDistance { font-size:1.85rem !important; }
+}
+</style>
+
+
+<style id="wl-round15-responsive">
+/* ==========================================================================
+   ROUND 15 — transparent guidance, responsive navigation, compact POI dock
+   ========================================================================== */
+:root {
+  --wl-safe-top: max(10px, env(safe-area-inset-top));
+  --wl-safe-right: max(10px, env(safe-area-inset-right));
+  --wl-safe-bottom: max(10px, env(safe-area-inset-bottom));
+  --wl-safe-left: max(10px, env(safe-area-inset-left));
+}
+
+/* The maneuver/trip card has no panel fill at all. Text uses a restrained
+   shadow because transparent UI still has to remain readable over imagery. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+body.navigating #navTop .nav-card {
+  border-color: transparent !important;
+  overflow: visible;
+}
+body.navigating #navTop,
+body.navigating #navTop * {
+  text-shadow: 0 1px 2px rgba(255,255,255,.78), 0 0 5px rgba(255,255,255,.42);
+}
+body.navigating:not(.light-mode) #navTop,
+body.navigating:not(.light-mode) #navTop * {
+  text-shadow: 0 1px 2px rgba(0,0,0,.96), 0 0 6px rgba(0,0,0,.72);
+}
+body.navigating.light-mode #navTop #turnDistance,
+body.navigating.light-mode #navTop #turnStreet,
+body.navigating.light-mode #navTop #turnStreet b,
+body.navigating.light-mode #navTop #roadName,
+body.navigating.light-mode #navTop .tl-road,
+body.navigating.light-mode #navTop .tl-dest,
+body.navigating.light-mode #navTop .nl-name {
+  color:#111820 !important;
+}
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #roadRow {
+  border-color:rgba(20,30,40,.12) !important;
+}
+body.navigating:not(.light-mode) #navTop #tripLine,
+body.navigating:not(.light-mode) #navTop #destRow,
+body.navigating:not(.light-mode) #navTop #roadRow {
+  border-color:rgba(255,255,255,.12) !important;
+}
+
+/* Give true lane guidance a stronger visual hierarchy than decorative UI. */
+#laneBar.wl-real-lanes {
+  display:flex !important;
+  align-items:stretch;
+  gap:5px;
+  padding:7px !important;
+  max-width:min(92vw, 430px);
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+#laneBar.wl-real-lanes::-webkit-scrollbar { display:none; }
+#laneBar.wl-real-lanes .lane {
+  position:relative;
+  min-width:48px;
+  height:48px;
+  font-size:1.42rem;
+  border-radius:10px;
+}
+#laneBar.wl-real-lanes .lane::after {
+  content:attr(data-status);
+  position:absolute;
+  left:4px; right:4px; bottom:2px;
+  font-size:.48rem;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  text-align:center;
+  opacity:.72;
+}
+#laneBar.wl-real-lanes .lane.use {
+  background:rgba(31,130,255,.28) !important;
+  border-color:rgba(31,130,255,.72) !important;
+  color:#4da0ff !important;
+}
+#laneBar.wl-real-lanes .lane.preferred {
+  background:rgba(31,130,255,.42) !important;
+  box-shadow:0 0 0 2px rgba(31,130,255,.28), inset 0 -4px 0 #2b7fff !important;
+}
+#laneBar.wl-real-lanes .lane.no {
+  opacity:.56;
+}
+
+/* Google/brand-enriched POI visuals. */
+.wl-poi-brand {
+  width:34px; height:34px; border-radius:50%; overflow:hidden;
+  display:grid; place-items:center; flex:0 0 34px;
+  background:#fff; border:2px solid rgba(255,255,255,.94);
+  box-shadow:0 2px 9px rgba(0,0,0,.28);
+}
+.wl-poi-brand img { width:100%; height:100%; object-fit:cover; display:block; }
+.wl-poi-photo {
+  width:48px; height:48px; border-radius:11px; overflow:hidden;
+  flex:0 0 48px; background:var(--surface-2);
+}
+.wl-poi-photo img { width:100%; height:100%; object-fit:cover; display:block; }
+.poi-provider {
+  font-size:.68rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+  color:var(--text-faint); margin-left:4px;
+}
+
+/* On normal laptop/tablet navigation the entire quick rail becomes a compact
+   vertical, independently scrollable control placed between maneuver card
+   and speed. This is the space requested in the reference screenshot. */
+@media (min-width: 761px) and (min-height: 620px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    position:fixed !important;
+    left:var(--wl-safe-left) !important;
+    top:clamp(286px, 39vh, 360px) !important;
+    bottom:calc(176px + env(safe-area-inset-bottom)) !important;
+    width:242px !important;
+    max-width:242px !important;
+    transform:none !important;
+    display:block !important;
+    z-index:4960 !important;
+  }
+  body.navigating #quick-rail {
+    width:100% !important;
+    height:100% !important;
+    max-height:100% !important;
+    padding:6px !important;
+    display:flex !important;
+    flex-direction:column !important;
+    align-items:stretch !important;
+    gap:3px !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    border-radius:18px !important;
+    mask-image:linear-gradient(#000 0, #000 calc(100% - 22px), transparent 100%) !important;
+    -webkit-mask-image:linear-gradient(#000 0, #000 calc(100% - 22px), transparent 100%) !important;
+    scrollbar-width:thin;
+  }
+  body.navigating #quick-rail .qr-btn {
+    width:100% !important;
+    min-height:48px !important;
+    height:48px !important;
+    padding:0 12px !important;
+    justify-content:flex-start !important;
+    border-radius:13px !important;
+  }
+  body.navigating #quick-rail .qr-btn .qr-ico { width:27px; text-align:center; }
+  body.navigating #quick-rail .qr-divider {
+    width:calc(100% - 18px) !important; height:1px !important;
+    margin:4px 9px !important;
+  }
+  body.navigating #dockLeft,
+  body.navigating #dockRight,
+  body.navigating #trafficKey { display:none !important; }
+}
+
+/* Tablet and narrow laptop: keep the map dominant, compact labels, and prevent
+   fixed controls from occupying the same pixels. */
+@media (max-width: 1040px) {
+  #brand .tag { display:none; }
+  #navTop { width:min(52vw, 348px) !important; }
+  #navTopRight .nav-btn { padding:0 12px !important; }
+  #navTopRight .nav-btn-label { display:none !important; }
+  body.navigating #rightPanels { width:min(42vw, 300px) !important; }
+  #turnPreview { width:138px !important; }
+}
+
+/* Phone/small embedded display. Top controls get their own row; guidance sits
+   beneath it and the POI rail becomes a compact horizontal scroller. */
+@media (max-width: 760px) {
+  #controls {
+    max-width:calc(100vw - 20px);
+    right:10px; left:10px; justify-content:flex-end;
+  }
+  #controls .ctl { padding:8px 10px; }
+  #brand { top:10px; left:10px; }
+  #brand .tag { display:none; }
+
+  body.navigating #navTopRight {
+    top:var(--wl-safe-top) !important;
+    right:var(--wl-safe-right) !important;
+    left:auto !important;
+    max-width:calc(100vw - 20px);
+  }
+  body.navigating #navTopRight .nav-btn {
+    min-width:44px !important; width:44px !important; height:44px !important;
+    min-height:44px !important; padding:0 !important;
+  }
+  body.navigating #navTop {
+    top:64px !important;
+    left:var(--wl-safe-left) !important;
+    right:var(--wl-safe-right) !important;
+    width:auto !important;
+    max-height:min(48vh, 360px);
+    overflow-y:auto;
+    scrollbar-width:none;
+  }
+  body.navigating #navTop::-webkit-scrollbar { display:none; }
+  body.navigating #turnArrow { width:52px !important; font-size:2.5rem !important; }
+  body.navigating #turnDistance { font-size:2.05rem !important; }
+  body.navigating #turnStreet { font-size:1.05rem !important; }
+  body.navigating #roadName { font-size:1.03rem !important; }
+  body.navigating #nextList .nl-row:nth-child(n+3) { display:none; }
+
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    left:8px !important; right:8px !important;
+    bottom:calc(84px + env(safe-area-inset-bottom)) !important;
+    width:auto !important; max-width:none !important;
+    transform:none !important;
+    display:block !important;
+  }
+  body.navigating #quick-rail {
+    width:100% !important;
+    padding:5px !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    display:flex !important;
+    flex-direction:row !important;
+    border-radius:17px !important;
+  }
+  body.navigating #quick-rail .qr-btn {
+    height:46px !important; min-height:46px !important;
+    padding:0 12px !important; gap:7px !important;
+  }
+  body.navigating #quick-rail .qr-label { font-size:.78rem !important; }
+  body.navigating #dockLeft,
+  body.navigating #dockRight,
+  body.navigating #trafficKey { display:none !important; }
+
+  body.navigating #speedCluster {
+    left:10px !important;
+    bottom:calc(140px + env(safe-area-inset-bottom)) !important;
+    transform:scale(.82);
+    transform-origin:left bottom;
+  }
+  body.navigating #fabStack {
+    right:10px !important;
+    bottom:calc(142px + env(safe-area-inset-bottom)) !important;
+  }
+  body.navigating #fabStack .fab {
+    width:46px !important; height:46px !important; padding:0 !important;
+    justify-content:center !important;
+  }
+  body.navigating #fabStack .fab span:last-child { display:none; }
+  body.navigating #turnPreview { display:none !important; }
+
+  #navBar { padding-left:6px !important; padding-right:6px !important; gap:4px !important; }
+  #navStats .nb-stat { padding:0 6px !important; }
+  #navStats .nb-stat b { font-size:1.05rem !important; }
+  #navStats .nb-stat span { font-size:.61rem !important; }
+  #navBar .bar-btn { width:40px !important; height:40px !important; }
+}
+
+/* Very narrow phones: remove secondary destination rows before squeezing
+   primary guidance below a useful touch/read size. */
+@media (max-width: 480px) {
+  body.navigating #navTop { top:58px !important; }
+  body.navigating #roadRow { padding:6px 8px !important; }
+  body.navigating #tripLine { padding:6px 8px !important; }
+  body.navigating #destRow { display:none !important; }
+  body.navigating #tripCompass { width:30px !important; height:30px !important; }
+  body.navigating #quick-rail .qr-label { display:none !important; }
+  body.navigating #quick-rail .qr-btn {
+    width:46px !important; padding:0 !important; justify-content:center !important;
+  }
+  body.navigating #quick-rail .qr-divider { margin:0 2px !important; }
+}
+
+/* Landscape displays with little height: guidance can scroll instead of
+   overlapping the speed, lane, and bottom controls. */
+@media (max-height: 580px) and (orientation: landscape) {
+  body.navigating #navTop {
+    top:56px !important;
+    width:min(42vw, 320px) !important;
+    max-height:calc(100vh - 132px) !important;
+    overflow-y:auto !important;
+  }
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    left:auto !important; right:8px !important; top:62px !important;
+    bottom:76px !important; width:190px !important;
+    max-width:190px !important; transform:none !important;
+  }
+  body.navigating #quick-rail {
+    display:flex !important; flex-direction:column !important;
+    height:100% !important; overflow-y:auto !important; overflow-x:hidden !important;
+  }
+  body.navigating #quick-rail .qr-btn {
+    width:100% !important; height:42px !important; min-height:42px !important;
+    justify-content:flex-start !important;
+  }
+  body.navigating #speedCluster { bottom:76px !important; transform:scale(.75); transform-origin:left bottom; }
+  body.navigating #fabStack { display:none !important; }
+}
+
+/* Avatar chooser */
+.wl-avatar-setup { margin:14px 0 12px; }
+.wl-avatar-title { font-size:.86rem; font-weight:700; color:#283748; margin-bottom:8px; }
+.wl-avatar-grid { display:flex; gap:8px; flex-wrap:wrap; }
+.wl-avatar-choice {
+  width:44px; height:44px; border-radius:50%; border:2px solid transparent;
+  background:#eef3f8; cursor:pointer; display:grid; place-items:center;
+  font-size:1.3rem; overflow:hidden;
+}
+.wl-avatar-choice.on { border-color:#2779d8; box-shadow:0 0 0 3px rgba(39,121,216,.12); }
+.wl-avatar-upload {
+  margin-top:9px; font-size:.78rem; color:#4b6075;
+  display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+}
+#profileAvatar.wl-avatar-photo { background-size:cover !important; background-position:center !important; color:transparent !important; }
+</style>
+
+
+<style id="wl-round16-ui">
+/* ==========================================================================
+   ROUND 16 — glass HUD, high-contrast copy, lane visibility, safe positioning
+   ========================================================================== */
+
+/* Restore the requested semi-transparent navigation glass instead of the
+   fully transparent Round 15 treatment. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background:rgba(22,27,33,.72) !important;
+  backdrop-filter:blur(14px) saturate(1.08) !important;
+  -webkit-backdrop-filter:blur(14px) saturate(1.08) !important;
+}
+body.navigating.light-mode #navTop .nav-card,
+body.navigating.light-mode #navTop .nav-card-main,
+body.navigating.light-mode #navTop #roadRow,
+body.navigating.light-mode #navTop #trafficAhead,
+body.navigating.light-mode #navTop #tripLine,
+body.navigating.light-mode #navTop #destRow,
+body.navigating.light-mode #navTop #nextList,
+body.navigating.light-mode #navTop .nl-row {
+  background:rgba(242,246,249,.78) !important;
+}
+
+/* Remove gray-font styling from the driving-critical UI. Hierarchy comes
+   from weight/opacity instead of gray text that disappears over the map. */
+body.navigating #navTop,
+body.navigating #navTop *,
+body.navigating #laneBar,
+body.navigating #laneBar *,
+body.navigating #dock,
+body.navigating #dock .qr-btn,
+body.navigating #poiPanel,
+body.navigating #poiPanel .panel-item-text,
+body.navigating #poiPanel .panel-item-text .sub {
+  color:#f7fbff !important;
+  text-shadow:0 1px 2px rgba(0,0,0,.88) !important;
+}
+body.navigating.light-mode #navTop,
+body.navigating.light-mode #navTop *,
+body.navigating.light-mode #laneBar,
+body.navigating.light-mode #laneBar *,
+body.navigating.light-mode #dock,
+body.navigating.light-mode #dock .qr-btn,
+body.navigating.light-mode #poiPanel,
+body.navigating.light-mode #poiPanel .panel-item-text,
+body.navigating.light-mode #poiPanel .panel-item-text .sub {
+  color:#101820 !important;
+  text-shadow:0 1px 1px rgba(255,255,255,.72) !important;
+}
+body.navigating #navTop .exit-badge,
+body.navigating #navTop .exit-badge *,
+body.navigating #laneBar .lane.use,
+body.navigating #laneBar .lane.preferred {
+  color:#fff !important;
+  text-shadow:none !important;
+}
+
+/* Keep the lane panel clearly visible instead of allowing later compact HUD
+   rules to make it look removed. */
+body.navigating #laneBar.wl-real-lanes {
+  display:flex !important;
+  position:absolute;
+  left:50%;
+  transform:translateX(-50%);
+  bottom:calc(104px + env(safe-area-inset-bottom));
+  z-index:8;
+  background:rgba(18,23,29,.76) !important;
+  border:1px solid rgba(255,255,255,.22);
+  border-radius:14px;
+  box-shadow:0 8px 22px rgba(0,0,0,.3);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+}
+body.navigating #laneBar.wl-real-lanes .lane {
+  min-width:54px;
+  height:54px;
+  border:1px solid rgba(255,255,255,.22);
+}
+body.navigating #laneBar.wl-real-lanes .lane.preferred {
+  background:rgba(39,126,255,.8) !important;
+  border-color:#8dbdff !important;
+  box-shadow:0 0 0 2px rgba(73,151,255,.32), inset 0 -4px 0 #dcecff !important;
+}
+body.navigating #laneBar.wl-real-lanes .lane.use:not(.preferred) {
+  background:rgba(39,126,255,.34) !important;
+}
+
+/* On laptop/tablet navigation, end the vertical quick rail above the entire
+   speed cluster. The previous rail ended inside the speedometer's footprint. */
+@media (min-width:761px) and (min-height:700px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    top:clamp(270px, 36vh, 335px) !important;
+    bottom:calc(278px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* Shorter desktop/tablet screens use a horizontal rail above the bottom HUD
+   instead of forcing a vertical rail into the speedometer. */
+@media (min-width:761px) and (max-height:699px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    left:12px !important;
+    right:12px !important;
+    top:auto !important;
+    bottom:calc(88px + env(safe-area-inset-bottom)) !important;
+    width:auto !important;
+    max-width:none !important;
+    transform:none !important;
+    display:block !important;
+  }
+  body.navigating #quick-rail {
+    width:100% !important;
+    height:auto !important;
+    display:flex !important;
+    flex-direction:row !important;
+    overflow-x:auto !important;
+    overflow-y:hidden !important;
+    padding:6px !important;
+  }
+  body.navigating #quick-rail .qr-btn {
+    width:auto !important;
+    min-width:max-content !important;
+    height:46px !important;
+    min-height:46px !important;
+    padding:0 12px !important;
+  }
+  body.navigating #speedCluster {
+    bottom:calc(150px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* On phones, keep the POI rail and lane card in separate vertical bands. */
+@media (max-width:760px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    bottom:calc(84px + env(safe-area-inset-bottom)) !important;
+  }
+  body.navigating #laneBar.wl-real-lanes {
+    bottom:calc(142px + env(safe-area-inset-bottom)) !important;
+    max-width:calc(100vw - 20px) !important;
+  }
+  body.navigating #speedCluster {
+    bottom:calc(204px + env(safe-area-inset-bottom)) !important;
+  }
+  body.navigating #fabStack {
+    bottom:calc(204px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+@media (max-width:480px) {
+  body.navigating #laneBar.wl-real-lanes .lane {
+    min-width:44px;
+    width:44px;
+    height:48px;
+    font-size:1.25rem;
+  }
+}
+
+/* Exact-device-position accuracy ring. It shows the browser-reported radius
+   rather than pretending a low-quality fix is exact. */
+.wl-accuracy-ring {
+  pointer-events:none;
+}
+</style>
+
+
+<style id="wl-round17-ui-correction">
+/* ==========================================================================
+   ROUND 17 — requested UI-only correction
+   ========================================================================== */
+
+/* Keep the top-left navigation card semi-transparent. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background:rgba(20,24,29,.74) !important;
+  backdrop-filter:blur(11px) saturate(1.04) !important;
+  -webkit-backdrop-filter:blur(11px) saturate(1.04) !important;
+}
+
+body.navigating.light-mode #navTop .nav-card,
+body.navigating.light-mode #navTop .nav-card-main,
+body.navigating.light-mode #navTop #roadRow,
+body.navigating.light-mode #navTop #trafficAhead,
+body.navigating.light-mode #navTop #tripLine,
+body.navigating.light-mode #navTop #destRow,
+body.navigating.light-mode #navTop #nextList,
+body.navigating.light-mode #navTop .nl-row {
+  background:rgba(245,248,250,.78) !important;
+}
+
+/* Make the "then turn..." strip crisp instead of blurred by the global
+   navigation text-shadow/backdrop treatment. */
+body.navigating #thenRow {
+  background:rgba(16,20,25,.94) !important;
+  color:#ffffff !important;
+  border:1px solid rgba(255,255,255,.16) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  text-shadow:none !important;
+  font-weight:650 !important;
+  letter-spacing:0 !important;
+}
+
+body.navigating #thenRow *,
+body.navigating #thenRow b,
+body.navigating #thenRow .then-ico {
+  color:#ffffff !important;
+  text-shadow:none !important;
+  filter:none !important;
+}
+
+body.navigating #thenRow .then-ico {
+  color:#4d9bff !important;
+}
+
+/* The quick-control/POI box stays VERTICAL while navigating at every size.
+   It is raised slightly and its bottom edge is kept clear of the speed HUD. */
+body.navigating #dock,
+body.navigating #dock.nav-shift {
+  position:fixed !important;
+  left:max(10px, env(safe-area-inset-left)) !important;
+  right:auto !important;
+  top:clamp(238px, 33vh, 305px) !important;
+  bottom:calc(220px + env(safe-area-inset-bottom)) !important;
+  width:230px !important;
+  max-width:min(230px, calc(100vw - 20px)) !important;
+  height:auto !important;
+  transform:none !important;
+  display:block !important;
+  z-index:4960 !important;
+}
+
+body.navigating #quick-rail {
+  width:100% !important;
+  height:100% !important;
+  max-height:100% !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  padding:6px !important;
+  gap:3px !important;
+  border-radius:18px !important;
+  mask-image:linear-gradient(#000 0, #000 calc(100% - 18px), transparent 100%) !important;
+  -webkit-mask-image:linear-gradient(#000 0, #000 calc(100% - 18px), transparent 100%) !important;
+}
+
+body.navigating #quick-rail .qr-btn {
+  width:100% !important;
+  min-width:0 !important;
+  min-height:47px !important;
+  height:47px !important;
+  padding:0 12px !important;
+  justify-content:flex-start !important;
+  flex:0 0 47px !important;
+  border-radius:12px !important;
+}
+
+body.navigating #quick-rail .qr-divider {
+  width:calc(100% - 18px) !important;
+  height:1px !important;
+  margin:3px 9px !important;
+  align-self:center !important;
+}
+
+/* Narrow and short devices still keep the rail vertical; it simply becomes
+   narrower/shorter and scrolls rather than changing orientation. */
+@media (max-width:760px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    top:clamp(220px, 34vh, 270px) !important;
+    bottom:calc(190px + env(safe-area-inset-bottom)) !important;
+    width:min(205px, 62vw) !important;
+    max-width:min(205px, 62vw) !important;
+  }
+
+  body.navigating #quick-rail .qr-btn {
+    min-height:46px !important;
+    height:46px !important;
+    flex-basis:46px !important;
+  }
+}
+
+@media (max-height:620px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    top:205px !important;
+    bottom:calc(170px + env(safe-area-inset-bottom)) !important;
+    width:200px !important;
+    max-width:min(200px, 58vw) !important;
+  }
+}
+
+@media (max-width:420px) {
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    width:min(185px, 58vw) !important;
+    max-width:min(185px, 58vw) !important;
+  }
+
+  body.navigating #quick-rail .qr-btn {
+    padding:0 10px !important;
+    gap:9px !important;
+  }
+}
+</style>
+
+
+<style id="wl-round18-final-ui">
+/* ==========================================================================
+   ROUND 18 — fixed-size compact nav card + no subsequent-turn strip
+   ========================================================================== */
+
+/* Remove the secondary/subsequent turn banner completely. */
+body.navigating #thenRow,
+body.navigating .then-row,
+body.navigating [data-role="subsequent-turn"] {
+  display:none !important;
+  visibility:hidden !important;
+  height:0 !important;
+  min-height:0 !important;
+  max-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  overflow:hidden !important;
+}
+
+/* Keep the primary navigation card physically the same size as the viewport
+   changes. Only its position changes when necessary. */
+body.navigating #navTop {
+  width:330px !important;
+  min-width:330px !important;
+  max-width:330px !important;
+  top:12px !important;
+  left:14px !important;
+}
+
+body.navigating #navTop .nav-card {
+  width:330px !important;
+  min-width:330px !important;
+  max-width:330px !important;
+  box-sizing:border-box !important;
+  border-radius:16px !important;
+  overflow:hidden !important;
+}
+
+/* Smaller, fixed-height main maneuver area. */
+body.navigating #navTop .nav-card-main {
+  height:96px !important;
+  min-height:96px !important;
+  max-height:96px !important;
+  box-sizing:border-box !important;
+  padding:10px 12px !important;
+  gap:10px !important;
+  overflow:hidden !important;
+}
+
+body.navigating #turnArrow {
+  width:54px !important;
+  min-width:54px !important;
+  max-width:54px !important;
+  font-size:2.55rem !important;
+}
+
+body.navigating #turnDistance {
+  font-size:2.15rem !important;
+  line-height:.98 !important;
+  white-space:nowrap !important;
+}
+
+body.navigating #turnStreet {
+  font-size:1.05rem !important;
+  line-height:1.22 !important;
+  margin-top:3px !important;
+  -webkit-line-clamp:1 !important;
+  white-space:nowrap !important;
+  text-overflow:ellipsis !important;
+}
+
+/* Keep the current-road row compact and stable as well. */
+body.navigating #roadRow {
+  height:52px !important;
+  min-height:52px !important;
+  max-height:52px !important;
+  box-sizing:border-box !important;
+  padding:7px 12px !important;
+  overflow:hidden !important;
+}
+
+body.navigating #roadShield svg {
+  height:36px !important;
+}
+
+body.navigating #roadName {
+  font-size:1.02rem !important;
+  line-height:1.1 !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+
+/* Trip summary remains compact instead of expanding the card. */
+body.navigating #tripLine {
+  height:42px !important;
+  min-height:42px !important;
+  max-height:42px !important;
+  box-sizing:border-box !important;
+  padding:7px 12px !important;
+  overflow:hidden !important;
+}
+
+body.navigating #tripLine b {
+  font-size:1rem !important;
+}
+
+/* Future-maneuver rows cannot expand the main card. */
+body.navigating #nextList {
+  max-height:92px !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+}
+
+body.navigating #nextList .nl-row {
+  min-height:44px !important;
+  padding:6px 12px !important;
+}
+
+body.navigating #nextList .nl-name {
+  font-size:.94rem !important;
+}
+
+body.navigating #nextList .nl-dist {
+  font-size:.96rem !important;
+  min-width:48px !important;
+}
+
+/* Responsiveness comes from layout movement, not changing card dimensions. */
+@media (max-width:700px) {
+  body.navigating #navTop {
+    left:8px !important;
+    top:8px !important;
+  }
+}
+
+@media (max-height:560px) {
+  body.navigating #navTop {
+    top:6px !important;
+  }
+
+  body.navigating #dock,
+  body.navigating #dock.nav-shift {
+    top:190px !important;
+    bottom:calc(150px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
+/* Extremely narrow displays keep the same 330px card and allow horizontal
+   viewport access instead of unpredictably shrinking/reflowing its contents. */
+@media (max-width:349px) {
+  html, body {
+    min-width:349px !important;
+  }
+}
+
+/* Prevent generic responsive rules elsewhere from stretching the fixed card. */
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  flex:none !important;
+}
+</style>
+
+
+<style id="wl-round19-safe-final-ui">
+body.navigating #thenRow,
+body.navigating .then-row,
+body.navigating [data-role="subsequent-turn"],
+body.navigating #nextList,
+body.navigating #nextList .nl-row,
+body.navigating .nl-more {
+  display:none !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+
+/* Keep the compact card stable while the rest of the page repositions. */
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  width:300px !important;
+  min-width:300px !important;
+  max-width:300px !important;
+  flex:none !important;
+}
+
+body.navigating #navTop .nav-card-main {
+  width:300px !important;
+  min-width:300px !important;
+  max-width:300px !important;
+  min-height:88px !important;
+  padding:9px 11px !important;
+  box-sizing:border-box !important;
+}
+
+body.navigating #turnDistance {
+  font-size:2rem !important;
+}
+
+body.navigating #turnStreet {
+  font-size:1rem !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+}
+
+@media (max-width:760px) {
+  body.navigating #navTop {
+    left:8px !important;
+    top:8px !important;
+  }
+}
+</style>
+
+
+<style id="wl-round20-clean-guidance-theme">
+/* Remove the lane-arrow strip completely. */
+body.navigating #laneBar,
+body.navigating #laneBar.wl-real-lanes,
+body.navigating #laneBar .lane,
+body.navigating .lane-bar,
+body.navigating [data-role="lane-guidance"] {
+  display:none !important;
+  visibility:hidden !important;
+  opacity:0 !important;
+  width:0 !important;
+  height:0 !important;
+  min-width:0 !important;
+  min-height:0 !important;
+  max-width:0 !important;
+  max-height:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  border:0 !important;
+  overflow:hidden !important;
+  pointer-events:none !important;
+}
+
+/* Daytime: solid black with crisp white text. */
+body.navigating.light-mode #navTop .nav-card,
+body.navigating.light-mode #navTop .nav-card-main,
+body.navigating.light-mode #navTop #roadRow,
+body.navigating.light-mode #navTop #trafficAhead,
+body.navigating.light-mode #navTop #tripLine,
+body.navigating.light-mode #navTop #destRow {
+  background:#050607 !important;
+  border-color:rgba(255,255,255,.13) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+
+body.navigating.light-mode #navTop,
+body.navigating.light-mode #navTop *,
+body.navigating.light-mode #turnDistance,
+body.navigating.light-mode #turnStreet,
+body.navigating.light-mode #roadName,
+body.navigating.light-mode #tripLine,
+body.navigating.light-mode #tripLine *,
+body.navigating.light-mode #roadLeft,
+body.navigating.light-mode #roadLeft * {
+  color:#ffffff !important;
+  text-shadow:none !important;
+  filter:none !important;
+}
+
+body.navigating.light-mode #navTop {
+  font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif !important;
+}
+
+body.navigating.light-mode #turnDistance {
+  font-weight:700 !important;
+  letter-spacing:-.035em !important;
+}
+
+body.navigating.light-mode #turnStreet,
+body.navigating.light-mode #roadName {
+  font-weight:500 !important;
+  letter-spacing:-.01em !important;
+}
+
+/* Nighttime: pleasant semi-transparent dark glass. */
+body.navigating:not(.light-mode) #navTop .nav-card,
+body.navigating:not(.light-mode) #navTop .nav-card-main,
+body.navigating:not(.light-mode) #navTop #roadRow,
+body.navigating:not(.light-mode) #navTop #trafficAhead,
+body.navigating:not(.light-mode) #navTop #tripLine,
+body.navigating:not(.light-mode) #navTop #destRow {
+  background:rgba(16,20,25,.76) !important;
+  border-color:rgba(255,255,255,.14) !important;
+  backdrop-filter:blur(12px) saturate(1.05) !important;
+  -webkit-backdrop-filter:blur(12px) saturate(1.05) !important;
+}
+
+body.navigating:not(.light-mode) #navTop {
+  font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif !important;
+}
+
+body.navigating:not(.light-mode) #navTop,
+body.navigating:not(.light-mode) #navTop *,
+body.navigating:not(.light-mode) #turnDistance,
+body.navigating:not(.light-mode) #turnStreet,
+body.navigating:not(.light-mode) #roadName,
+body.navigating:not(.light-mode) #tripLine,
+body.navigating:not(.light-mode) #tripLine * {
+  color:#f8fbff !important;
+  text-shadow:none !important;
+  filter:none !important;
+}
+
+body.navigating:not(.light-mode) #turnDistance {
+  font-weight:680 !important;
+  letter-spacing:-.035em !important;
+}
+
+body.navigating:not(.light-mode) #turnStreet,
+body.navigating:not(.light-mode) #roadName {
+  font-weight:500 !important;
+  letter-spacing:-.008em !important;
+}
+
+/* Keep the compact fixed card. */
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  width:300px !important;
+  min-width:300px !important;
+  max-width:300px !important;
+}
+</style>
+
+
+<style id="wl-round21-unified-glass-white-text">
+/* ==========================================================================
+   ROUND 21 — same semi-transparent glass in day/night + true white text
+   ========================================================================== */
+
+/* Both themes use the same pleasant semi-transparent dark glass. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow {
+  background:rgba(16,20,25,.76) !important;
+  border-color:rgba(255,255,255,.14) !important;
+  backdrop-filter:blur(12px) saturate(1.05) !important;
+  -webkit-backdrop-filter:blur(12px) saturate(1.05) !important;
+}
+
+/* Force all guidance copy to true white in both day and night modes. */
+body.navigating #navTop,
+body.navigating #navTop *,
+body.navigating #turnDistance,
+body.navigating #turnStreet,
+body.navigating #roadName,
+body.navigating #tripLine,
+body.navigating #tripLine *,
+body.navigating #roadLeft,
+body.navigating #roadLeft *,
+body.navigating #turnArrow,
+body.navigating .turn-text,
+body.navigating .turn-text *,
+body.navigating #trafficAhead,
+body.navigating #trafficAhead *,
+body.navigating #destRow,
+body.navigating #destRow * {
+  color:#ffffff !important;
+  text-shadow:none !important;
+  filter:none !important;
+  opacity:1 !important;
+}
+
+/* Keep route shields/badges readable without changing their fills. */
+body.navigating #navTop .exit-badge,
+body.navigating #navTop .exit-badge *,
+body.navigating #roadShield,
+body.navigating #roadShield * {
+  color:#ffffff !important;
+}
+
+/* Clean, pleasant typography for both themes. */
+body.navigating #navTop {
+  font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif !important;
+}
+
+body.navigating #turnDistance {
+  font-weight:700 !important;
+  letter-spacing:-.035em !important;
+}
+
+body.navigating #turnStreet,
+body.navigating #roadName {
+  font-weight:500 !important;
+  letter-spacing:-.01em !important;
+}
+
+/* Preserve the compact fixed card from the prior build. */
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  width:300px !important;
+  min-width:300px !important;
+  max-width:300px !important;
+}
+</style>
+
+
+<style id="wl-round22-force-white-guidance">
+/* Exact fix for the dark/gray maneuver copy shown in the screenshot. */
+body.navigating #turnDistance,
+body.navigating #turnDistance *,
+body.navigating #turnStreet,
+body.navigating #turnStreet *,
+body.navigating .turn-text,
+body.navigating .turn-text *,
+body.navigating .turn-dist-row,
+body.navigating .turn-dist-row * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+
+body.navigating #turnDistance {
+  font-weight:700 !important;
+}
+
+body.navigating #turnStreet,
+body.navigating #turnStreet * {
+  font-weight:500 !important;
+}
+
+/* Keep the requested semi-transparent glass in both day and night modes. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow {
+  background:rgba(16,20,25,.76) !important;
+  border-color:rgba(255,255,255,.14) !important;
+  backdrop-filter:blur(12px) saturate(1.05) !important;
+  -webkit-backdrop-filter:blur(12px) saturate(1.05) !important;
+}
+</style>
+
+
+<style id="wl-round23-final-gray-glass-white-road">
+/* ==========================================================================
+   ROUND 23 — one consistent semi-transparent gray card + white road text
+   ========================================================================== */
+
+/* Make the ENTIRE navigation card one consistent semi-transparent gray glass.
+   No section is allowed to fall back to solid black. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background:rgba(72,76,82,.72) !important;
+  background-color:rgba(72,76,82,.72) !important;
+  border-color:rgba(255,255,255,.18) !important;
+  backdrop-filter:blur(12px) saturate(1.04) !important;
+  -webkit-backdrop-filter:blur(12px) saturate(1.04) !important;
+}
+
+/* Prevent nested rows from creating darker black bands inside the card. */
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow {
+  box-shadow:none !important;
+}
+
+/* Force the current road name (e.g. "Poets Lane") to true white. */
+body.navigating #roadName,
+body.navigating #roadName *,
+body.navigating #roadRow,
+body.navigating #roadRow * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+
+/* Keep the main maneuver text white too. */
+body.navigating #turnDistance,
+body.navigating #turnDistance *,
+body.navigating #turnStreet,
+body.navigating #turnStreet *,
+body.navigating .turn-text,
+body.navigating .turn-text *,
+body.navigating #tripLine,
+body.navigating #tripLine * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+
+/* Preserve readable accent graphics/shields while keeping their text white. */
+body.navigating #roadShield,
+body.navigating #roadShield *,
+body.navigating .exit-badge,
+body.navigating .exit-badge * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+}
+
+/* Keep the compact fixed card dimensions from the functional build. */
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  width:300px !important;
+  min-width:300px !important;
+  max-width:300px !important;
+}
+</style>
+
+
+<style id="wl-round24-true-transparent-gray">
+/* True semi-transparent neutral gray across the entire guidance card. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background:rgba(118,122,128,.58) !important;
+  background-color:rgba(118,122,128,.58) !important;
+  border-color:rgba(255,255,255,.22) !important;
+  backdrop-filter:blur(10px) saturate(1.02) !important;
+  -webkit-backdrop-filter:blur(10px) saturate(1.02) !important;
+}
+
+/* Remove darker inner-band overrides. */
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow {
+  box-shadow:none !important;
+}
+
+/* Keep all guidance text pure white. */
+body.navigating #navTop,
+body.navigating #navTop *,
+body.navigating #turnDistance,
+body.navigating #turnDistance *,
+body.navigating #turnStreet,
+body.navigating #turnStreet *,
+body.navigating #roadName,
+body.navigating #roadName *,
+body.navigating #roadRow,
+body.navigating #roadRow *,
+body.navigating #tripLine,
+body.navigating #tripLine * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+</style>
+
+
+<style id="wl-round25-actual-gray-card">
+/* ==========================================================================
+   ROUND 25 — true gray card without transparency stacking
+   ========================================================================== */
+
+/* ONE gray layer only. This is intentionally much lighter than black so the
+   card visibly reads as gray over both light and dark map areas. */
+body.navigating #navTop .nav-card {
+  background:rgba(132,138,146,.82) !important;
+  background-color:rgba(132,138,146,.82) !important;
+  background-image:none !important;
+  border:1px solid rgba(255,255,255,.24) !important;
+  backdrop-filter:blur(10px) saturate(1.02) !important;
+  -webkit-backdrop-filter:blur(10px) saturate(1.02) !important;
+}
+
+/* Inner sections must be transparent. Applying semi-transparent gray to each
+   child was stacking layers and making the card look black. */
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background:transparent !important;
+  background-color:transparent !important;
+  background-image:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  box-shadow:none !important;
+}
+
+/* Keep separators subtle instead of creating dark bands. */
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow {
+  border-color:rgba(255,255,255,.18) !important;
+}
+
+/* Keep all navigation text true white. */
+body.navigating #navTop,
+body.navigating #navTop *,
+body.navigating #turnDistance,
+body.navigating #turnDistance *,
+body.navigating #turnStreet,
+body.navigating #turnStreet *,
+body.navigating #roadName,
+body.navigating #roadName *,
+body.navigating #tripLine,
+body.navigating #tripLine * {
+  color:#ffffff !important;
+  -webkit-text-fill-color:#ffffff !important;
+  opacity:1 !important;
+  text-shadow:none !important;
+  filter:none !important;
+  mix-blend-mode:normal !important;
+}
+</style>
+
 </head>
 <body>
 
@@ -4798,6 +6164,7 @@ window.WL_CARTO_KEY = '';
     <button class="qr-btn" data-poi="ev" type="button"><span class="qr-ico">&#9889;</span><span class="qr-label">EV charging</span></button>
     <button class="qr-btn" data-poi="hospital" type="button"><span class="qr-ico">&#127973;</span><span class="qr-label">Emergency</span></button>
     <button class="qr-btn" data-poi="services" type="button"><span class="qr-ico">&#128736;</span><span class="qr-label">Rest &amp; restrooms</span></button>
+    <button class="qr-btn" data-poi="events" type="button"><span class="qr-ico">&#127915;</span><span class="qr-label">Events</span></button>
     <button class="qr-btn" data-poi="parking" type="button"><span class="qr-ico">&#127359;</span><span class="qr-label">Parking</span></button>
     <button class="qr-btn" data-poi="safety" type="button"><span class="qr-ico">&#128680;</span><span class="qr-label">Safety</span></button>
     <span class="qr-divider"></span>
@@ -4929,6 +6296,9 @@ window.WL_CARTO_KEY = '';
         <span id="onRoadShield" class="tl-shield"></span>
         <span class="tl-road" id="onRoadName">&mdash;</span>
         <span class="tl-left"><b id="milesLeft" class="num">--</b> mi</span>
+        <button id="tripCompass" type="button" title="Toggle north up / heading up" aria-label="Compass">
+          <span class="tc-ring"><span class="tc-n">N</span><span class="tc-needle"></span></span>
+        </button>
         <span class="tl-more">Trip &#8250;</span>
       </div>
       <div id="destRow"><span class="dr-flag">&#127937;</span><span class="tl-dest" id="destLine">&mdash;</span></div>
@@ -4938,8 +6308,8 @@ window.WL_CARTO_KEY = '';
   </div>
 
   <div id="navTopRight">
-    <button id="navAlertsBtn" class="nav-btn" type="button" title="Report or view alerts"><span>&#9888;&#65039;</span><span class="nav-btn-label">Alerts</span></button>
-    <button id="navVoiceBtn" class="nav-btn" type="button" title="Spoken guidance"><span id="navVoiceIco">&#128266;</span><span class="nav-btn-label" id="navVoiceLabel">Full</span></button>
+    <button id="navAlertsBtn" class="nav-btn" type="button" title="Report road conditions or hazards"><span>&#9888;&#65039;</span><span class="nav-btn-label">Report</span></button>
+    <button id="navVoiceBtn" class="nav-btn" type="button" title="Voice Guide"><span id="navVoiceIco">&#128266;</span><span class="nav-btn-label" id="navVoiceLabel">Voice Guide</span></button>
     <button id="navNorthBtn" class="nav-btn" type="button" title="North up or heading up">&#129517;</button>
     <button id="navMenuToggle" class="nav-btn" type="button" title="More">&#8942;</button>
     <div id="navMenu" class="hidden">
@@ -4978,7 +6348,7 @@ window.WL_CARTO_KEY = '';
     <div id="navStats">
       <div class="nb-stat nb-eta"><b id="etaClock" class="num">--</b><span>Arrival <i id="navDelta" class="nav-delta hidden"></i></span></div>
       <div class="nb-stat"><b id="remainMi" class="num">--</b><span>Miles left</span></div>
-      <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Drive time</span></div>
+      <div class="nb-stat nb-wide"><b id="remainMin" class="num">--</b><span>Time left</span></div>
       <div class="nb-stat nb-traffic nb-x4"><b id="navTrafficVal">&mdash;</b><span id="navTrafficLbl">Traffic</span></div>
       <div class="nb-stat nb-x3"><b id="nextExit" class="num">&mdash;</b><span>Next exit</span></div>
       <div class="nb-stat nb-x2"><b id="doneMi" class="num">0.0</b><span>Traveled</span></div>
@@ -5191,7 +6561,7 @@ window.onSpotifyIframeApiReady = function (api) {
      and WayLyn will switch autocomplete, ratings, hours and photos over
      to Google automatically -- see googlePlaceSearch() below.
   ================================================================== */
-  const GOOGLE_PLACES_KEY = '';
+  const GOOGLE_PLACES_KEY = (function(){ try { return localStorage.getItem('wlGooglePlacesKey') || ''; } catch (e) { return ''; } })();
   // Live traffic. TomTom's Traffic Flow API has a free tier (2,500 calls/day),
   // works from the browser, and is the only keyless-CORS-friendly option that
   // returns real measured speeds. Paste a key here and WayLyn switches from
@@ -7796,7 +9166,7 @@ window.onSpotifyIframeApiReady = function (api) {
      VOICE GUIDANCE -- three levels, cycled from one button
   ================================================================== */
   const VOICE_LEVELS = ['full', 'alerts', 'off'];
-  const VOICE_COPY = { full: ['\u{1F50A}', 'Full'], alerts: ['\u{1F514}', 'Alerts'], off: ['\u{1F507}', 'Muted'] };
+  const VOICE_COPY = { full: ['\u{1F50A}', 'Max'], alerts: ['\u{1F514}', 'Alerts'], off: ['\u{1F507}', 'Muted'] };
   let voiceLevel = Store.get('voiceLevel', 'full');
   function speak(text, isAlert, queue) {
     if (voiceLevel === 'off') return;
@@ -7823,7 +9193,7 @@ window.onSpotifyIframeApiReady = function (api) {
     $('qrVoice').querySelector('.qr-label').textContent = 'Voice ' + label.toLowerCase();
     $('qrVoice').classList.toggle('active', voiceLevel !== 'off');
     $('navVoiceIco').textContent = ico;
-    $('navVoiceLabel').textContent = label;
+    $('navVoiceLabel').textContent = 'Voice Guide';
     $('navVoiceBtn').classList.toggle('muted', voiceLevel === 'off');
     $('navVoiceBtn').classList.toggle('on', voiceLevel === 'full');
   }
@@ -7833,7 +9203,7 @@ window.onSpotifyIframeApiReady = function (api) {
     syncVoiceUi();
     if (voiceLevel === 'off') { if (window.speechSynthesis) window.speechSynthesis.cancel(); showBubble('Spoken guidance muted. Turn-by-turn stays on screen.'); }
     else if (voiceLevel === 'alerts') showBubble('Alerts only \u2014 you\u2019ll hear rerouting, hazards and arrival, but not every turn.');
-    else { showBubble('Full spoken guidance on.'); speak('Voice guidance on.'); }
+    else { showBubble('Max voice guidance on.'); speak('Voice guidance on.'); }
   }
   $('qrVoice').addEventListener('click', cycleVoice);
   $('navVoiceBtn').addEventListener('click', cycleVoice);
@@ -11142,7 +12512,8 @@ window.onSpotifyIframeApiReady = function (api) {
      Theme cycles Light -> Dark -> Auto. Auto follows real sunrise and
      sunset for wherever you actually are, which matters on a long drive.
   ================================================================== */
-  let themeMode = Store.global('themeMode', 'auto');
+  let themeMode = 'auto';
+  Store.setGlobal('themeMode', 'auto');
   let sunTimes = null, sunFetchedFor = null;
 
   async function refreshSunTimes() {
@@ -15543,6 +16914,708 @@ window.onSpotifyIframeApiReady = function (api) {
     put('eta', etaMs ? fmtClock(etaMs) : '\u2014', '');
   }
 
+
+  /* ==================================================================
+     REFINED NAVIGATION PASS
+     Keeps route progress monotonic, makes curved road geometry drive the
+     marker/camera, enriches 3D roads/buildings, and keeps exits contextual.
+  ================================================================== */
+  let refinedMarkerAlong = 0;
+  let refinedRouteSignature = '';
+
+  function refinedRouteSig() {
+    if (!navCoords.length) return '';
+    const a = navCoords[0], b = navCoords[navCoords.length - 1];
+    return navCoords.length + ':' + a[0].toFixed(4) + ',' + a[1].toFixed(4) + ':' + b[0].toFixed(4) + ',' + b[1].toFixed(4);
+  }
+
+  function pointAtNavDistance(metres) {
+    if (!navCoords.length) return null;
+    const d = clamp(metres || 0, 0, navCum.length ? navCum[navCum.length - 1] : 0);
+    let lo = 0, hi = Math.max(0, navCum.length - 1);
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi + 1) / 2);
+      if (navCum[mid] <= d) lo = mid;
+      else hi = mid - 1;
+    }
+    const i = Math.min(lo, navCoords.length - 2);
+    const a = navCoords[i], b = navCoords[i + 1] || a;
+    const span = Math.max(0.001, (navCum[i + 1] || navCum[i]) - navCum[i]);
+    const f = clamp((d - navCum[i]) / span, 0, 1);
+    return { lat: a[0] + (b[0] - a[0]) * f, lng: a[1] + (b[1] - a[1]) * f, segIndex: i };
+  }
+
+  function roadBearingAt(metres, lookAhead) {
+    const a = pointAtNavDistance(metres);
+    const b = pointAtNavDistance((metres || 0) + Math.max(12, lookAhead || 35));
+    if (!a || !b) return headingDeg || 0;
+    return bearing(a, b);
+  }
+
+  function updateTripCompass(roadHeading) {
+    const compass = $('tripCompass');
+    if (!compass) return;
+    const needle = compass.querySelector('.tc-needle');
+    if (needle) needle.style.transform = 'rotate(' + (northUp ? 0 : -roadHeading) + 'deg)';
+    compass.title = northUp ? 'North up — tap for heading up' : 'Heading up — tap for north up';
+  }
+
+  const baseUpdateMap3dUser = updateMap3dUser;
+  updateMap3dUser = function refinedUpdateMap3dUser(lat, lng) {
+    if (!map3d || !map3dReady || typeof maplibregl === 'undefined' || !navCoords.length) {
+      baseUpdateMap3dUser(lat, lng);
+      return;
+    }
+    const sig = refinedRouteSig();
+    if (sig !== refinedRouteSignature) {
+      refinedRouteSignature = sig;
+      refinedMarkerAlong = Math.max(0, navDistAlong || 0);
+    }
+
+    const projection = projectOnRouteNear(
+      navCoords, navCum, { lat:lat, lng:lng },
+      refinedMarkerAlong || matchedAlong, 45, 900
+    );
+    if (projection && projection.distToRoute < 180) {
+      /* Never animate backward because of GPS jitter. A real reroute changes
+         the route signature above and resets this value intentionally. */
+      refinedMarkerAlong = Math.max(refinedMarkerAlong, projection.distAlong);
+    }
+
+    const point = pointAtNavDistance(refinedMarkerAlong);
+    if (!point) { baseUpdateMap3dUser(lat, lng); return; }
+    const roadHeading = roadBearingAt(refinedMarkerAlong, 42);
+
+    if (!map3dUser) {
+      const el = document.createElement('div');
+      el.innerHTML = locatorHtml(0);
+      map3dUser = new maplibregl.Marker({ element:el, rotationAlignment:'viewport' })
+        .setLngLat([point.lng, point.lat]).addTo(map3d);
+    } else {
+      map3dUser.setLngLat([point.lng, point.lat]);
+    }
+
+    const rotor = map3dUser.getElement().querySelector('.locator-rotor');
+    if (rotor) rotor.style.transform = 'rotate(' + (northUp ? roadHeading : 0) + 'deg)';
+    updateTripCompass(roadHeading);
+  };
+
+  setCameraTarget = function refinedSetCameraTarget(lat, lng, bearingDeg, speedMps, metresToTurn) {
+    const mph = (speedMps || 0) * 2.23694;
+    const along = Math.max(refinedMarkerAlong || 0, navDistAlong || 0);
+    const roadHeading = northUp ? 0 : roadBearingAt(along, mph > 45 ? 70 : 42);
+    let z = mph > 58 ? 16.7 : mph > 35 ? 17.15 : 17.65;
+    if (metresToTurn != null && metresToTurn < 320) z = Math.max(z, 18.05);
+    const pitch = mph > 55 ? 57 : 62;
+
+    /* Center slightly behind the car so more of the blue route remains
+       visible ahead instead of disappearing under the top edge. */
+    const back = mph > 50 ? 72 : mph > 25 ? 48 : 28;
+    const car = pointAtNavDistance(along) || { lat:lat, lng:lng };
+    const rad = ((roadHeading || bearingDeg || 0) + 180) * Math.PI / 180;
+    const latBack = car.lat + (back / 111320) * Math.cos(rad);
+    const lngScale = Math.max(.2, Math.cos(car.lat * Math.PI / 180));
+    const lngBack = car.lng + (back / (111320 * lngScale)) * Math.sin(rad);
+
+    camZoomWant = z;
+    camTarget = { lat:latBack, lng:lngBack, bearing:roadHeading, zoom:z, pitch:pitch };
+    if (!camNow) camNow = { lat:latBack, lng:lngBack, bearing:roadHeading, zoom:z, pitch:pitch };
+    startCameraLoop();
+  };
+
+  style3dBuildings = function refinedStyle3dBuildings() {
+    if (!map3d || !map3d.getStyle()) return;
+    try { if (map3d.getLayer('wl-buildings')) map3d.removeLayer('wl-buildings'); } catch (e) {}
+    const style = map3d.getStyle();
+    if (!style || !style.layers) return;
+
+    const sourceLayer = style.layers.find((layer) =>
+      layer['source-layer'] === 'building' && style.sources && style.sources[layer.source]
+    );
+    const source = sourceLayer ? sourceLayer.source :
+      (style.sources.openmaptiles ? 'openmaptiles' :
+        Object.keys(style.sources || {}).find((k) => style.sources[k].type === 'vector'));
+    if (!source) return;
+
+    let labelId;
+    for (const layer of style.layers) {
+      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) { labelId = layer.id; break; }
+    }
+    try {
+      map3d.addLayer({
+        id:'wl-buildings',
+        source:source,
+        'source-layer':'building',
+        type:'fill-extrusion',
+        minzoom:11.5,
+        paint:{
+          'fill-extrusion-color': lightMode
+            ? ['interpolate',['linear'],['zoom'],12,'#d4dde3',17,'#c2cdd5']
+            : ['interpolate',['linear'],['zoom'],12,'#31414d',17,'#465a68'],
+          'fill-extrusion-height':[
+            'coalesce',
+            ['to-number',['get','render_height']],
+            ['to-number',['get','height']],
+            ['*',['to-number',['get','building:levels']],3.05],
+            8
+          ],
+          'fill-extrusion-base':[
+            'coalesce',
+            ['to-number',['get','render_min_height']],
+            ['to-number',['get','min_height']],
+            0
+          ],
+          'fill-extrusion-opacity':.94
+        }
+      }, labelId);
+    } catch (e) { console.warn('Refined 3D buildings unavailable', e); }
+  };
+
+  style3dPalette = function refinedStyle3dPalette() {
+    if (!map3d || !map3d.getStyle()) return;
+    const dark = !lightMode;
+    try {
+      map3d.getStyle().layers.forEach((layer) => {
+        if (!map3d.getLayer(layer.id)) return;
+        const id = layer.id || '';
+        try {
+          if (layer.type === 'background') {
+            map3d.setPaintProperty(id, 'background-color', dark ? '#111b25' : '#eef3f5');
+          } else if (layer.type === 'fill') {
+            if (/water|ocean|river|lake/i.test(id)) map3d.setPaintProperty(id,'fill-color',dark ? '#16395a' : '#9ec9ed');
+            else if (/park|grass|wood|forest|garden|pitch|golf/i.test(id)) map3d.setPaintProperty(id,'fill-color',dark ? '#173b2d' : '#bfe0c3');
+            else if (/residential|commercial|industrial|landuse|landcover/i.test(id)) map3d.setPaintProperty(id,'fill-color',dark ? '#202a34' : '#e6ebee');
+          } else if (layer.type === 'line' && layer['source-layer'] === 'transportation') {
+            map3d.setPaintProperty(id,'line-opacity', dark ? .95 : .88);
+            if (/motorway|trunk|primary/i.test(id)) map3d.setPaintProperty(id,'line-color',dark ? '#566776' : '#aab5bd');
+          }
+        } catch (e) {}
+      });
+    } catch (e) {}
+  };
+
+  function add3dLaneRoad() {
+    if (!map3d || !map3dReady || !map3d.getSource('wl-route')) return;
+    const before = map3d.getLayer('wl-route-casing') ? 'wl-route-casing' : undefined;
+    try {
+      if (!map3d.getLayer('wl-route-roadbed')) {
+        map3d.addLayer({
+          id:'wl-route-roadbed', type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'round'},
+          paint:{'line-color':lightMode ? '#626a70' : '#313941','line-width':34,'line-opacity':.9}
+        }, before);
+      }
+      [-11,-5.5,5.5,11].forEach((offset, idx) => {
+        const id = 'wl-lane-divider-' + idx;
+        if (map3d.getLayer(id)) return;
+        map3d.addLayer({
+          id:id, type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'butt'},
+          paint:{
+            'line-color':lightMode ? 'rgba(255,255,255,.82)' : 'rgba(218,226,232,.72)',
+            'line-width':1.05,
+            'line-offset':offset,
+            'line-dasharray':[2.5,4],
+            'line-opacity':.8
+          }
+        }, before);
+      });
+    } catch (e) { console.warn('3D lane rendering partial', e); }
+  }
+
+  const baseSetup3dRoute = setup3dRoute;
+  setup3dRoute = function refinedSetup3dRoute() {
+    baseSetup3dRoute();
+    add3dLaneRoad();
+  };
+
+  function currentHighwayRef() {
+    const options = [
+      navSteps[navStepIndex] && currentRoadRef(navSteps[navStepIndex]),
+      navStepIndex > 0 && navSteps[navStepIndex - 1] && currentRoadRef(navSteps[navStepIndex - 1])
+    ].filter(Boolean);
+    return options.find((ref) => /^(I-|US-|SR-|SH-|A\d|M\d)|interstate|highway|freeway|motorway/i.test(String(ref))) || null;
+  }
+
+  function contextualUpcomingExit() {
+    const highway = currentHighwayRef();
+    if (!highway) return null;
+    for (let i = navStepIndex; i < navSteps.length; i++) {
+      const exit = stepExit(navSteps[i]);
+      if (!exit) continue;
+      const dist = Math.max(0, (navStepStart[i] || 0) - navDistAlong);
+      if (dist > 4200) return null;
+      return { num:exit, dist:dist, signs:stepSigns(navSteps[i]), now:i === navStepIndex };
+    }
+    return null;
+  }
+
+  upcomingExit = contextualUpcomingExit;
+  nextExitLabel = function refinedNextExitLabel() {
+    const info = contextualUpcomingExit();
+    return info ? info.num : null;
+  };
+
+  updateCardExit = function refinedUpdateCardExit() {
+    const info = contextualUpcomingExit();
+    const roadBadge = $('roadExit');
+    const turnBadge = $('turnExit');
+    const signs = $('turnSigns');
+
+    if (info) {
+      if (roadBadge) {
+        $('roadExitNum').textContent = info.num;
+        roadBadge.classList.remove('hidden');
+      }
+      if (turnBadge) {
+        $('turnExitNum').textContent = info.num;
+        turnBadge.classList.remove('hidden');
+        turnBadge.classList.toggle('soon', info.dist < 1200);
+      }
+      if (signs && info.signs) {
+        signs.textContent = info.signs;
+        signs.classList.remove('hidden');
+      } else if (signs) signs.classList.add('hidden');
+    } else {
+      if (roadBadge) roadBadge.classList.add('hidden');
+      if (turnBadge) turnBadge.classList.add('hidden');
+      if (signs) signs.classList.add('hidden');
+    }
+  };
+
+  const baseApplyTheme = applyTheme;
+  applyTheme = function refinedApplyTheme() {
+    baseApplyTheme();
+    document.body.classList.remove('night-plain');
+    if (map3d && map3dReady) {
+      try {
+        style3dPalette();
+        style3dBuildings();
+        boostMajorRoads();
+        add3dLaneRoad();
+      } catch (e) { console.warn('3D theme refresh partial', e); }
+    }
+  };
+
+  const tripCompass = $('tripCompass');
+  if (tripCompass) tripCompass.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleNorthUp();
+    updateTripCompass(roadBearingAt(refinedMarkerAlong || navDistAlong || 0, 42));
+  });
+
+  /* Auto theme is authoritative: refresh at boot and then frequently enough
+     to cross sunset/sunrise without leaving a stale daytime map on screen. */
+  themeMode = 'auto';
+  Store.setGlobal('themeMode', 'auto');
+  setInterval(() => applyAutoTheme(), 2 * 60 * 1000);
+  setTimeout(() => applyAutoTheme(), 50);
+
+
+
+  /* ==================================================================
+     ROUND 15 — LIVE BUILDING COMPLETION, REAL LANE COUNTS, FAST POI DATA
+     Public patterns used here:
+       - lane recommendations are driven by the routing step's lane array;
+       - 3D buildings are true fill extrusions with OSM height/level fallbacks;
+       - POI photos/icons can be enriched from Google Places when configured.
+  ================================================================== */
+
+  function wlParseHeight(tags) {
+    const raw = tags && tags.height;
+    if (raw != null) {
+      const n = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+      if (isFinite(n) && n > 1) return Math.min(n, 350);
+    }
+    const levels = parseFloat(tags && (tags['building:levels'] || tags.levels));
+    if (isFinite(levels) && levels > 0) return Math.min(levels * 3.05, 350);
+    const kind = String(tags && tags.building || '').toLowerCase();
+    if (/apartments|hotel|office|commercial|retail/.test(kind)) return 12;
+    if (/garage|shed|carport/.test(kind)) return 3.3;
+    return 6.6;
+  }
+
+  let wlBuildingFetchAt = null;
+  let wlBuildingFetchBusy = false;
+  let wlBuildingFetchTime = 0;
+
+  async function refreshSupplementalBuildings(force) {
+    if (!map3d || !map3dReady || wlBuildingFetchBusy) return;
+    if (map3d.getZoom && map3d.getZoom() < 14.2) return;
+    const c = map3d.getCenter();
+    const here = { lat:c.lat, lng:c.lng };
+    if (!force && wlBuildingFetchAt && haversine(wlBuildingFetchAt, here) < 520 &&
+        Date.now() - wlBuildingFetchTime < 4 * 60 * 1000) return;
+
+    wlBuildingFetchBusy = true;
+    wlBuildingFetchAt = here;
+    wlBuildingFetchTime = Date.now();
+    try {
+      const q = '[out:json][timeout:10];way["building"](around:1150,' +
+        c.lat.toFixed(5) + ',' + c.lng.toFixed(5) + ');out tags geom 900;';
+      const data = await overpassFast(q);
+      const features = [];
+      (data.elements || []).forEach((el) => {
+        if (!el.geometry || el.geometry.length < 4) return;
+        const ring = el.geometry.map((p) => [p.lon, p.lat]);
+        const first = ring[0], last = ring[ring.length - 1];
+        if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first.slice());
+        const tags = el.tags || {};
+        features.push({
+          type:'Feature',
+          properties:{
+            h:wlParseHeight(tags),
+            base:Math.max(0, parseFloat(tags.min_height) || 0),
+            kind:tags.building || 'yes'
+          },
+          geometry:{ type:'Polygon', coordinates:[ring] }
+        });
+      });
+      const gj = { type:'FeatureCollection', features:features };
+      if (map3d.getSource('wl-building-supplement')) {
+        map3d.getSource('wl-building-supplement').setData(gj);
+      } else {
+        map3d.addSource('wl-building-supplement', { type:'geojson', data:gj });
+        let before;
+        const labels = (map3d.getStyle().layers || []).find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
+        before = labels && labels.id;
+        map3d.addLayer({
+          id:'wl-building-supplement-3d',
+          type:'fill-extrusion',
+          source:'wl-building-supplement',
+          minzoom:14,
+          paint:{
+            'fill-extrusion-color': lightMode ? '#c6d0d6' : '#435562',
+            'fill-extrusion-height':['get','h'],
+            'fill-extrusion-base':['get','base'],
+            'fill-extrusion-opacity':.84
+          }
+        }, before);
+      }
+    } catch (e) {
+      console.warn('Supplemental building detail unavailable', e);
+    } finally {
+      wlBuildingFetchBusy = false;
+    }
+  }
+
+  const wlEnsureMap3dBase = ensureMap3d;
+  ensureMap3d = function wlEnsureMap3d() {
+    const instance = wlEnsureMap3dBase();
+    if (instance && !instance.__wlRound15Bound) {
+      instance.__wlRound15Bound = true;
+      instance.on('load', () => setTimeout(() => refreshSupplementalBuildings(true), 350));
+      instance.on('moveend', () => {
+        if (navActive()) refreshSupplementalBuildings(false);
+      });
+    }
+    return instance;
+  };
+
+  function wlCurrentLanes(step) {
+    if (!step || !step.intersections) return [];
+    for (const intersection of step.intersections) {
+      if (intersection && intersection.lanes && intersection.lanes.length) return intersection.lanes;
+    }
+    return [];
+  }
+
+  function wlLaneCountForRoad() {
+    const exact = wlCurrentLanes(navSteps[navStepIndex]);
+    if (exact.length) return clamp(exact.length, 1, 8);
+    const step = navSteps[navStepIndex] || {};
+    const road = String(currentRoadRef(step) || step.name || '').toLowerCase();
+    if (/interstate|motorway|freeway|expressway|turnpike|i-\d/.test(road)) return 3;
+    if (/highway|parkway|us-\d|route \d/.test(road)) return 2;
+    return 2;
+  }
+
+  function wlRemove3dLaneLayers() {
+    if (!map3d) return;
+    for (let i = 0; i < 10; i++) {
+      const id = 'wl-lane-divider-' + i;
+      try { if (map3d.getLayer(id)) map3d.removeLayer(id); } catch (e) {}
+    }
+  }
+
+  add3dLaneRoad = function wlAdd3dLaneRoad() {
+    if (!map3d || !map3dReady || !map3d.getSource('wl-route')) return;
+    const before = map3d.getLayer('wl-route-casing') ? 'wl-route-casing' : undefined;
+    const laneCount = wlLaneCountForRoad();
+    const roadWidth = clamp(laneCount * 8.2 + 6, 22, 68);
+    try {
+      wlRemove3dLaneLayers();
+      if (map3d.getLayer('wl-route-roadbed')) {
+        map3d.setPaintProperty('wl-route-roadbed', 'line-width', roadWidth);
+        map3d.setPaintProperty('wl-route-roadbed', 'line-color', lightMode ? '#596169' : '#303943');
+      } else {
+        map3d.addLayer({
+          id:'wl-route-roadbed', type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'round'},
+          paint:{'line-color':lightMode ? '#596169' : '#303943','line-width':roadWidth,'line-opacity':.92}
+        }, before);
+      }
+      const lanePixels = roadWidth / laneCount;
+      for (let i = 1; i < laneCount; i++) {
+        const offset = -roadWidth / 2 + lanePixels * i;
+        map3d.addLayer({
+          id:'wl-lane-divider-' + (i - 1),
+          type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'butt'},
+          paint:{
+            'line-color':lightMode ? 'rgba(255,255,255,.88)' : 'rgba(225,232,238,.78)',
+            'line-width':1.2,
+            'line-offset':offset,
+            'line-dasharray':[2.2,3.6],
+            'line-opacity':.9
+          }
+        }, before);
+      }
+    } catch (e) { console.warn('Dynamic lane rendering unavailable', e); }
+  };
+
+  renderLanes = function wlRenderLanes(step, metresToTurn) {
+    const bar = $('laneBar');
+    const lanes = wlCurrentLanes(step);
+    if (!bar || !lanes.length || metresToTurn > 950) {
+      if (bar) { bar.classList.add('hidden'); bar.classList.remove('wl-real-lanes'); }
+      return;
+    }
+    bar.innerHTML = lanes.map((lane) => {
+      const preferred = lane.active === true;
+      const usable = lane.valid === true || preferred;
+      const indications = lane.indications || (lane.valid_indication ? [lane.valid_indication] : []);
+      return '<span class="lane ' + (usable ? 'use ' : 'no ') + (preferred ? 'preferred' : '') +
+        '" data-status="' + (preferred ? 'best' : usable ? 'use' : '') + '" title="' +
+        (preferred ? 'Preferred lane' : usable ? 'Valid lane' : 'Not for this maneuver') + '">' +
+        laneGlyph(indications) + '</span>';
+    }).join('');
+    bar.classList.remove('hidden');
+    bar.classList.add('wl-real-lanes');
+    add3dLaneRoad();
+  };
+
+  function wlPoiCacheAnchor() {
+    let a = livePosition;
+    if (!a && allRoutes.length) {
+      const r = allRoutes[activeRouteIndex];
+      a = r && r.coords && r.coords.length ? { lat:r.coords[0][0], lng:r.coords[0][1] } : null;
+    }
+    if (!a && map) {
+      const c = map.getCenter();
+      a = { lat:c.lat, lng:c.lng };
+    }
+    return a;
+  }
+
+  function wlPoiCacheKey(key) {
+    const a = wlPoiCacheAnchor();
+    if (!a) return null;
+    return 'wl-poi-v3:' + key + ':' + (Math.round(a.lat * 80) / 80).toFixed(4) + ':' +
+      (Math.round(a.lng * 80) / 80).toFixed(4);
+  }
+
+  function wlReadPoiCache(key) {
+    const cacheKey = wlPoiCacheKey(key);
+    if (!cacheKey) return null;
+    try {
+      const row = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (!row || !row.items || Date.now() - row.at > 12 * 60 * 1000) return null;
+      return row.items;
+    } catch (e) { return null; }
+  }
+
+  function wlWritePoiCache(key, items) {
+    const cacheKey = wlPoiCacheKey(key);
+    if (!cacheKey || !items || !items.length) return;
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({ at:Date.now(), items:items.slice(0, 40) }));
+    } catch (e) {}
+  }
+
+  const WL_GOOGLE_POI_QUERY = {
+    food:'restaurants',
+    fastfood:'fast food restaurants',
+    gas:'gas stations',
+    ev:'electric vehicle charging stations',
+    hospital:'hospitals',
+    parking:'parking',
+    services:'rest areas'
+  };
+
+  async function wlGooglePoiSearch(key) {
+    if (!GOOGLE_PLACES_KEY || !WL_GOOGLE_POI_QUERY[key]) return [];
+    const a = wlPoiCacheAnchor();
+    if (!a) return [];
+    const res = await fetch(GOOGLE_PLACES_BASE + '/places:searchText', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Goog-Api-Key':GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location,places.primaryTypeDisplayName,places.iconMaskBaseUri,places.iconBackgroundColor,places.photos,places.rating,places.userRatingCount'
+      },
+      body:JSON.stringify({
+        textQuery:WL_GOOGLE_POI_QUERY[key],
+        maxResultCount:20,
+        locationBias:{ circle:{ center:{ latitude:a.lat, longitude:a.lng }, radius:Math.min(50000, Math.max(2500, poiRadiusMi * 1609.34)) } }
+      })
+    });
+    if (!res.ok) throw new Error('Google Places ' + res.status);
+    const d = await res.json();
+    return (d.places || []).map((p) => {
+      const photo = p.photos && p.photos[0] && p.photos[0].name
+        ? GOOGLE_PLACES_BASE + '/' + p.photos[0].name + '/media?maxWidthPx=180&key=' + GOOGLE_PLACES_KEY
+        : '';
+      return {
+        id:'google:' + p.id,
+        lat:p.location.latitude,
+        lng:p.location.longitude,
+        tags:{
+          name:(p.displayName && p.displayName.text) || POI[key].label,
+          amenity:key,
+          google_rating:p.rating || '',
+          google_ratings:p.userRatingCount || ''
+        },
+        googlePhoto:photo,
+        googleIcon:p.iconMaskBaseUri ? p.iconMaskBaseUri + '.png' : '',
+        googleIconBg:p.iconBackgroundColor || '',
+        googleAddress:p.formattedAddress || '',
+        googleCategory:(p.primaryTypeDisplayName && p.primaryTypeDisplayName.text) || '',
+        source:'google'
+      };
+    });
+  }
+
+  const wlSearchPoiBase = searchPoi;
+  searchPoi = async function wlSearchPoi(key) {
+    const cached = wlReadPoiCache(key);
+    if (cached && cached.length) return cached;
+
+    let items = [];
+    if (GOOGLE_PLACES_KEY && WL_GOOGLE_POI_QUERY[key]) {
+      try {
+        const googleJob = wlGooglePoiSearch(key);
+        const timeout = new Promise((resolve) => setTimeout(() => resolve([]), 950));
+        items = await Promise.race([googleJob, timeout]);
+        if (items && items.length) {
+          const a = wlPoiCacheAnchor();
+          items.forEach((e) => {
+            e.metersFromMe = a ? haversine(a, e) : 0;
+            e.mileAlong = allRoutes.length ? distanceAlongRoute(e.lat, e.lng) : null;
+          });
+          items.sort((x, y) => x.metersFromMe - y.metersFromMe);
+          wlWritePoiCache(key, items);
+          return items;
+        }
+      } catch (e) { console.warn('Google POI enrichment unavailable', e); }
+    }
+
+    items = await wlSearchPoiBase(key);
+    wlWritePoiCache(key, items);
+    return items;
+  };
+
+  function wlPoiVisual(el, cfg, color, size) {
+    const px = size || 34;
+    const src = el.googlePhoto || el.googleIcon || '';
+    if (src) {
+      const bg = el.googleIconBg || '#ffffff';
+      return '<span class="wl-poi-brand" style="width:' + px + 'px;height:' + px + 'px;background:' + esc(bg) + '">' +
+        '<img loading="lazy" decoding="async" src="' + esc(src) + '" alt="" /></span>';
+    }
+    return '<span class="wl-poi-chip" style="background:' + color + ';width:' + px + 'px;height:' + px +
+      'px;font-size:' + Math.round(px * .48) + 'px">' + cfg.emoji + '</span>';
+  }
+
+  const wlPoiToPlaceBase = poiToPlace;
+  poiToPlace = function wlPoiToPlace(key, el) {
+    const p = wlPoiToPlaceBase(key, el);
+    if (el.googleAddress) p.address = el.googleAddress;
+    if (el.googlePhoto) p.photos = [el.googlePhoto];
+    p.source = el.source || p.source;
+    return p;
+  };
+
+  drawPoi = function wlDrawPoi(key, items) {
+    clearPoi(key);
+    const cfg = POI[key];
+    const color = cssVar(cfg.color, '#888');
+    const layer = L.layerGroup().addTo(map);
+    poiLayers[key] = layer;
+    poi3d[key] = [];
+    items.slice(0, 60).forEach((el) => {
+      const place = poiToPlace(key, el);
+      const visual = wlPoiVisual(el, cfg, color, 34);
+      const popup = '<div style="display:flex;gap:9px;align-items:center">' + visual +
+        '<div><div class="pp-name">' + esc(place.name) + '</div><div class="pp-sub">' +
+        esc(place.label || el.googleCategory || '') +
+        (el.metersFromMe != null ? ' · ' + fmtDistance(el.metersFromMe) + ' away' : '') +
+        '</div></div></div>' +
+        '<button class="pp-btn" onclick="window.WayLyn.openPlace(' + el.lat + ',' + el.lng + ',\'' + key + '\')">View details</button>';
+      const icon = L.divIcon({ className:'', html:visual, iconSize:[34,34], iconAnchor:[17,17] });
+      L.marker([el.lat, el.lng], { icon:icon }).addTo(layer).bindPopup(popup);
+      add3dPoi(key, el.lat, el.lng, cfg.emoji, color, popup);
+    });
+  };
+
+  renderPoiPanel = function wlRenderPoiPanel(key, items) {
+    const panel = $('poiPanel');
+    const cfg = POI[key];
+    const color = cssVar(cfg.color, '#888');
+    closeOtherRightPanels('poi');
+    panel.innerHTML = '<div class="panel-title">' + cfg.label +
+      ' <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-faint)">' +
+      items.length + ' found</span><button class="icon-act" id="poiHide" title="Hide">✕</button></div>' +
+      (items.length ? items.slice(0, 40).map((el, i) => {
+        const place = poiToPlace(key, el);
+        const near = fmtDistance(el.metersFromMe || 0);
+        return '<div class="panel-item">' +
+          wlPoiVisual(el, cfg, color, 38) +
+          '<span class="panel-item-text" data-open="' + i + '" style="cursor:pointer">' +
+          esc(place.name) +
+          (el.source === 'google' ? '<span class="poi-provider">Google Places</span>' : '') +
+          '<span class="sub num">' + esc(el.googleCategory || place.label || cfg.label) + ' · ' + near +
+          (el.tags && el.tags.google_rating ? ' · ★ ' + esc(String(el.tags.google_rating)) : '') +
+          '</span></span>' +
+          '<button class="icon-act" data-stop="' + i + '" title="Add as a stop">➕</button></div>';
+      }).join('') : '<div class="panel-empty">No mapped places were returned for this area.</div>');
+    panel.classList.remove('hidden');
+    $('poiHide').addEventListener('click', () => closePoi(key));
+    panel.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => {
+      const item = items[parseInt(el.dataset.open, 10)];
+      map.setView([item.lat, item.lng], 17, { animate:true });
+      if (map3d && map3dReady) map3d.easeTo({ center:[item.lng,item.lat], zoom:17 });
+      showPlaceCard(poiToPlace(key, item));
+    }));
+    panel.querySelectorAll('[data-stop]').forEach((el) => el.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      const item = items[parseInt(el.dataset.stop, 10)];
+      await addStopSmart(poiToPlace(key, item), POI[key].dwell);
+    }));
+  };
+
+  /* Warm the most-used POI categories after a location/route becomes known.
+     The result is persisted, so subsequent taps normally render immediately. */
+  let wlPoiPrefetchCell = '';
+  function wlPrefetchPois() {
+    const a = wlPoiCacheAnchor();
+    if (!a) return;
+    const cell = Math.round(a.lat * 50) + ':' + Math.round(a.lng * 50);
+    if (cell === wlPoiPrefetchCell) return;
+    wlPoiPrefetchCell = cell;
+    ['food','fastfood','gas'].forEach((key, index) => {
+      if (wlReadPoiCache(key)) return;
+      setTimeout(() => searchPoi(key).catch(() => {}), 250 + index * 550);
+    });
+  }
+  setInterval(wlPrefetchPois, 15000);
+  setTimeout(wlPrefetchPois, 1800);
+
+
   /* ==================================================================
      BOOT
   ================================================================== */
@@ -17167,6 +19240,511 @@ window.onSpotifyIframeApiReady = function (api) {
   bootAccount();
 })();
 
+</script>
+
+<script id="wl-round15-avatar">
+(function () {
+  'use strict';
+
+  const AVATARS = ['🧭','🚗','🌎','🛣️','⭐','🚙'];
+  let chosen = '🧭';
+  let chosenImage = '';
+
+  function accountEmail() {
+    try {
+      const u = window.WLAuth && window.WLAuth.current && window.WLAuth.current();
+      return u && u.email ? String(u.email).toLowerCase() : '';
+    } catch (e) { return ''; }
+  }
+
+  function storageKey(email) { return 'wl-avatar:' + String(email || '').toLowerCase(); }
+
+  function readAvatar(email) {
+    try { return JSON.parse(localStorage.getItem(storageKey(email)) || 'null'); }
+    catch (e) { return null; }
+  }
+
+  function saveAvatar(email, value) {
+    if (!email || !value) return;
+    try { localStorage.setItem(storageKey(email), JSON.stringify(value)); } catch (e) {}
+  }
+
+  function applyProfileAvatar() {
+    const email = accountEmail();
+    const row = readAvatar(email);
+    const el = document.getElementById('profileAvatar');
+    if (!el || !row) return;
+    if (row.image) {
+      el.textContent = '';
+      el.classList.add('wl-avatar-photo');
+      el.style.backgroundImage = 'url("' + row.image.replace(/"/g, '%22') + '")';
+    } else {
+      el.classList.remove('wl-avatar-photo');
+      el.style.backgroundImage = '';
+      el.textContent = row.emoji || '🧭';
+    }
+  }
+
+  function syncMode() {
+    const wrap = document.getElementById('wlAvatarSetup');
+    const up = document.getElementById('segUp');
+    if (wrap && up) wrap.style.display = up.classList.contains('on') ? '' : 'none';
+  }
+
+  function mount() {
+    const nameWrap = document.getElementById('aNameWrap');
+    if (!nameWrap || document.getElementById('wlAvatarSetup')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'wlAvatarSetup';
+    wrap.className = 'wl-avatar-setup';
+    wrap.innerHTML =
+      '<div class="wl-avatar-title">Choose your profile picture</div>' +
+      '<div class="wl-avatar-grid">' +
+      AVATARS.map((a, i) => '<button type="button" class="wl-avatar-choice' + (i === 0 ? ' on' : '') +
+        '" data-avatar="' + a + '" aria-label="Choose ' + a + '">' + a + '</button>').join('') +
+      '</div>' +
+      '<label class="wl-avatar-upload">📷 Use your own picture' +
+      '<input id="wlAvatarFile" type="file" accept="image/*" hidden></label>';
+    nameWrap.insertAdjacentElement('afterend', wrap);
+
+    wrap.querySelectorAll('[data-avatar]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        chosen = btn.dataset.avatar;
+        chosenImage = '';
+        wrap.querySelectorAll('[data-avatar]').forEach((b) => b.classList.toggle('on', b === btn));
+      });
+    });
+
+    const file = document.getElementById('wlAvatarFile');
+    file.addEventListener('change', () => {
+      const f = file.files && file.files[0];
+      if (!f || !/^image\//.test(f.type) || f.size > 2 * 1024 * 1024) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        chosenImage = String(reader.result || '');
+        wrap.querySelectorAll('[data-avatar]').forEach((b) => b.classList.remove('on'));
+      };
+      reader.readAsDataURL(f);
+    });
+
+    const form = document.getElementById('aForm');
+    form.addEventListener('submit', () => {
+      const up = document.getElementById('segUp');
+      if (!up || !up.classList.contains('on')) return;
+      const email = (document.getElementById('aEmail').value || '').trim().toLowerCase();
+      saveAvatar(email, chosenImage ? { image:chosenImage } : { emoji:chosen });
+      setTimeout(applyProfileAvatar, 900);
+    }, true);
+
+    ['segUp','segIn'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.addEventListener('click', () => setTimeout(syncMode, 0));
+    });
+    syncMode();
+  }
+
+  function start() {
+    mount();
+    applyProfileAvatar();
+    const root = document.documentElement;
+    if (window.MutationObserver) {
+      new MutationObserver(() => {
+        if (!document.getElementById('wlAvatarSetup')) mount();
+        applyProfileAvatar();
+      }).observe(root, { childList:true, subtree:true });
+    }
+    setInterval(applyProfileAvatar, 2500);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
+
+
+<script id="wl-round16-runtime">
+(() => {
+  'use strict';
+
+  /* -----------------------------------------------------------------------
+     POI coverage + instant cache-first UX
+     ----------------------------------------------------------------------- */
+  POI.events = {
+    label:'Events & venues',
+    emoji:'🎫',
+    color:'--poi-services',
+    filter:'[~"^(amenity|leisure|tourism)$"~"^(theatre|cinema|arts_centre|community_centre|events_venue|stadium|sports_centre|attraction)$"]',
+    dwell:25
+  };
+
+  POI.services = {
+    label:'Rest & restrooms',
+    emoji:'🚻',
+    color:'--poi-services',
+    filter:'[~"^(highway|amenity|tourism)$"~"^(services|rest_area|toilets|shower|drinking_water|picnic_site)$"]',
+    dwell:12
+  };
+
+  POI.safety = {
+    label:'Speed cameras',
+    emoji:'📷',
+    color:'--poi-safety',
+    filter:'[~"^(highway|enforcement|camera:type)$"~"^(speed_camera|maxspeed|traffic_signals|redlight|fixed)$"]',
+    dwell:0
+  };
+
+  if (typeof WL_GOOGLE_POI_QUERY !== 'undefined') {
+    WL_GOOGLE_POI_QUERY.events = 'event venues';
+    WL_GOOGLE_POI_QUERY.services = 'rest areas public restrooms';
+  }
+
+  const ROUND16_POI_KEYS = [
+    'food', 'fastfood', 'gas', 'ev', 'hospital',
+    'services', 'events', 'parking', 'safety'
+  ];
+
+  const round16PoiMemory = new Map();
+
+  function round16CachedPoi(key) {
+    const memory = round16PoiMemory.get(key);
+    if (memory && memory.length) return memory;
+    try {
+      const persisted = wlReadPoiCache(key);
+      if (persisted && persisted.length) {
+        round16PoiMemory.set(key, persisted);
+        return persisted;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  const round16SearchPoiBase = searchPoi;
+  searchPoi = async function round16SearchPoi(key) {
+    const cached = round16CachedPoi(key);
+    if (cached && cached.length) return cached;
+
+    const items = await round16SearchPoiBase(key);
+    if (items && items.length) {
+      round16PoiMemory.set(key, items);
+      poiWarm[key] = { at:Date.now(), items };
+      try { wlWritePoiCache(key, items); } catch (e) {}
+    }
+    return items || [];
+  };
+
+  let round16PrefetchCell = '';
+  let round16PrefetchBusy = false;
+
+  async function round16PrefetchAllPois(force) {
+    const anchor = wlPoiCacheAnchor();
+    if (!anchor || round16PrefetchBusy) return;
+
+    const cell = Math.round(anchor.lat * 100) + ':' + Math.round(anchor.lng * 100);
+    if (!force && cell === round16PrefetchCell) return;
+    round16PrefetchCell = cell;
+    round16PrefetchBusy = true;
+
+    try {
+      const queue = ROUND16_POI_KEYS.filter((key) => {
+        const cached = round16CachedPoi(key);
+        if (cached && cached.length) {
+          poiWarm[key] = { at:Date.now(), items:cached };
+          return false;
+        }
+        return true;
+      });
+
+      /* Stagger requests slightly so the free map-data mirrors are not hit
+         with a burst, while still warming every category before it is tapped. */
+      await Promise.allSettled(queue.map((key, index) => new Promise((resolve) => {
+        setTimeout(async () => {
+          try {
+            const items = await round16SearchPoiBase(key);
+            if (items && items.length) {
+              round16PoiMemory.set(key, items);
+              poiWarm[key] = { at:Date.now(), items };
+              try { wlWritePoiCache(key, items); } catch (e) {}
+            }
+          } catch (e) {}
+          resolve();
+        }, index * 110);
+      })));
+    } finally {
+      round16PrefetchBusy = false;
+    }
+  }
+
+  /* Cache-first means taps can render in a frame after the initial warmup.
+     Refresh continues in the background as the car changes area. */
+  setTimeout(() => round16PrefetchAllPois(true), 250);
+  setInterval(() => round16PrefetchAllPois(false), 8000);
+
+  /* -----------------------------------------------------------------------
+     Lane-accurate maneuver guidance
+     ----------------------------------------------------------------------- */
+  function round16LaneCandidate() {
+    const maxIndex = Math.min(navSteps.length - 1, navStepIndex + 2);
+    for (let i = navStepIndex; i <= maxIndex; i++) {
+      const step = navSteps[i];
+      const lanes = wlCurrentLanes(step);
+      if (lanes.length) {
+        return {
+          step,
+          lanes,
+          index:i,
+          distance:Math.max(0, (navStepStart[i] || navDistAlong) - navDistAlong)
+        };
+      }
+    }
+    return null;
+  }
+
+  function round16LaneStatus(lane, step) {
+    const maneuver = String(step && step.maneuver && step.maneuver.type || '');
+    const preferred = lane.active === true;
+    const valid = lane.valid === true || preferred;
+    if (preferred && /off ramp|exit/i.test(maneuver)) return 'EXIT';
+    if (preferred) return 'BEST';
+    if (valid) return 'USE';
+    return '';
+  }
+
+  renderLanes = function round16RenderLanes(step, metresToTurn) {
+    const bar = $('laneBar');
+    if (!bar) return;
+
+    const candidate = round16LaneCandidate();
+    if (!candidate || !candidate.lanes.length) {
+      bar.classList.add('hidden');
+      bar.classList.remove('wl-real-lanes');
+      add3dLaneRoad();
+      return;
+    }
+
+    const highway = !!currentHighwayRef();
+    const visibleDistance = highway ? 2600 : 1400;
+    const distance = Number.isFinite(candidate.distance) ? candidate.distance : metresToTurn;
+    if (Number.isFinite(distance) && distance > visibleDistance) {
+      bar.classList.add('hidden');
+      bar.classList.remove('wl-real-lanes');
+      add3dLaneRoad();
+      return;
+    }
+
+    bar.innerHTML = candidate.lanes.map((lane) => {
+      const preferred = lane.active === true;
+      const usable = lane.valid === true || preferred;
+      const indications = lane.indications ||
+        (lane.valid_indication ? [lane.valid_indication] : []);
+      const status = round16LaneStatus(lane, candidate.step);
+
+      return '<span class="lane ' +
+        (usable ? 'use ' : 'no ') +
+        (preferred ? 'preferred' : '') +
+        '" data-status="' + status +
+        '" title="' +
+        (status === 'EXIT' ? 'Exit lane' :
+          preferred ? 'Preferred lane' :
+          usable ? 'Valid lane' : 'Do not use for this maneuver') +
+        '">' + laneGlyph(indications) + '</span>';
+    }).join('');
+
+    bar.classList.remove('hidden');
+    bar.classList.add('wl-real-lanes');
+    add3dLaneRoad();
+  };
+
+  function round16PreferredLaneInfo() {
+    const candidate = round16LaneCandidate();
+    if (!candidate) return null;
+    const preferred = [];
+    candidate.lanes.forEach((lane, index) => {
+      if (lane.active === true) preferred.push(index);
+    });
+    if (!preferred.length) {
+      candidate.lanes.forEach((lane, index) => {
+        if (lane.valid === true) preferred.push(index);
+      });
+    }
+    return preferred.length ? {
+      count:candidate.lanes.length,
+      indexes:preferred,
+      step:candidate.step
+    } : null;
+  }
+
+  const round16Add3dLaneBase = add3dLaneRoad;
+  add3dLaneRoad = function round16Add3dLaneRoad() {
+    round16Add3dLaneBase();
+    if (!map3d || !map3dReady || !map3d.getSource('wl-route')) return;
+
+    const laneInfo = round16PreferredLaneInfo();
+    try {
+      if (map3d.getLayer('wl-lane-recommended')) {
+        map3d.removeLayer('wl-lane-recommended');
+      }
+      if (!laneInfo || !laneInfo.count) return;
+
+      const laneCount = clamp(laneInfo.count, 1, 8);
+      const roadWidth = clamp(laneCount * 8.2 + 6, 22, 68);
+      const lanePixels = roadWidth / laneCount;
+      const averageIndex = laneInfo.indexes.reduce((sum, value) => sum + value, 0) /
+        laneInfo.indexes.length;
+      const offset = -roadWidth / 2 + lanePixels * (averageIndex + .5);
+
+      const before = map3d.getLayer('wl-route-casing') ? 'wl-route-casing' : undefined;
+      map3d.addLayer({
+        id:'wl-lane-recommended',
+        type:'line',
+        source:'wl-route',
+        filter:['==',['get','done'],0],
+        layout:{'line-join':'round','line-cap':'round'},
+        paint:{
+          'line-color':'rgba(43,127,255,.48)',
+          'line-width':Math.max(4, lanePixels * .62),
+          'line-offset':offset,
+          'line-opacity':.92
+        }
+      }, before);
+    } catch (e) {
+      console.warn('Recommended 3D lane highlight unavailable', e);
+    }
+  };
+
+  /* -----------------------------------------------------------------------
+     Five-second automatic recenter
+     ----------------------------------------------------------------------- */
+  breakFollow = function round16BreakFollow() {
+    navFollow = false;
+    clearTimeout(recenterTimer);
+    const button = $('recenterFab');
+    if (button) {
+      button.classList.remove('waiting');
+      button.classList.add('counting');
+    }
+    const label = $('recenterLabel');
+    if (label) label.textContent = 'Recenter · 5s';
+
+    recenterTimer = setTimeout(() => {
+      recenterTimer = null;
+      recenterNow();
+    }, 5000);
+  };
+
+  /* -----------------------------------------------------------------------
+     Highest-accuracy browser location + visible accuracy radius
+     ----------------------------------------------------------------------- */
+  let round16AccuracyCircle = null;
+  let round16PrecisionWatch = null;
+
+  function round16UpdateAccuracy(lat, lng, accuracy) {
+    if (!map || !Number.isFinite(accuracy)) return;
+    const radius = Math.max(1, accuracy);
+    if (!round16AccuracyCircle) {
+      round16AccuracyCircle = L.circle([lat, lng], {
+        radius,
+        className:'wl-accuracy-ring',
+        color:'#2b7fff',
+        weight:1,
+        opacity:.45,
+        fillColor:'#2b7fff',
+        fillOpacity:.07,
+        interactive:false
+      }).addTo(map);
+    } else {
+      round16AccuracyCircle.setLatLng([lat, lng]);
+      round16AccuracyCircle.setRadius(radius);
+    }
+  }
+
+  function round16AcceptPreciseFix(pos) {
+    if (!pos || !pos.coords) return;
+    const coords = pos.coords;
+    const next = { lat:coords.latitude, lng:coords.longitude };
+    const accuracy = Number(coords.accuracy) || 9999;
+
+    /* Fresh high-accuracy fixes win. Do not replace a strong current fix with
+       a much worse one unless the old fix has gone stale. */
+    const oldAge = Date.now() - lastFixAt;
+    if (lastAccuracy != null && accuracy > lastAccuracy * 1.8 && oldAge < 5000) {
+      return;
+    }
+
+    const previous = livePosition;
+    livePosition = next;
+    lastFixAt = Date.now();
+    lastAccuracy = accuracy;
+    bestAccuracy = bestAccuracy == null ? accuracy : Math.min(bestAccuracy, accuracy);
+    geoError = null;
+
+    if (coords.heading != null && Number.isFinite(coords.heading)) {
+      headingDeg = coords.heading;
+    } else if (previous && haversine(previous, next) > 2) {
+      headingDeg = bearing(previous, next) || headingDeg;
+    }
+
+    if (!liveMarker) {
+      liveMarker = L.marker([next.lat, next.lng], {
+        icon:locatorIcon(headingDeg)
+      }).addTo(map).bindPopup('You are here');
+    } else {
+      liveMarker.setLatLng([next.lat, next.lng]);
+      liveMarker.setIcon(locatorIcon(headingDeg));
+    }
+
+    round16UpdateAccuracy(next.lat, next.lng, accuracy);
+
+    if (followMode && !navActive()) {
+      map.panTo([next.lat, next.lng], { animate:true, duration:.25 });
+    }
+  }
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      round16AcceptPreciseFix,
+      () => {},
+      { enableHighAccuracy:true, timeout:12000, maximumAge:0 }
+    );
+
+    round16PrecisionWatch = navigator.geolocation.watchPosition(
+      round16AcceptPreciseFix,
+      () => {},
+      { enableHighAccuracy:true, timeout:12000, maximumAge:0 }
+    );
+  }
+
+  /* Make the existing "Locate me" action request an uncached high-accuracy
+     fix again, so the button never intentionally uses a ballpark cached fix. */
+  const locateButton = $('qrLocate');
+  if (locateButton) {
+    locateButton.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition((pos) => {
+        round16AcceptPreciseFix(pos);
+        const p = livePosition;
+        if (p) map.setView([p.lat, p.lng], 18, { animate:true });
+      }, () => {}, {
+        enableHighAccuracy:true,
+        timeout:12000,
+        maximumAge:0
+      });
+    });
+  }
+
+  /* Keep the visible copy at Max while retaining the existing stored
+     "full" value for backward compatibility. */
+  if (typeof VOICE_COPY !== 'undefined' && VOICE_COPY.full) {
+    VOICE_COPY.full[1] = 'Max';
+    try { syncVoiceUi(); } catch (e) {}
+  }
+
+  setTimeout(() => {
+    add3dLaneRoad();
+    round16PrefetchAllPois(true);
+  }, 900);
+})();
 </script>
 </body>
 </html>
