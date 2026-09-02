@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5445,6 +5446,263 @@ body.openfreemap-base .leaflet-maplibre-gl {
 body.esri-base .leaflet-tile-pane {
   filter:none !important;
 }
+</style>
+
+
+<style id="wl-round18-reference-refurb">
+/* ==========================================================================
+   ROUND 18 — reference-refurbished navigation chrome
+   Keeps WayLyn's routing/data engine intact while making the active drive
+   screen read like the supplied reference: map first, compact turn card,
+   right-side utilities, compact ETA capsule, speed sign, and a 3D car.
+   ========================================================================== */
+
+body.navigating {
+  --nav-green:#006b67;
+  --nav-green-deep:#005a57;
+  --nav-glass:rgba(8,16,22,.86);
+  --nav-outline:rgba(255,255,255,.13);
+}
+
+/* Map is the product while driving. */
+body.navigating #map3d { display:block !important; background:#243241; }
+body.navigating #brand,
+body.navigating #hint,
+body.navigating #leftPanels,
+body.navigating #rightPanels,
+body.navigating #turnPreview,
+body.navigating #resumeBar { display:none !important; }
+body.navigating #dock,
+body.navigating #trafficKey { display:none !important; }
+
+/* ---------- upper-left utility row ---------- */
+#wlNavActions {
+  position:absolute; top:10px; left:10px; z-index:16;
+  display:flex; gap:10px; align-items:center;
+}
+.wl-ref-circle,
+.wl-ref-pill {
+  height:52px; border:1px solid rgba(255,255,255,.08); color:#fff;
+  background:rgba(11,24,31,.93); box-shadow:0 7px 22px rgba(0,0,0,.30);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+  cursor:pointer; font:700 16px/1 var(--font-ui);
+}
+.wl-ref-circle { width:52px; border-radius:50%; padding:0; display:grid; place-items:center; font-size:23px; }
+.wl-ref-pill { border-radius:27px; padding:0 18px; display:inline-flex; align-items:center; gap:8px; }
+.wl-ref-pill:hover,.wl-ref-circle:hover { background:rgba(22,41,50,.98); }
+
+/* ---------- maneuver card, close to supplied reference ---------- */
+body.navigating #navTop {
+  top:74px !important; left:10px !important; width:min(395px,calc(100vw - 20px)) !important;
+  z-index:15 !important;
+}
+body.navigating #navTop .nav-card {
+  border:0 !important; border-radius:0 0 22px 22px !important; overflow:hidden !important;
+  background:transparent !important; box-shadow:0 10px 28px rgba(0,0,0,.28) !important;
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+}
+body.navigating #navTop .nav-card-main {
+  min-height:94px; padding:10px 16px 9px !important; gap:13px !important;
+  background:var(--nav-green) !important; border:0 !important;
+  backdrop-filter:none !important; -webkit-backdrop-filter:none !important;
+}
+body.navigating #turnArrow {
+  width:54px !important; font-size:2.75rem !important; color:white !important;
+  filter:none !important; text-shadow:none !important;
+}
+body.navigating #turnDistance {
+  font-size:2.0rem !important; line-height:.95 !important; color:#fff !important; font-weight:750 !important;
+}
+body.navigating #turnStreet {
+  color:#fff !important; font-size:1.23rem !important; line-height:1.25 !important;
+  margin-top:6px !important; font-weight:720 !important; text-shadow:none !important;
+}
+body.navigating #turnStreet b { color:#fff !important; }
+body.navigating #turnSigns { color:rgba(255,255,255,.82)!important; border-left-color:rgba(255,255,255,.55)!important; }
+body.navigating #roadRow {
+  min-height:44px; padding:7px 14px !important; border-top:1px solid rgba(255,255,255,.11)!important;
+  background:var(--nav-green-deep) !important; backdrop-filter:none !important;
+}
+body.navigating #roadName { font-size:1.04rem !important; color:#fff !important; font-weight:720 !important; }
+body.navigating #roadShield svg { height:31px !important; }
+body.navigating #nextList,
+body.navigating #trafficAhead,
+body.navigating #tripLine,
+body.navigating #destRow { display:none !important; }
+
+/* A clean lane strip reminiscent of the reference card. */
+body.navigating #laneBar {
+  margin:0 !important; padding:5px 14px 7px !important; min-height:34px !important;
+  border-radius:0 0 19px 19px !important; border:0 !important; background:var(--nav-green-deep)!important;
+  color:#fff !important; box-shadow:0 8px 20px rgba(0,0,0,.2);
+}
+body.navigating #laneBar .lane { color:rgba(255,255,255,.38) !important; }
+body.navigating #laneBar .lane.use,
+body.navigating #laneBar .lane.preferred { color:#fff !important; }
+
+/* ---------- top-right settings/exit ---------- */
+body.navigating #navTopRight {
+  top:10px !important; right:10px !important; z-index:17 !important; gap:9px !important;
+}
+body.navigating #navTopRight #navAlertsBtn,
+body.navigating #navTopRight #navVoiceBtn,
+body.navigating #navTopRight #navNorthBtn { display:none !important; }
+body.navigating #navMenuToggle {
+  width:52px !important; height:52px !important; min-width:52px !important; padding:0 !important;
+  border-radius:50% !important; background:rgba(11,24,31,.93)!important; color:#fff!important;
+  border:1px solid rgba(255,255,255,.08)!important; font-size:0!important;
+}
+body.navigating #navMenuToggle::before { content:"⚙"; font-size:25px; }
+#wlExitRef { min-width:82px; justify-content:center; }
+
+/* compass badge */
+#wlCompassRef {
+  position:absolute; top:72px; right:12px; z-index:15;
+  min-width:48px; height:38px; border-radius:13px; padding:0 12px;
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; background:rgba(0,0,0,.82); box-shadow:0 5px 16px rgba(0,0,0,.25);
+  font:800 20px/1 var(--font-display); letter-spacing:.04em;
+}
+
+/* ---------- speed sign: top-right like the reference ---------- */
+body.navigating #speedCluster {
+  top:128px !important; right:12px !important; bottom:auto !important; left:auto !important;
+  z-index:15 !important; display:flex !important; flex-direction:row-reverse; align-items:center !important; gap:8px !important;
+}
+body.navigating .speed-dial {
+  width:auto !important; height:65px !important; min-width:58px !important; padding:0 5px !important;
+  border:0 !important; border-radius:9px !important; background:rgba(0,0,0,.73)!important;
+  box-shadow:none !important; display:flex !important; flex-direction:column !important; justify-content:center !important;
+}
+body.navigating .speed-dial b { font-size:1.38rem!important; color:#fff!important; }
+body.navigating .speed-dial small { font-size:.67rem!important; color:#fff!important; letter-spacing:.03em!important; margin:2px 0 0!important; }
+body.navigating #limitSign {
+  width:59px!important; height:59px!important; border-radius:7px!important; border:4px solid #111!important;
+  background:#fff!important; box-shadow:0 2px 8px rgba(0,0,0,.3)!important;
+}
+body.navigating #limitSign small { font-size:.56rem!important; color:#111!important; }
+body.navigating #limitSign b { font-size:1.42rem!important; color:#111!important; }
+
+/* ---------- right utility rail ---------- */
+#wlRightRail {
+  position:absolute; right:12px; top:43%; z-index:15;
+  display:flex; flex-direction:column; gap:12px; align-items:center;
+}
+#wlRightRail .wl-ref-circle { width:50px; height:50px; background:rgba(5,15,21,.88); }
+#wlRightRail .haz { color:#ffd35c; }
+#wlRightRail .route { font-size:21px; }
+
+/* ---------- compact bottom-left ETA capsule ---------- */
+body.navigating #barToggle,
+body.navigating #fabStack { display:none !important; }
+body.navigating #navBar {
+  left:12px !important; right:auto !important; bottom:12px !important; width:385px !important; max-width:calc(100vw - 24px)!important;
+  height:72px !important; padding:0 14px !important; gap:0!important;
+  border:1px solid rgba(255,255,255,.08)!important; border-radius:24px!important;
+  background:rgba(5,15,21,.9)!important; box-shadow:0 8px 28px rgba(0,0,0,.35)!important;
+  backdrop-filter:blur(11px)!important; -webkit-backdrop-filter:blur(11px)!important;
+}
+body.navigating #navBarSearch,
+body.navigating #navBarSteps { display:none !important; }
+body.navigating #navStats { width:100%; display:grid !important; grid-template-columns:1.25fr .8fr .85fr !important; align-items:stretch!important; }
+body.navigating #navStats .nb-stat { display:none !important; border-right:1px solid rgba(255,255,255,.09); padding:0 10px!important; }
+body.navigating #navStats .nb-stat:nth-child(1),
+body.navigating #navStats .nb-stat:nth-child(2),
+body.navigating #navStats .nb-stat:nth-child(3) { display:flex !important; }
+body.navigating #navStats .nb-stat:nth-child(3) { border-right:0; }
+body.navigating .nb-stat b { color:#fff!important; font-size:1.45rem!important; }
+body.navigating .nb-stat.nb-eta b { color:#fff!important; }
+body.navigating .nb-stat span { color:rgba(255,255,255,.72)!important; font-size:.72rem!important; letter-spacing:.02em!important; text-transform:none!important; }
+body.navigating #navStats .nb-stat:nth-child(3) b { color:#79df5d!important; }
+
+/* ---------- polished 3D car marker ---------- */
+.refined-car-locator { width:58px!important; height:72px!important; overflow:visible!important; }
+.refined-car-locator .locator-pulse { inset:8px -1px !important; background:radial-gradient(circle,rgba(45,190,255,.23),transparent 67%)!important; }
+.wl-car3d {
+  position:absolute; left:50%; top:50%; width:30px; height:48px;
+  transform:translate(-50%,-50%) perspective(70px) rotateX(13deg);
+  border-radius:10px 10px 8px 8px;
+  background:linear-gradient(90deg,#dfe5e9 0 16%,#f9fbfc 35% 65%,#c6cdd2 84% 100%);
+  border:1px solid rgba(255,255,255,.9);
+  box-shadow:0 10px 10px rgba(0,0,0,.42), 0 2px 4px rgba(0,0,0,.55);
+}
+.wl-car3d::before {
+  content:""; position:absolute; left:4px; right:4px; top:7px; height:14px; border-radius:6px 6px 3px 3px;
+  background:linear-gradient(#91a6b4,#273b49 70%); border:1px solid rgba(255,255,255,.55);
+}
+.wl-car3d::after {
+  content:""; position:absolute; left:5px; right:5px; bottom:6px; height:5px; border-radius:2px;
+  background:linear-gradient(90deg,#ff3e35 0 23%,#1f2528 24% 76%,#ff3e35 77%);
+  box-shadow:-8px -12px 0 -2px #2f3336, 8px -12px 0 -2px #2f3336;
+}
+.wl-car3d .car-roof {
+  position:absolute; left:7px; right:7px; top:21px; height:12px; border-radius:4px;
+  background:linear-gradient(90deg,#bcc4c9,#f4f7f8 50%,#aeb8be);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75);
+}
+.wl-car3d .car-logo {
+  position:absolute; left:50%; top:35px; transform:translateX(-50%);
+  width:8px; height:8px; border-radius:50%; background:#d8dde1;
+  border:1px solid #8b959b; box-shadow:inset 0 0 0 1px #f8fafb;
+}
+
+/* Keep popup menu usable and ordered. */
+body.navigating #navMenu {
+  top:60px !important; right:0!important; width:245px!important; border-radius:18px!important;
+  background:rgba(7,18,24,.97)!important;
+}
+
+/* Responsive: preserve the reference hierarchy instead of shrinking everything. */
+@media (max-width:720px) {
+  body.navigating #navTop { width:min(360px,calc(100vw - 20px))!important; }
+  #wlNavActions .wl-ref-pill { padding:0 14px; }
+  body.navigating #navBar { width:min(360px,calc(100vw - 24px))!important; }
+  body.navigating #turnDistance { font-size:1.72rem!important; }
+  body.navigating #turnStreet { font-size:1.07rem!important; }
+  #wlRightRail { top:46%; }
+}
+@media (max-width:470px) {
+  #wlNavActions .wl-ref-pill span:last-child { display:none; }
+  #wlNavActions .wl-ref-pill { width:52px; padding:0; justify-content:center; }
+  body.navigating #navTop { top:72px!important; }
+  body.navigating #navTopRight { right:8px!important; }
+  #wlExitRef { min-width:70px; padding:0 13px; }
+}
+</style>
+
+<style id="wl-round21-business-branding-css">
+/* Round 21 — real business branding for POIs */
+.wl-poi-brand{
+  position:relative;display:inline-grid;place-items:center;overflow:hidden;
+  border-radius:10px;background:#fff;border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 3px 12px rgba(0,0,0,.26);flex:0 0 auto;
+}
+.wl-poi-brand img{
+  width:82%;height:82%;object-fit:contain;display:block;position:relative;z-index:2;
+}
+.wl-poi-brand .wl-brand-fallback{
+  position:absolute;inset:0;display:grid;place-items:center;z-index:1;
+  font-weight:850;font-size:12px;letter-spacing:-.03em;color:#f6f8fa;
+  background:linear-gradient(145deg,#232b32,#101418);
+}
+.wl-poi-brand.has-logo .wl-brand-fallback{display:none}
+.wl-poi-brand.logo-photo img{width:100%;height:100%;object-fit:cover}
+.wl-brand-source{
+  font-size:10px;color:var(--text-faint);margin-top:6px;display:flex;gap:7px;flex-wrap:wrap;
+}
+.wl-brand-source a{color:var(--signal);text-decoration:none}
+.wl-business-link{
+  display:inline-flex;align-items:center;gap:6px;border-radius:999px;
+  padding:7px 10px;background:rgba(0,122,255,.12);color:var(--signal)!important;
+  font-weight:750;text-decoration:none!important;
+}
+.wl-business-link[hidden]{display:none!important}
+.wl-brand-card-head{
+  display:flex;align-items:center;gap:12px;margin:0 0 10px;
+}
+.wl-brand-card-head .wl-poi-brand{width:54px!important;height:54px!important;border-radius:14px}
+.wl-brand-card-title{min-width:0}
+.wl-brand-card-title .pc-name{margin:0}
 </style>
 
 </head>
@@ -19812,5 +20070,2000 @@ window.onSpotifyIframeApiReady = function (api) {
   }, 900);
 })();
 </script>
+
+<script id="wl-round18-reference-refurb-js">
+(() => {
+  'use strict';
+  const $r = (id) => document.getElementById(id);
+
+  function proxy(id) {
+    const el = $r(id);
+    if (el) el.click();
+  }
+
+  function injectReferenceChrome() {
+    const nav = $r('navMode');
+    if (!nav || $r('wlNavActions')) return;
+
+    const actions = document.createElement('div');
+    actions.id = 'wlNavActions';
+    actions.innerHTML =
+      '<button class="wl-ref-circle" id="wlRefMic" type="button" aria-label="Voice search" title="Voice search">🎙</button>' +
+      '<button class="wl-ref-pill" id="wlRefStop" type="button"><span>＋</span><span>Add stop</span></button>';
+    nav.appendChild(actions);
+
+    const exit = document.createElement('button');
+    exit.id = 'wlExitRef';
+    exit.className = 'wl-ref-pill';
+    exit.type = 'button';
+    exit.textContent = 'Exit';
+    const topRight = $r('navTopRight');
+    if (topRight) topRight.appendChild(exit);
+
+    const compass = document.createElement('button');
+    compass.id = 'wlCompassRef';
+    compass.type = 'button';
+    compass.textContent = 'N';
+    compass.title = 'Toggle north up / heading up';
+    nav.appendChild(compass);
+
+    const rail = document.createElement('div');
+    rail.id = 'wlRightRail';
+    rail.innerHTML =
+      '<button class="wl-ref-circle" id="wlRailNext" type="button" title="Trip overview">›</button>' +
+      '<button class="wl-ref-circle haz" id="wlRailHaz" type="button" title="Report a hazard">⚠</button>' +
+      '<button class="wl-ref-circle" id="wlRailSound" type="button" title="Voice guidance">🔊</button>' +
+      '<button class="wl-ref-circle route" id="wlRailRoute" type="button" title="All directions">⑂</button>';
+    nav.appendChild(rail);
+
+    $r('wlRefMic').addEventListener('click', () => proxy('navMicFab'));
+    $r('wlRefStop').addEventListener('click', () => proxy('navAddStop'));
+    $r('wlExitRef').addEventListener('click', () => proxy('navExit'));
+    $r('wlCompassRef').addEventListener('click', () => proxy('tripCompass'));
+    $r('wlRailNext').addEventListener('click', () => proxy('navCard'));
+    $r('wlRailHaz').addEventListener('click', () => proxy('navAlertsBtn'));
+    $r('wlRailSound').addEventListener('click', () => proxy('navVoiceBtn'));
+    $r('wlRailRoute').addEventListener('click', () => proxy('navSteps'));
+  }
+
+  function carMarkup() {
+    return '<div class="locator refined-car-locator">' +
+      '<div class="locator-pulse"></div>' +
+      '<div class="locator-rotor">' +
+        '<div class="wl-car3d"><span class="car-roof"></span><span class="car-logo"></span></div>' +
+      '</div></div>';
+  }
+
+  function upgrade3dCar() {
+    try {
+      if (!window.map3dUser || !map3dUser.getElement) return;
+      const root = map3dUser.getElement();
+      if (!root || root.querySelector('.wl-car3d')) return;
+      root.innerHTML = carMarkup();
+    } catch (e) {}
+  }
+
+  /* Preserve the current position-matching behavior and only swap the marker's
+     presentation after the existing implementation has done its work. */
+  if (typeof updateMap3dUser === 'function') {
+    const baseUserUpdate = updateMap3dUser;
+    updateMap3dUser = function wlRound18UpdateMap3dUser(lat, lng) {
+      const out = baseUserUpdate(lat, lng);
+      upgrade3dCar();
+      return out;
+    };
+  }
+
+  /* Make every available building layer contribute depth. The existing code
+     already adds OSM/Overpass fallback geometry; this lowers the zoom threshold
+     and refreshes those extrusions after style reloads. */
+  if (typeof style3dBuildings === 'function') {
+    const baseBuildings = style3dBuildings;
+    style3dBuildings = function wlRound18Buildings() {
+      baseBuildings();
+      try {
+        if (map3d && map3d.getLayer('wl-buildings')) {
+          map3d.setLayerZoomRange('wl-buildings', 10.5, 24);
+          map3d.setPaintProperty('wl-buildings', 'fill-extrusion-opacity', .98);
+        }
+        if (map3d && map3d.getLayer('wl-building-supplement-3d')) {
+          map3d.setLayerZoomRange('wl-building-supplement-3d', 13, 24);
+          map3d.setPaintProperty('wl-building-supplement-3d', 'fill-extrusion-opacity', .90);
+        }
+      } catch (e) {}
+    };
+  }
+
+  /* Keep the new compass label in sync with current orientation state. */
+  const compassTick = () => {
+    const c = $r('wlCompassRef');
+    if (!c) return;
+    try {
+      const b = map3d && map3d.getBearing ? map3d.getBearing() : 0;
+      c.textContent = (Math.abs(b) < 12 || (typeof northUp !== 'undefined' && northUp)) ? 'N' : 'N';
+      c.style.transform = 'rotate(' + (typeof northUp !== 'undefined' && northUp ? 0 : -b) + 'deg)';
+    } catch (e) {}
+  };
+
+  injectReferenceChrome();
+  setInterval(() => { upgrade3dCar(); compassTick(); }, 700);
+
+  /* If the MapLibre map already exists, ensure the refined building pass runs
+     after its current style has finished loading. */
+  setTimeout(() => {
+    try {
+      if (typeof map3d !== 'undefined' && map3d) {
+        map3d.on('styledata', () => {
+          try { style3dBuildings(); } catch (e) {}
+        });
+        if (map3d.loaded && map3d.loaded()) style3dBuildings();
+      }
+    } catch (e) {}
+  }, 1200);
+})();
+</script>
+
+<style id="wl-round19-driving-refinement">
+/* ==========================================================================
+   ROUND 19 — driving refinement
+   - dimensional vehicle with visible wheels
+   - restored recenter control
+   - smaller translucent trip card with in-card compass
+   - explicit lane guidance / lane-level road rendering
+   - richer day/night map palette without blacking out the basemap
+   ========================================================================== */
+
+body.navigating {
+  --r19-panel: rgba(21,25,30,.74);
+  --r19-panel-strong: rgba(10,13,16,.86);
+  --r19-border: rgba(255,255,255,.14);
+  --r19-text: #f7fbff;
+  --r19-muted: #c6d0d8;
+  --r19-compass: #66d9ff;
+  --r19-route: #1d83ff;
+  --r19-lane: rgba(244,248,252,.88);
+}
+
+/* Never apply CSS filters to the 3D canvas. Day mode stays colorful;
+   night mode is achieved by the vector palette, not by making everything black. */
+body.navigating #map3d,
+body.navigating #map3d canvas,
+body.navigating .maplibregl-canvas { filter:none !important; }
+
+/* Smaller, translucent top-left trip card. */
+body.navigating #navTop {
+  top:68px !important;
+  left:10px !important;
+  width:min(340px,calc(100vw - 20px)) !important;
+}
+body.navigating #navTop .nav-card {
+  background:var(--r19-panel) !important;
+  border:1px solid var(--r19-border) !important;
+  border-radius:18px !important;
+  box-shadow:0 10px 26px rgba(0,0,0,.24) !important;
+  backdrop-filter:blur(12px) saturate(1.08) !important;
+  -webkit-backdrop-filter:blur(12px) saturate(1.08) !important;
+}
+body.navigating #navTop .nav-card-main {
+  min-height:78px !important;
+  padding:9px 12px 7px !important;
+  gap:10px !important;
+  background:transparent !important;
+}
+body.navigating #turnArrow {
+  width:46px !important;
+  font-size:2.25rem !important;
+  color:var(--r19-text) !important;
+}
+body.navigating #turnArrow .wl-arrow {
+  width:42px !important;
+  height:42px !important;
+  color:#7adfff !important;
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,.35));
+}
+body.navigating #turnDistance {
+  font-size:1.66rem !important;
+  color:var(--r19-text) !important;
+}
+body.navigating #turnStreet {
+  margin-top:3px !important;
+  font-size:1.00rem !important;
+  color:var(--r19-muted) !important;
+}
+body.navigating #turnStreet b { color:var(--r19-text) !important; }
+body.navigating #roadRow {
+  min-height:36px !important;
+  padding:5px 11px !important;
+  background:rgba(4,7,10,.43) !important;
+  border-top:1px solid rgba(255,255,255,.08) !important;
+}
+body.navigating #roadName { font-size:.90rem !important; color:#eaf1f6 !important; }
+body.navigating #roadShield svg { height:27px !important; }
+
+/* Trip line is back because the compass belongs in the guidance panel. */
+body.navigating #tripLine {
+  display:flex !important;
+  min-height:35px !important;
+  padding:5px 10px !important;
+  gap:7px !important;
+  background:rgba(0,0,0,.28) !important;
+  border-top:1px solid rgba(255,255,255,.07) !important;
+  color:#c8d2da !important;
+  font-size:.77rem !important;
+}
+body.navigating #tripLine .tl-road {
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+body.navigating #tripLine .tl-left { white-space:nowrap; }
+body.navigating #tripLine .tl-more { font-size:.72rem !important; color:#9fb0bd !important; }
+
+/* Better in-card compass — cool cyan instead of black. */
+body.navigating #tripCompass {
+  width:30px !important;
+  height:30px !important;
+  min-width:30px !important;
+  padding:0 !important;
+  margin-left:auto !important;
+  border:1px solid rgba(102,217,255,.52) !important;
+  border-radius:50% !important;
+  background:rgba(18,51,65,.82) !important;
+  color:var(--r19-compass) !important;
+  display:grid !important;
+  place-items:center !important;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05),0 2px 8px rgba(0,0,0,.22);
+}
+body.navigating #tripCompass .tc-ring {
+  position:relative !important;
+  width:23px !important;
+  height:23px !important;
+  display:block !important;
+  border-radius:50%;
+}
+body.navigating #tripCompass .tc-n {
+  position:absolute;
+  top:1px; left:50%; transform:translateX(-50%);
+  font-size:9px !important; line-height:1 !important;
+  font-weight:900 !important; color:#9ce8ff !important;
+}
+body.navigating #tripCompass .tc-needle {
+  position:absolute !important;
+  left:10px !important;
+  top:8px !important;
+  width:3px !important;
+  height:12px !important;
+  border-radius:3px !important;
+  transform-origin:50% 4px !important;
+  background:linear-gradient(#ff6161 0 46%,#d9f5ff 47% 100%) !important;
+  box-shadow:0 0 5px rgba(102,217,255,.45);
+  transition:transform .22s linear;
+}
+
+/* Remove the extra floating compass because the panel compass is authoritative. */
+#wlCompassRef { display:none !important; }
+
+/* Real lane card: each lane has its own slot and recommended lanes glow. */
+body.navigating #laneBar,
+body.navigating #laneBar.wl-real-lanes {
+  position:relative !important;
+  margin:7px 0 0 !important;
+  padding:7px 8px !important;
+  min-height:54px !important;
+  border:1px solid var(--r19-border) !important;
+  border-radius:15px !important;
+  background:rgba(8,12,15,.76) !important;
+  display:flex;
+  justify-content:center;
+  gap:5px;
+  backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);
+  box-shadow:0 8px 20px rgba(0,0,0,.22);
+}
+body.navigating #laneBar.hidden { display:none !important; }
+body.navigating #laneBar .lane {
+  position:relative;
+  width:48px !important;
+  min-width:48px !important;
+  height:42px !important;
+  border-radius:10px !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  background:rgba(255,255,255,.035) !important;
+  color:#6e7881 !important;
+  display:grid !important;
+  place-items:center !important;
+  font-size:1.28rem !important;
+}
+body.navigating #laneBar .lane.use {
+  color:#e8f0f5 !important;
+  border-color:rgba(255,255,255,.22) !important;
+}
+body.navigating #laneBar .lane.preferred {
+  color:#fff !important;
+  border-color:#56c7ff !important;
+  background:linear-gradient(180deg,rgba(44,151,255,.32),rgba(18,75,118,.42)) !important;
+  box-shadow:0 0 0 2px rgba(55,166,255,.10),0 0 15px rgba(56,178,255,.23) !important;
+}
+body.navigating #laneBar .lane.preferred::after {
+  content:attr(data-status);
+  position:absolute; left:50%; bottom:-5px; transform:translateX(-50%);
+  padding:1px 5px; border-radius:6px;
+  background:#167bd1; color:#fff;
+  font-size:7px; line-height:12px; font-weight:900; letter-spacing:.04em;
+  text-transform:uppercase;
+}
+
+/* Top-right becomes one clear set: Report, Voice Guide, Settings, Exit.
+   The duplicate hazard/audio controls in the floating rail are removed. */
+body.navigating #navTopRight #navAlertsBtn,
+body.navigating #navTopRight #navVoiceBtn {
+  display:inline-flex !important;
+}
+body.navigating #navTopRight #navNorthBtn { display:none !important; }
+body.navigating #navTopRight .nav-btn {
+  min-height:44px !important;
+  height:44px !important;
+  padding:0 12px !important;
+  background:rgba(8,12,16,.84) !important;
+  border:1px solid rgba(255,255,255,.11) !important;
+  color:#f4f8fa !important;
+  box-shadow:0 6px 18px rgba(0,0,0,.20) !important;
+}
+body.navigating #navTopRight #navAlertsBtn { color:#ffd66a !important; }
+body.navigating #navTopRight #navVoiceBtn { color:#8fe0ff !important; }
+body.navigating #navMenuToggle {
+  width:44px !important; min-width:44px !important; height:44px !important;
+}
+#wlExitRef { height:44px !important; min-width:68px !important; padding:0 14px !important; }
+#wlRightRail #wlRailHaz,
+#wlRightRail #wlRailSound { display:none !important; }
+#wlRightRail { top:47% !important; gap:9px !important; }
+#wlRightRail .wl-ref-circle { width:46px !important; height:46px !important; }
+
+/* Recenter returns as a dedicated, always reachable control. */
+body.navigating #fabStack {
+  display:flex !important;
+  right:12px !important;
+  bottom:96px !important;
+  left:auto !important;
+  top:auto !important;
+  z-index:19 !important;
+}
+body.navigating #fabStack #navMicFab { display:none !important; }
+body.navigating #recenterFab {
+  display:inline-flex !important;
+  height:48px !important;
+  min-width:48px !important;
+  padding:0 14px !important;
+  border-radius:24px !important;
+  background:rgba(8,13,17,.88) !important;
+  border:1px solid rgba(102,217,255,.42) !important;
+  color:#c8f2ff !important;
+  box-shadow:0 7px 22px rgba(0,0,0,.28) !important;
+}
+body.navigating #recenterFab.warn {
+  background:#ffb020 !important;
+  border-color:#ffb020 !important;
+  color:#211300 !important;
+}
+
+/* Bottom summary keeps "Time left" visible and avoids a huge bar. */
+body.navigating #navBar {
+  width:350px !important;
+  height:66px !important;
+  background:rgba(8,12,16,.86) !important;
+  border-color:rgba(255,255,255,.11) !important;
+}
+body.navigating .nb-stat b { font-size:1.28rem !important; }
+body.navigating .nb-stat span { font-size:.67rem !important; }
+
+/* -------- dimensional CSS car --------
+   This is a true 3D CSS object: separate top/front/side planes plus four wheels.
+   It remains light enough for a navigation marker and needs no external 3D asset. */
+.refined-car-locator {
+  width:76px !important;
+  height:92px !important;
+  overflow:visible !important;
+  perspective:180px !important;
+}
+.refined-car-locator .locator-pulse {
+  inset:17px 7px 2px !important;
+  background:radial-gradient(ellipse,rgba(41,167,255,.25),transparent 67%) !important;
+}
+.refined-car-locator .locator-rotor {
+  inset:0 !important;
+  transform-style:preserve-3d !important;
+  transition:transform .14s linear !important;
+}
+.wl-car-real {
+  position:absolute;
+  left:50%; top:52%;
+  width:42px; height:66px;
+  transform:translate(-50%,-50%) rotateX(57deg) rotateZ(0deg);
+  transform-style:preserve-3d;
+  filter:drop-shadow(0 13px 6px rgba(0,0,0,.48));
+}
+.wl-car-real .car-body-top {
+  position:absolute; inset:5px 4px 7px;
+  border-radius:14px 14px 10px 10px;
+  background:
+    linear-gradient(90deg,rgba(255,255,255,.72),transparent 22% 76%,rgba(40,53,61,.23)),
+    linear-gradient(180deg,#eef3f6 0 18%,#d4dde2 19% 78%,#b9c4ca 100%);
+  border:1px solid rgba(255,255,255,.92);
+  transform:translateZ(9px);
+  box-shadow:inset 0 0 0 1px rgba(90,105,115,.25);
+}
+.wl-car-real .car-cabin {
+  position:absolute; left:8px; right:8px; top:14px; height:27px;
+  border-radius:8px 8px 5px 5px;
+  background:
+    linear-gradient(180deg,#9eb5c3 0 14%,#304956 15% 50%,#4f6875 51% 84%,#9fb3be 85%);
+  border:1px solid rgba(255,255,255,.48);
+  transform:translateZ(13px);
+  box-shadow:inset 0 0 7px rgba(5,13,19,.28);
+}
+.wl-car-real .car-hood {
+  position:absolute; left:7px; right:7px; top:4px; height:14px;
+  border-radius:9px 9px 3px 3px;
+  background:linear-gradient(90deg,#c8d2d7,#f8fafb 48%,#b9c4ca);
+  transform:translateZ(11px);
+}
+.wl-car-real .car-rear {
+  position:absolute; left:7px; right:7px; bottom:4px; height:13px;
+  border-radius:3px 3px 8px 8px;
+  background:linear-gradient(90deg,#aeb9bf,#ecf1f3 48%,#a8b4ba);
+  transform:translateZ(11px);
+}
+.wl-car-real .car-left-side,
+.wl-car-real .car-right-side {
+  position:absolute; top:10px; width:9px; height:48px;
+  background:linear-gradient(180deg,#c7d1d6,#9ca9b0);
+  transform-origin:center;
+}
+.wl-car-real .car-left-side { left:0; transform:rotateY(90deg) translateZ(4px); }
+.wl-car-real .car-right-side { right:0; transform:rotateY(-90deg) translateZ(4px); }
+.wl-car-real .wheel {
+  position:absolute;
+  width:9px; height:17px;
+  border-radius:50%;
+  background:radial-gradient(circle at 50% 50%,#747d82 0 24%,#202629 25% 66%,#080b0d 67% 100%);
+  border:1px solid #050709;
+  transform:translateZ(5px) rotateX(-18deg);
+  box-shadow:0 2px 2px rgba(0,0,0,.45);
+}
+.wl-car-real .wheel.fl { left:-4px; top:11px; }
+.wl-car-real .wheel.fr { right:-4px; top:11px; }
+.wl-car-real .wheel.rl { left:-4px; bottom:9px; }
+.wl-car-real .wheel.rr { right:-4px; bottom:9px; }
+.wl-car-real .car-logo3d {
+  position:absolute; left:50%; top:7px; width:9px; height:9px;
+  transform:translateX(-50%) translateZ(15px);
+  border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff,#c2ccd1 43%,#65747c 70%,#eaf0f2 72%);
+  border:1px solid rgba(70,82,88,.72);
+  box-shadow:0 1px 2px rgba(0,0,0,.35);
+}
+.wl-car-real .lamp {
+  position:absolute; z-index:3; width:7px; height:3px; border-radius:3px;
+  transform:translateZ(15px);
+}
+.wl-car-real .lamp.head-l { top:7px; left:7px; background:#e9fbff; box-shadow:0 0 6px #d8f8ff; }
+.wl-car-real .lamp.head-r { top:7px; right:7px; background:#e9fbff; box-shadow:0 0 6px #d8f8ff; }
+.wl-car-real .lamp.tail-l { bottom:8px; left:7px; background:#ff5656; }
+.wl-car-real .lamp.tail-r { bottom:8px; right:7px; background:#ff5656; }
+
+@media (max-width:820px) {
+  body.navigating #navTopRight .nav-btn-label { display:none !important; }
+  body.navigating #navTopRight #navAlertsBtn,
+  body.navigating #navTopRight #navVoiceBtn { width:44px!important; min-width:44px!important; padding:0!important; }
+  body.navigating #navTop { width:min(320px,calc(100vw - 18px)) !important; }
+}
+</style>
+
+<script id="wl-round19-driving-refinement-js">
+(() => {
+  'use strict';
+  const byId = (id) => document.getElementById(id);
+
+  /* ------------------------------------------------------------
+     1) A dimensional car with actual visible wheels.
+     ------------------------------------------------------------ */
+  function realCarMarkup() {
+    return '<div class="locator refined-car-locator">' +
+      '<div class="locator-pulse"></div>' +
+      '<div class="locator-rotor">' +
+        '<div class="wl-car-real" aria-hidden="true">' +
+          '<span class="car-left-side"></span><span class="car-right-side"></span>' +
+          '<span class="wheel fl"></span><span class="wheel fr"></span>' +
+          '<span class="wheel rl"></span><span class="wheel rr"></span>' +
+          '<span class="car-body-top"></span><span class="car-hood"></span>' +
+          '<span class="car-cabin"></span><span class="car-rear"></span>' +
+          '<span class="car-logo3d"></span>' +
+          '<span class="lamp head-l"></span><span class="lamp head-r"></span>' +
+          '<span class="lamp tail-l"></span><span class="lamp tail-r"></span>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function ensureReal3dCar() {
+    try {
+      if (typeof map3dUser === 'undefined' || !map3dUser || !map3dUser.getElement) return;
+      const root = map3dUser.getElement();
+      if (!root) return;
+      if (!root.querySelector('.wl-car-real')) root.innerHTML = realCarMarkup();
+    } catch (e) {}
+  }
+
+  if (typeof updateMap3dUser === 'function') {
+    const previousUpdateMap3dUser = updateMap3dUser;
+    updateMap3dUser = function round19Map3dUser(lat, lng) {
+      const out = previousUpdateMap3dUser(lat, lng);
+      ensureReal3dCar();
+      try {
+        const root = map3dUser && map3dUser.getElement ? map3dUser.getElement() : null;
+        const rotor = root && root.querySelector('.locator-rotor');
+        const along = Math.max(
+          typeof refinedMarkerAlong !== 'undefined' ? refinedMarkerAlong || 0 : 0,
+          typeof navDistAlong !== 'undefined' ? navDistAlong || 0 : 0
+        );
+        const h = typeof roadBearingAt === 'function' ? roadBearingAt(along, 28) :
+          (typeof headingDeg !== 'undefined' ? headingDeg || 0 : 0);
+        if (rotor) rotor.style.transform =
+          'rotate(' + ((typeof northUp !== 'undefined' && northUp) ? h : 0) + 'deg)';
+      } catch (e) {}
+      return out;
+    };
+  }
+
+  /* ------------------------------------------------------------
+     2) Recenter is restored; when already centered it remains subdued.
+     ------------------------------------------------------------ */
+  const recenter = byId('recenterFab');
+  if (recenter) {
+    recenter.style.display = '';
+    const syncRecenter = () => {
+      try {
+        recenter.classList.toggle('warn', typeof navFollow !== 'undefined' && !navFollow);
+        recenter.title = (typeof navFollow !== 'undefined' && navFollow)
+          ? 'Navigation is centered'
+          : 'Recenter on your car';
+      } catch (e) {}
+    };
+    setInterval(syncRecenter, 500);
+    syncRecenter();
+  }
+
+  /* ------------------------------------------------------------
+     3) Strict highway-state exits.
+     Do not announce an exit while departing or while still on the on-ramp.
+     ------------------------------------------------------------ */
+  function strictHighwayNow() {
+    try {
+      if (!navSteps || !navSteps.length || navStepIndex <= 0) return null;
+      const step = navSteps[navStepIndex];
+      if (!step) return null;
+      const m = step.maneuver || {};
+      const type = String(m.type || '').toLowerCase();
+      if (/depart|on ramp|off ramp|merge|fork/.test(type)) return null;
+      const ref = String((typeof currentRoadRef === 'function' && currentRoadRef(step)) || step.ref || step.name || '');
+      if (!/(\bI[-\s]?\d+\b|\bUS[-\s]?\d+\b|\bSR[-\s]?\d+\b|\bSH[-\s]?\d+\b|interstate|freeway|motorway|expressway|turnpike|parkway)/i.test(ref)) return null;
+      const start = (navStepStart && Number.isFinite(navStepStart[navStepIndex])) ? navStepStart[navStepIndex] : 0;
+      const intoStep = Math.max(0, (navDistAlong || 0) - start);
+      if (intoStep < 55) return null;
+      return ref;
+    } catch (e) { return null; }
+  }
+
+  currentHighwayRef = strictHighwayNow;
+
+  function strictUpcomingExit() {
+    const highway = strictHighwayNow();
+    if (!highway) return null;
+    for (let i = navStepIndex; i < Math.min(navSteps.length, navStepIndex + 8); i++) {
+      const s = navSteps[i];
+      const exit = typeof stepExit === 'function' ? stepExit(s) : null;
+      if (!exit) continue;
+      const dist = Math.max(0, ((navStepStart && navStepStart[i]) || 0) - (navDistAlong || 0));
+      if (dist > 3600) return null;
+      return {
+        num: exit,
+        dist: dist,
+        signs: typeof stepSigns === 'function' ? stepSigns(s) : '',
+        now: i === navStepIndex
+      };
+    }
+    return null;
+  }
+
+  upcomingExit = strictUpcomingExit;
+  nextExitLabel = function round19ExitLabel() {
+    const info = strictUpcomingExit();
+    return info ? info.num : null;
+  };
+
+  updateCardExit = function round19CardExit() {
+    const info = strictUpcomingExit();
+    const roadBadge = byId('roadExit');
+    const turnBadge = byId('turnExit');
+    const signs = byId('turnSigns');
+    if (!info) {
+      if (roadBadge) roadBadge.classList.add('hidden');
+      if (turnBadge) turnBadge.classList.add('hidden');
+      if (signs) signs.classList.add('hidden');
+      return;
+    }
+    if (roadBadge) {
+      const n = byId('roadExitNum'); if (n) n.textContent = info.num;
+      roadBadge.classList.remove('hidden');
+    }
+    if (turnBadge) {
+      const n = byId('turnExitNum'); if (n) n.textContent = info.num;
+      turnBadge.classList.remove('hidden');
+      turnBadge.classList.toggle('soon', info.dist < 1100);
+    }
+    if (signs) {
+      if (info.signs && info.dist < 2200) {
+        signs.textContent = info.signs;
+        signs.classList.remove('hidden');
+      } else signs.classList.add('hidden');
+    }
+  };
+
+  /* ------------------------------------------------------------
+     4) Lane-level road surface.
+     The route geometry is still the router geometry, so bends and exits curve
+     with the actual road instead of using a straight synthetic turn.
+     ------------------------------------------------------------ */
+  function removeRound19LaneLayers() {
+    if (typeof map3d === 'undefined' || !map3d) return;
+    const ids = [
+      'r19-road-edge-left','r19-road-edge-right','r19-lane-guidance',
+      'r19-lane-arrow'
+    ];
+    for (let i = 0; i < 10; i++) ids.push('r19-divider-' + i);
+    ids.forEach((id) => {
+      try { if (map3d.getLayer(id)) map3d.removeLayer(id); } catch (e) {}
+    });
+  }
+
+  function laneState() {
+    try {
+      if (typeof round16LaneCandidate === 'function') {
+        const candidate = round16LaneCandidate();
+        if (candidate && candidate.lanes && candidate.lanes.length) return candidate;
+      }
+      const step = navSteps && navSteps[navStepIndex];
+      const lanes = typeof wlCurrentLanes === 'function' ? wlCurrentLanes(step) : [];
+      return lanes && lanes.length ? { step:step, lanes:lanes, index:navStepIndex, distance:0 } : null;
+    } catch (e) { return null; }
+  }
+
+  const priorAdd3dLaneRoad = typeof add3dLaneRoad === 'function' ? add3dLaneRoad : null;
+  add3dLaneRoad = function round19LaneRoad() {
+    if (priorAdd3dLaneRoad) priorAdd3dLaneRoad();
+    if (typeof map3d === 'undefined' || !map3d || !map3dReady || !map3d.getSource('wl-route')) return;
+    removeRound19LaneLayers();
+
+    const state = laneState();
+    let count = 0;
+    try { count = state && state.lanes ? state.lanes.length : (typeof wlLaneCountForRoad === 'function' ? wlLaneCountForRoad() : 2); }
+    catch (e) { count = 2; }
+    count = Math.max(1, Math.min(8, count || 2));
+
+    const roadWidth = Math.max(24, Math.min(70, count * 8.4 + 7));
+    const lanePx = roadWidth / count;
+    const before = map3d.getLayer('wl-route-casing') ? 'wl-route-casing' : undefined;
+
+    try {
+      if (map3d.getLayer('wl-route-roadbed')) {
+        map3d.setPaintProperty('wl-route-roadbed', 'line-width', roadWidth);
+        map3d.setPaintProperty('wl-route-roadbed', 'line-color', lightMode ? '#676e73' : '#40484f');
+        map3d.setPaintProperty('wl-route-roadbed', 'line-opacity', .96);
+      }
+
+      [-roadWidth/2 + 1.2, roadWidth/2 - 1.2].forEach((offset, idx) => {
+        map3d.addLayer({
+          id: idx ? 'r19-road-edge-right' : 'r19-road-edge-left',
+          type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'round'},
+          paint:{
+            'line-color': lightMode ? 'rgba(245,247,248,.92)' : 'rgba(228,235,239,.76)',
+            'line-width':1.4, 'line-offset':offset, 'line-opacity':.92
+          }
+        }, before);
+      });
+
+      for (let i = 1; i < count; i++) {
+        const offset = -roadWidth/2 + lanePx*i;
+        map3d.addLayer({
+          id:'r19-divider-' + (i-1),
+          type:'line', source:'wl-route',
+          filter:['==',['get','done'],0],
+          layout:{'line-join':'round','line-cap':'butt'},
+          paint:{
+            'line-color': lightMode ? 'rgba(255,255,255,.86)' : 'rgba(231,237,241,.72)',
+            'line-width':1.15, 'line-offset':offset,
+            'line-dasharray':[2.2,3.4], 'line-opacity':.92
+          }
+        }, before);
+      }
+
+      if (state && state.lanes) {
+        const preferred = [];
+        state.lanes.forEach((l, i) => { if (l.active === true) preferred.push(i); });
+        if (!preferred.length) state.lanes.forEach((l, i) => { if (l.valid === true) preferred.push(i); });
+        if (preferred.length) {
+          const avg = preferred.reduce((a,b)=>a+b,0) / preferred.length;
+          const offset = -roadWidth/2 + lanePx*(avg+.5);
+          map3d.addLayer({
+            id:'r19-lane-guidance',
+            type:'line', source:'wl-route',
+            filter:['==',['get','done'],0],
+            layout:{'line-join':'round','line-cap':'round'},
+            paint:{
+              'line-color':'rgba(33,143,255,.58)',
+              'line-width':Math.max(4.5,lanePx*.62),
+              'line-offset':offset,
+              'line-opacity':.94,
+              'line-blur':.25
+            }
+          }, before);
+        }
+      }
+    } catch (e) { console.warn('Round 19 lane surface partial', e); }
+  };
+
+  /* Keep lane labels useful farther out on highways, and clearly say EXIT/BEST. */
+  if (typeof renderLanes === 'function') {
+    renderLanes = function round19RenderLanes(step, metresToTurn) {
+      const bar = byId('laneBar');
+      if (!bar) return;
+      const state = laneState();
+      if (!state || !state.lanes || !state.lanes.length) {
+        bar.classList.add('hidden');
+        return;
+      }
+      const highway = !!strictHighwayNow();
+      const distance = Number.isFinite(state.distance) ? state.distance : metresToTurn;
+      if (Number.isFinite(distance) && distance > (highway ? 2600 : 1100)) {
+        bar.classList.add('hidden');
+        return;
+      }
+      const maneuverType = String(state.step && state.step.maneuver && state.step.maneuver.type || '');
+      bar.innerHTML = state.lanes.map((lane) => {
+        const preferred = lane.active === true;
+        const usable = lane.valid === true || preferred;
+        const ind = lane.indications || (lane.valid_indication ? [lane.valid_indication] : []);
+        const label = preferred && /off ramp|exit/i.test(maneuverType) ? 'EXIT' :
+          preferred ? 'BEST' : usable ? 'USE' : '';
+        return '<span class="lane ' + (usable ? 'use ' : 'no ') + (preferred ? 'preferred' : '') +
+          '" data-status="' + label + '" title="' +
+          (label === 'EXIT' ? 'Exit lane' : preferred ? 'Preferred lane' : usable ? 'Valid lane' : 'Not for this maneuver') +
+          '">' + (typeof laneGlyph === 'function' ? laneGlyph(ind) : '↑') + '</span>';
+      }).join('');
+      bar.classList.remove('hidden');
+      bar.classList.add('wl-real-lanes');
+      add3dLaneRoad();
+    };
+  }
+
+  /* ------------------------------------------------------------
+     5) Forward-only route matching with smoother curve heading.
+     No reverse motion from GPS jitter, and heading is derived from nearby
+     route geometry on both sides of the car so it follows bends naturally.
+     ------------------------------------------------------------ */
+  let r19Along = 0;
+  let r19RouteKey = '';
+  let r19Heading = null;
+
+  function routeKey() {
+    try {
+      const r = allRoutes && allRoutes[activeRouteIndex];
+      const c = r && r.coords;
+      if (!c || !c.length) return '';
+      return c.length + ':' + c[0][0].toFixed(5) + ':' + c[0][1].toFixed(5) + ':' +
+        c[c.length-1][0].toFixed(5) + ':' + c[c.length-1][1].toFixed(5);
+    } catch (e) { return ''; }
+  }
+
+  function circularLerp(a, b, t) {
+    if (a == null || !Number.isFinite(a)) return b;
+    let d = ((b - a + 540) % 360) - 180;
+    return (a + d*t + 360) % 360;
+  }
+
+  function curvedHeadingAt(along, speedMps) {
+    try {
+      const span = Math.max(10, Math.min(42, 10 + (speedMps || 0) * 1.1));
+      const a = pointAtNavDistance(Math.max(0, along - span*.35));
+      const b = pointAtNavDistance(along + span);
+      if (a && b) return bearing(a,b);
+      return roadBearingAt(along, span);
+    } catch (e) {
+      return typeof headingDeg !== 'undefined' ? headingDeg || 0 : 0;
+    }
+  }
+
+  if (typeof updateMap3dUser === 'function') {
+    const laneAwareUpdate = updateMap3dUser;
+    updateMap3dUser = function round19ForwardOnlyCar(lat, lng) {
+      const key = routeKey();
+      if (key !== r19RouteKey) {
+        r19RouteKey = key;
+        r19Along = Math.max(0, typeof navDistAlong !== 'undefined' ? navDistAlong || 0 : 0);
+        r19Heading = null;
+      }
+      try {
+        if (navCoords && navCoords.length && typeof projectOnRouteNear === 'function') {
+          const p = projectOnRouteNear(navCoords, navCum, {lat:lat,lng:lng},
+            r19Along || (typeof matchedAlong !== 'undefined' ? matchedAlong : 0), 36, 720);
+          if (p && p.distToRoute < 140) r19Along = Math.max(r19Along, p.distAlong);
+        }
+      } catch (e) {}
+      const point = typeof pointAtNavDistance === 'function' ? pointAtNavDistance(r19Along) : null;
+      const out = laneAwareUpdate(point ? point.lat : lat, point ? point.lng : lng);
+      ensureReal3dCar();
+      try {
+        const speed = typeof lastSpeedMps !== 'undefined' ? lastSpeedMps || 0 : 0;
+        const raw = curvedHeadingAt(r19Along, speed);
+        r19Heading = circularLerp(r19Heading, raw, .34);
+        const rotor = map3dUser && map3dUser.getElement &&
+          map3dUser.getElement().querySelector('.locator-rotor');
+        if (rotor) rotor.style.transform =
+          'rotate(' + ((typeof northUp !== 'undefined' && northUp) ? r19Heading : 0) + 'deg)';
+        if (typeof updateTripCompass === 'function') updateTripCompass(r19Heading);
+      } catch (e) {}
+      return out;
+    };
+  }
+
+  /* ------------------------------------------------------------
+     6) Camera framing.
+     Keep the car lower on screen and show more route ahead. Near bends/exits,
+     zoom OUT slightly instead of zooming in so the route does not run offscreen.
+     ------------------------------------------------------------ */
+  setCameraTarget = function round19CameraTarget(lat, lng, bearingDeg, speedMps, metresToTurn) {
+    const mph = (speedMps || 0) * 2.23694;
+    const along = Math.max(
+      r19Along || 0,
+      typeof refinedMarkerAlong !== 'undefined' ? refinedMarkerAlong || 0 : 0,
+      typeof navDistAlong !== 'undefined' ? navDistAlong || 0 : 0
+    );
+    const hRaw = (typeof northUp !== 'undefined' && northUp) ? 0 : curvedHeadingAt(along, speedMps);
+    r19Heading = circularLerp(r19Heading, hRaw, .30);
+    const roadHeading = (typeof northUp !== 'undefined' && northUp) ? 0 : r19Heading;
+
+    let zoom = mph > 60 ? 16.45 : mph > 42 ? 16.8 : mph > 22 ? 17.18 : 17.52;
+    if (metresToTurn != null && metresToTurn < 450) zoom -= .18;
+    if (metresToTurn != null && metresToTurn < 180) zoom -= .16;
+    const pitch = mph > 55 ? 55 : 59;
+
+    const car = typeof pointAtNavDistance === 'function'
+      ? (pointAtNavDistance(along) || {lat:lat,lng:lng})
+      : {lat:lat,lng:lng};
+
+    /* Center behind the car: about the bottom 38% of the viewport. */
+    const back = mph > 55 ? 115 : mph > 30 ? 82 : 55;
+    const rad = ((roadHeading || bearingDeg || 0) + 180) * Math.PI / 180;
+    const latBack = car.lat + (back / 111320) * Math.cos(rad);
+    const scale = Math.max(.22, Math.cos(car.lat * Math.PI / 180));
+    const lngBack = car.lng + (back / (111320 * scale)) * Math.sin(rad);
+
+    camZoomWant = zoom;
+    camTarget = {lat:latBack,lng:lngBack,bearing:roadHeading,zoom:zoom,pitch:pitch};
+    if (!camNow) camNow = {lat:latBack,lng:lngBack,bearing:roadHeading,zoom:zoom,pitch:pitch};
+    if (typeof startCameraLoop === 'function') startCameraLoop();
+  };
+
+  /* ------------------------------------------------------------
+     7) Building coverage + richer map palette.
+     Uses the vector building source with low zoom/default-height fallbacks.
+     Supplemental OSM buildings from the existing fetch remain layered in too.
+     ------------------------------------------------------------ */
+  const oldStyle3dBuildings = typeof style3dBuildings === 'function' ? style3dBuildings : null;
+  style3dBuildings = function round19Buildings() {
+    if (oldStyle3dBuildings) oldStyle3dBuildings();
+    if (typeof map3d === 'undefined' || !map3d || !map3d.getStyle()) return;
+    try {
+      if (map3d.getLayer('wl-buildings')) {
+        map3d.setLayerZoomRange('wl-buildings', 10, 24);
+        map3d.setPaintProperty('wl-buildings','fill-extrusion-opacity',.97);
+        map3d.setPaintProperty('wl-buildings','fill-extrusion-color',
+          lightMode
+            ? ['interpolate',['linear'],['zoom'],10,'#d5dde2',15,'#c4ced4',19,'#b7c2c9']
+            : ['interpolate',['linear'],['zoom'],10,'#3d4c58',15,'#526473',19,'#607584']);
+      }
+      if (map3d.getLayer('wl-building-supplement-3d')) {
+        map3d.setLayerZoomRange('wl-building-supplement-3d', 11.5, 24);
+        map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-opacity',.94);
+      }
+    } catch (e) {}
+  };
+
+  style3dPalette = function round19Palette() {
+    if (typeof map3d === 'undefined' || !map3d || !map3d.getStyle()) return;
+    const dark = !lightMode;
+    try {
+      map3d.getStyle().layers.forEach((layer) => {
+        if (!map3d.getLayer(layer.id)) return;
+        const id = String(layer.id || '');
+        try {
+          if (layer.type === 'background') {
+            map3d.setPaintProperty(id,'background-color', dark ? '#15222c' : '#edf2f4');
+          } else if (layer.type === 'fill') {
+            if (/water|ocean|river|lake|waterway/i.test(id))
+              map3d.setPaintProperty(id,'fill-color', dark ? '#123c5e' : '#86bfe9');
+            else if (/park|grass|wood|forest|garden|pitch|golf|green/i.test(id))
+              map3d.setPaintProperty(id,'fill-color', dark ? '#1d4937' : '#b7ddb9');
+            else if (/residential|commercial|industrial|landuse|landcover/i.test(id))
+              map3d.setPaintProperty(id,'fill-color', dark ? '#28343e' : '#e2e7ea');
+          } else if (layer.type === 'line' && layer['source-layer'] === 'transportation') {
+            const major = /motorway|trunk|primary|highway|freeway/i.test(id);
+            map3d.setPaintProperty(id,'line-color',
+              major ? (dark ? '#667580' : '#9daab2') : (dark ? '#4a5760' : '#c1c9ce'));
+            map3d.setPaintProperty(id,'line-opacity', major ? .98 : .86);
+          } else if (layer.type === 'symbol') {
+            if (layer.paint && layer.paint['text-color'] != null) {
+              map3d.setPaintProperty(id,'text-color', dark ? '#dbe5eb' : '#33414a');
+            }
+            if (layer.paint && layer.paint['text-halo-color'] != null) {
+              map3d.setPaintProperty(id,'text-halo-color', dark ? 'rgba(18,27,34,.82)' : 'rgba(255,255,255,.86)');
+            }
+          }
+        } catch (e) {}
+      });
+      style3dBuildings();
+      add3dLaneRoad();
+    } catch (e) {}
+  };
+
+  /* ------------------------------------------------------------
+     8) Automatic day/night is authoritative and refreshes vector colors.
+     Existing sunrise/sunset lookup is retained; this just tightens the timer.
+     ------------------------------------------------------------ */
+  async function round19ThemeTick() {
+    try {
+      if (typeof themeMode !== 'undefined') themeMode = 'auto';
+      if (typeof applyAutoTheme === 'function') await applyAutoTheme();
+      if (typeof map3d !== 'undefined' && map3d && map3dReady) {
+        style3dPalette();
+        style3dBuildings();
+      }
+    } catch (e) {}
+  }
+  setTimeout(round19ThemeTick, 120);
+  setInterval(round19ThemeTick, 60 * 1000);
+
+  /* Labels requested by the new UI wording. */
+  const report = byId('navAlertsBtn');
+  if (report) {
+    report.title = 'Report road conditions or hazards';
+    const label = report.querySelector('.nav-btn-label');
+    if (label) label.textContent = 'Report';
+  }
+  const voice = byId('navVoiceBtn');
+  if (voice) {
+    voice.title = 'Voice Guide';
+    const label = byId('navVoiceLabel');
+    if (label) label.textContent = 'Voice Guide';
+  }
+  const remainLabel = byId('remainMin') && byId('remainMin').parentElement
+    ? byId('remainMin').parentElement.querySelector('span') : null;
+  if (remainLabel) remainLabel.textContent = 'Time left';
+
+  /* Keep compass synced with the actual map bearing as the car turns. */
+  function compassTick() {
+    try {
+      const c = byId('tripCompass');
+      if (!c) return;
+      const needle = c.querySelector('.tc-needle');
+      const b = (typeof map3d !== 'undefined' && map3d && map3d.getBearing)
+        ? map3d.getBearing() : 0;
+      if (needle && !(typeof r19Heading === 'number' && Number.isFinite(r19Heading)))
+        needle.style.transform = 'rotate(' + (-b) + 'deg)';
+    } catch (e) {}
+  }
+  setInterval(compassTick, 180);
+
+  /* Re-run geometry/palette after the MapLibre style finishes loading. */
+  setTimeout(() => {
+    try {
+      if (typeof map3d !== 'undefined' && map3d) {
+        map3d.on('styledata', () => {
+          try { style3dPalette(); style3dBuildings(); add3dLaneRoad(); } catch (e) {}
+        });
+        if (map3d.loaded && map3d.loaded()) {
+          style3dPalette(); style3dBuildings(); add3dLaneRoad();
+        }
+      }
+    } catch (e) {}
+  }, 900);
+})();
+</script>
+
+
+<!-- ======================================================================
+     WAYLYN ROUND 20 — TRUE 3D VEHICLE + WORLD-SPACE LANES + EXIT/CAMERA FIX
+     Added 2026-08-31. Uses Three.js 0.185.1 as a MapLibre custom 3D layer.
+     ====================================================================== -->
+<style id="wl-round20-css">
+/* Hide the old DOM/CSS car only after the WebGL car layer reports ready. */
+body.wl-webgl-car #map3d .maplibregl-marker .wl-car-real,
+body.wl-webgl-car #map3d .maplibregl-marker .locator-pulse { opacity:0!important; }
+
+/* Compact, darker, transparent trip card. */
+body.navigating #navTop { width:min(330px,calc(100vw - 22px))!important; }
+body.navigating #navTop .nav-card {
+  background:rgba(25,29,33,.72)!important;
+  border-color:rgba(255,255,255,.13)!important;
+  box-shadow:0 10px 34px rgba(0,0,0,.30)!important;
+  backdrop-filter:blur(18px) saturate(1.15)!important;
+}
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card * { --text:#eef4f7; --text-bright:#fff; --text-dim:#c3cdd3; }
+body.navigating #tripCompass {
+  color:#55d8ff!important;
+  border-color:rgba(85,216,255,.38)!important;
+  background:rgba(6,24,33,.55)!important;
+  box-shadow:0 0 0 1px rgba(85,216,255,.12),0 5px 16px rgba(0,0,0,.28)!important;
+}
+body.navigating #tripCompass .tc-n { color:#ff6575!important; }
+body.navigating #tripCompass .tc-needle { color:#55d8ff!important; }
+
+/* Recenter always remains reachable during nav. */
+body.navigating #recenterFab {
+  display:inline-flex!important;
+  visibility:visible!important;
+  opacity:1!important;
+  z-index:12!important;
+}
+
+/* Lane strip is now a high-contrast instrument, not a second generic card. */
+body.navigating #laneBar.wl-real-lanes {
+  background:rgba(17,21,24,.80)!important;
+  border:1px solid rgba(255,255,255,.11)!important;
+  backdrop-filter:blur(12px)!important;
+}
+#laneBar .lane[data-status="EXIT"]::after,
+#laneBar .lane[data-status="BEST"]::after,
+#laneBar .lane[data-status="USE"]::after {
+  font-size:.57rem!important;
+  letter-spacing:.06em!important;
+}
+</style>
+
+<script id="wl-round20-driving-engine">
+(() => {
+  'use strict';
+
+  const THREE_URL = 'https://unpkg.com/three@0.185.1/build/three.module.js';
+  const R20 = {
+    THREE:null, layer:null, car:null, map:null, ready:false,
+    lng:0, lat:0, heading:0, along:0, lastAlong:0, routeKey:'',
+    wheelSpin:0, steer:0, lastHeading:null, laneBuildAlong:-1,
+    laneSignature:'', exitPhase:'NORMAL', lastBuildingRefresh:0
+  };
+
+  const byId = (id) => document.getElementById(id);
+  const clamp20 = (v,a,b) => Math.max(a,Math.min(b,v));
+  const rad = (d) => d * Math.PI / 180;
+  const angleDelta = (a,b) => ((b-a+540)%360)-180;
+  const angleLerp = (a,b,t) => a == null ? b : (a + angleDelta(a,b)*t + 360)%360;
+
+  function routeKey20() {
+    try {
+      const r = allRoutes && allRoutes[activeRouteIndex];
+      const c = r && r.coords;
+      if (!c || c.length < 2) return '';
+      const a=c[0], b=c[c.length-1];
+      return c.length+':'+a[0].toFixed(5)+','+a[1].toFixed(5)+':'+b[0].toFixed(5)+','+b[1].toFixed(5);
+    } catch(e) { return ''; }
+  }
+
+  function routeHeading20(along,speed) {
+    try {
+      const look = clamp20(12 + (speed||0)*1.35, 14, 58);
+      const a = pointAtNavDistance(Math.max(0,along-look*.22));
+      const b = pointAtNavDistance(along+look);
+      if (a && b) return bearing(a,b);
+      return roadBearingAt(along,look);
+    } catch(e) {
+      return typeof headingDeg !== 'undefined' && Number.isFinite(headingDeg) ? headingDeg : 0;
+    }
+  }
+
+  function destination20(p,bearingDeg,meters) {
+    const R=6378137, br=rad(bearingDeg), lat1=rad(p.lat), lon1=rad(p.lng), d=meters/R;
+    const lat2=Math.asin(Math.sin(lat1)*Math.cos(d)+Math.cos(lat1)*Math.sin(d)*Math.cos(br));
+    const lon2=lon1+Math.atan2(Math.sin(br)*Math.sin(d)*Math.cos(lat1),Math.cos(d)-Math.sin(lat1)*Math.sin(lat2));
+    return {lat:lat2*180/Math.PI,lng:lon2*180/Math.PI};
+  }
+
+  function laneCandidate20() {
+    try {
+      const max = Math.min(navSteps.length-1, navStepIndex+2);
+      for(let i=navStepIndex;i<=max;i++){
+        const s=navSteps[i];
+        const lanes = typeof wlCurrentLanes==='function' ? wlCurrentLanes(s) :
+          (s && s.intersections && s.intersections[0] && s.intersections[0].lanes) || [];
+        if(lanes && lanes.length){
+          return {step:s,lanes,index:i,distance:Math.max(0,(navStepStart[i]||R20.along)-R20.along)};
+        }
+      }
+    } catch(e){}
+    return null;
+  }
+
+  function laneCount20() {
+    const c=laneCandidate20();
+    if(c && c.lanes.length) return clamp20(c.lanes.length,1,8);
+    try {
+      const s=navSteps[navStepIndex]||{};
+      const r=String((typeof currentRoadRef==='function'&&currentRoadRef(s))||s.ref||s.name||'').toLowerCase();
+      if(/interstate|motorway|freeway|expressway|turnpike|\bi[-\s]?\d+/.test(r)) return 3;
+      if(/highway|parkway|trunk|us[-\s]?\d+/.test(r)) return 2;
+    }catch(e){}
+    return 2;
+  }
+
+  function makeCar20(THREE) {
+    const root=new THREE.Group();
+    root.name='WayLynVehicle';
+
+    const bodyMat=new THREE.MeshStandardMaterial({color:0xe7edf0,metalness:.72,roughness:.28});
+    const trimMat=new THREE.MeshStandardMaterial({color:0x151a1e,metalness:.28,roughness:.58});
+    const glassMat=new THREE.MeshStandardMaterial({color:0x284757,metalness:.18,roughness:.18,transparent:true,opacity:.88});
+    const tireMat=new THREE.MeshStandardMaterial({color:0x090b0d,metalness:.05,roughness:.92});
+    const rimMat=new THREE.MeshStandardMaterial({color:0x7d8a91,metalness:.82,roughness:.24});
+    const redMat=new THREE.MeshStandardMaterial({color:0xff2638,emissive:0x8a0711,emissiveIntensity:.6});
+    const lampMat=new THREE.MeshStandardMaterial({color:0xeafaff,emissive:0xaeeeff,emissiveIntensity:1.2});
+    const logoMat=new THREE.MeshStandardMaterial({color:0x65dfff,metalness:.85,roughness:.18,emissive:0x0b5f77,emissiveIntensity:.35});
+
+    function box(w,l,h,z,mat,ry=0){
+      const g=new THREE.BoxGeometry(w,l,h);
+      const m=new THREE.Mesh(g,mat); m.position.z=z; m.rotation.z=ry; m.castShadow=true; m.receiveShadow=true; root.add(m); return m;
+    }
+    box(1.86,4.45,.52,.58,bodyMat);
+    const hood=box(1.72,1.23,.30,.92,bodyMat); hood.position.y=1.36;
+    const trunk=box(1.72,.88,.28,.91,bodyMat); trunk.position.y=-1.55;
+    const cabin=box(1.56,1.94,.72,1.28,glassMat); cabin.position.y=-.05;
+    const roof=box(1.42,1.20,.10,1.70,bodyMat); roof.position.y=-.15;
+
+    // Bumpers / lower sill make the model read as a car at a shallow pitch.
+    const sillL=box(.10,3.35,.22,.48,trimMat); sillL.position.x=-.96;
+    const sillR=box(.10,3.35,.22,.48,trimMat); sillR.position.x=.96;
+    const frontB=box(1.78,.14,.20,.47,trimMat); frontB.position.y=2.22;
+    const rearB=box(1.78,.14,.20,.47,trimMat); rearB.position.y=-2.22;
+
+    const wheelGeo=new THREE.CylinderGeometry(.37,.37,.25,24);
+    const rimGeo=new THREE.CylinderGeometry(.19,.19,.265,20);
+    const frontPivots=[];
+    const wheels=[];
+    [[-.98,1.36,true],[.98,1.36,true],[-.98,-1.42,false],[.98,-1.42,false]].forEach(([x,y,front])=>{
+      const pivot=new THREE.Group(); pivot.position.set(x,y,.43); root.add(pivot);
+      const tire=new THREE.Mesh(wheelGeo,tireMat); tire.rotation.z=Math.PI/2; tire.castShadow=true; pivot.add(tire);
+      const rim=new THREE.Mesh(rimGeo,rimMat); rim.rotation.z=Math.PI/2; pivot.add(rim);
+      wheels.push(tire,rim);
+      if(front) frontPivots.push(pivot);
+    });
+
+    // Head / tail lamps.
+    [[-.59,2.235],[.59,2.235]].forEach(([x,y])=>{
+      const l=new THREE.Mesh(new THREE.BoxGeometry(.42,.06,.12),lampMat); l.position.set(x,y,.78); root.add(l);
+    });
+    [[-.60,-2.235],[.60,-2.235]].forEach(([x,y])=>{
+      const l=new THREE.Mesh(new THREE.BoxGeometry(.40,.06,.12),redMat); l.position.set(x,y,.76); root.add(l);
+    });
+
+    // Raised 3D WayLyn-style circular badge on roof.
+    const badge=new THREE.Mesh(new THREE.CylinderGeometry(.15,.15,.045,28),logoMat);
+    badge.rotation.x=Math.PI/2; badge.position.set(0,.28,1.78); root.add(badge);
+    const badgeRing=new THREE.Mesh(new THREE.TorusGeometry(.105,.025,8,28),new THREE.MeshStandardMaterial({color:0xf4fdff,metalness:.9,roughness:.15}));
+    badgeRing.position.set(0,.28,1.805); root.add(badgeRing);
+
+    root.userData.frontPivots=frontPivots;
+    root.userData.wheels=wheels;
+    root.scale.setScalar(1.04);
+    return root;
+  }
+
+  async function install3dCar20() {
+    if(R20.ready || typeof map3d==='undefined' || !map3d || !map3dReady) return;
+    if(map3d.getLayer && map3d.getLayer('wl-real-webgl-car')) { R20.ready=true; return; }
+    try {
+      const THREE=await import(THREE_URL);
+      R20.THREE=THREE; R20.map=map3d;
+      const layer={
+        id:'wl-real-webgl-car', type:'custom', renderingMode:'3d',
+        onAdd(map,gl){
+          this.map=map;
+          this.camera=new THREE.Camera();
+          this.scene=new THREE.Scene();
+          this.scene.add(new THREE.HemisphereLight(0xffffff,0x25313a,1.65));
+          const key=new THREE.DirectionalLight(0xffffff,2.3); key.position.set(-4,-7,10); this.scene.add(key);
+          const fill=new THREE.DirectionalLight(0x8fdcff,1.05); fill.position.set(6,3,5); this.scene.add(fill);
+          R20.car=makeCar20(THREE); this.scene.add(R20.car);
+          this.renderer=new THREE.WebGLRenderer({canvas:map.getCanvas(),context:gl,antialias:true});
+          this.renderer.autoClear=false;
+          this.renderer.outputColorSpace=THREE.SRGBColorSpace;
+          this.renderer.toneMapping=THREE.ACESFilmicToneMapping;
+          this.renderer.toneMappingExposure=1.08;
+          R20.ready=true;
+          document.body.classList.add('wl-webgl-car');
+        },
+        render(gl,matrix){
+          if(!R20.car || !Number.isFinite(R20.lng) || !Number.isFinite(R20.lat)) return;
+          const mc=maplibregl.MercatorCoordinate.fromLngLat([R20.lng,R20.lat],0.35);
+          const s=mc.meterInMercatorCoordinateUnits();
+          const m=new THREE.Matrix4().fromArray(matrix);
+          const t=new THREE.Matrix4().makeTranslation(mc.x,mc.y,mc.z||0);
+          const sc=new THREE.Matrix4().makeScale(s,-s,s);
+          const rz=new THREE.Matrix4().makeRotationZ(rad(-R20.heading));
+          this.camera.projectionMatrix=m.multiply(t).multiply(sc).multiply(rz);
+
+          // physical wheel animation / steering
+          const fp=R20.car.userData.frontPivots||[];
+          fp.forEach(p=>p.rotation.z=rad(R20.steer));
+          const ws=R20.car.userData.wheels||[];
+          ws.forEach(w=>w.rotation.x=R20.wheelSpin);
+
+          this.renderer.resetState();
+          this.renderer.render(this.scene,this.camera);
+          this.map.triggerRepaint();
+        },
+        onRemove(){
+          try{ this.renderer.dispose(); }catch(e){}
+          R20.ready=false; document.body.classList.remove('wl-webgl-car');
+        }
+      };
+      R20.layer=layer;
+      const before=(map3d.getStyle().layers||[]).find(l=>l.type==='symbol');
+      map3d.addLayer(layer,before&&before.id);
+    } catch(e) {
+      console.warn('WayLyn true 3D car unavailable; retaining CSS fallback.',e);
+    }
+  }
+
+  /* -------------------- forward-only route progress -------------------- */
+  if(typeof updateMap3dUser==='function'){
+    const priorUpdate=updateMap3dUser;
+    updateMap3dUser=function round20VehicleUpdate(lat,lng){
+      const key=routeKey20();
+      if(key!==R20.routeKey){
+        R20.routeKey=key;
+        R20.along=Math.max(0,typeof navDistAlong!=='undefined' ? navDistAlong||0 : 0);
+        R20.lastAlong=R20.along; R20.lastHeading=null;
+      }
+      try{
+        if(navCoords && navCoords.length && typeof projectOnRouteNear==='function'){
+          const pr=projectOnRouteNear(navCoords,navCum,{lat,lng},R20.along||matchedAlong||0,42,900);
+          if(pr && pr.distToRoute<125){
+            // Never allow a GPS wobble to move the displayed car backwards.
+            if(pr.distAlong >= R20.along-5) R20.along=Math.max(R20.along,pr.distAlong);
+          }
+        }
+      }catch(e){}
+
+      const snapped=typeof pointAtNavDistance==='function' ? pointAtNavDistance(R20.along) : null;
+      const out=priorUpdate(snapped?snapped.lat:lat,snapped?snapped.lng:lng);
+
+      const speed=typeof lastSpeedMps!=='undefined' ? lastSpeedMps||0 : 0;
+      const raw=routeHeading20(R20.along,speed);
+      const old=R20.lastHeading;
+      R20.heading=angleLerp(R20.heading,raw,clamp20(.22+speed*.008,.22,.38));
+      R20.steer=clamp20(angleDelta(old==null?R20.heading:old,R20.heading)*2.3,-27,27);
+      R20.lastHeading=R20.heading;
+
+      const delta=Math.max(0,R20.along-R20.lastAlong);
+      R20.wheelSpin=(R20.wheelSpin + delta/.37)%(Math.PI*2);
+      R20.lastAlong=R20.along;
+
+      const pt=typeof pointAtNavDistance==='function' ? pointAtNavDistance(R20.along) : null;
+      R20.lat=pt?pt.lat:lat; R20.lng=pt?pt.lng:lng;
+      if(typeof updateTripCompass==='function') updateTripCompass(R20.heading);
+
+      // Hide only the old vehicle graphic, never the marker container itself.
+      try{
+        if(R20.ready && typeof map3dUser!=='undefined' && map3dUser && map3dUser.getElement){
+          const oldCar=map3dUser.getElement().querySelector('.wl-car-real');
+          if(oldCar) oldCar.style.opacity='0';
+        }
+      }catch(e){}
+
+      if(!R20.ready) install3dCar20();
+      refreshWorldLanes20(false);
+      return out;
+    };
+  }
+
+  /* ---------------- world-space lane geometry ---------------- */
+  function lanePoint20(along,offset){
+    const p=pointAtNavDistance(along);
+    if(!p) return null;
+    const h=routeHeading20(along,0);
+    return destination20(p,h+90,offset);
+  }
+  function lineForOffset20(start,end,offset){
+    const coords=[];
+    const step=18;
+    for(let d=start;d<=end;d+=step){
+      const p=lanePoint20(d,offset); if(p) coords.push([p.lng,p.lat]);
+    }
+    if(coords.length){
+      const p=lanePoint20(end,offset); if(p) coords.push([p.lng,p.lat]);
+    }
+    return coords;
+  }
+  function removeLegacyLaneLayers20(){
+    if(!map3d) return;
+    const prefixes=['wl-lane-divider-','r19-divider-'];
+    for(let i=0;i<12;i++) prefixes.forEach(pre=>{
+      try{ if(map3d.getLayer(pre+i)) map3d.removeLayer(pre+i); }catch(e){}
+    });
+    ['r19-road-edge-left','r19-road-edge-right','r19-lane-guidance','wl-lane-recommended'].forEach(id=>{
+      try{ if(map3d.getLayer(id)) map3d.removeLayer(id); }catch(e){}
+    });
+  }
+  function ensureLaneLayers20(){
+    if(!map3d || !map3dReady) return false;
+    if(!map3d.getSource('r20-world-lanes')){
+      map3d.addSource('r20-world-lanes',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+    }
+    const before=map3d.getLayer('wl-route-casing')?'wl-route-casing':undefined;
+    if(!map3d.getLayer('r20-road-edges')) map3d.addLayer({
+      id:'r20-road-edges',type:'line',source:'r20-world-lanes',filter:['==',['get','kind'],'edge'],
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':lightMode?'#f8fafb':'#cfd7dc','line-width':2.1,'line-opacity':.86}
+    },before);
+    if(!map3d.getLayer('r20-lane-dividers')) map3d.addLayer({
+      id:'r20-lane-dividers',type:'line',source:'r20-world-lanes',filter:['==',['get','kind'],'divider'],
+      layout:{'line-join':'round','line-cap':'butt'},
+      paint:{'line-color':lightMode?'rgba(255,255,255,.94)':'rgba(233,239,242,.82)','line-width':1.65,'line-dasharray':[2.4,3.5],'line-opacity':.95}
+    },before);
+    if(!map3d.getLayer('r20-lane-preferred')) map3d.addLayer({
+      id:'r20-lane-preferred',type:'line',source:'r20-world-lanes',filter:['==',['get','kind'],'preferred'],
+      layout:{'line-join':'round','line-cap':'round'},
+      paint:{'line-color':'#2b8fff','line-width':7.2,'line-opacity':.48,'line-blur':.45}
+    },before);
+    return true;
+  }
+  function refreshWorldLanes20(force){
+    try{
+      if(!map3d || !map3dReady || !navCoords || navCoords.length<2) return;
+      const candidate=laneCandidate20();
+      const count=laneCount20(), laneW=3.65;
+      const pref=[];
+      if(candidate){
+        candidate.lanes.forEach((l,i)=>{if(l.active===true)pref.push(i)});
+        if(!pref.length) candidate.lanes.forEach((l,i)=>{if(l.valid===true)pref.push(i)});
+      }
+      const sig=count+':'+pref.join(',')+':'+(candidate?candidate.index:'x');
+      if(!force && Math.abs(R20.along-R20.laneBuildAlong)<12 && sig===R20.laneSignature) return;
+      R20.laneBuildAlong=R20.along; R20.laneSignature=sig;
+      removeLegacyLaneLayers20();
+      if(!ensureLaneLayers20()) return;
+
+      const start=Math.max(0,R20.along-70);
+      const end=Math.min((navCum&&navCum.length?navCum[navCum.length-1]:R20.along+1700),R20.along+1800);
+      const feats=[];
+      const edge=(count*laneW)/2;
+      [-edge,edge].forEach(o=>{
+        const c=lineForOffset20(start,end,o); if(c.length>1) feats.push({type:'Feature',properties:{kind:'edge'},geometry:{type:'LineString',coordinates:c}});
+      });
+      for(let i=1;i<count;i++){
+        const o=(i-count/2)*laneW;
+        const c=lineForOffset20(start,end,o); if(c.length>1) feats.push({type:'Feature',properties:{kind:'divider'},geometry:{type:'LineString',coordinates:c}});
+      }
+      pref.forEach(i=>{
+        const o=((i+.5)-count/2)*laneW;
+        // Recommended lane does not paint miles ahead; keep it local to the maneuver.
+        const upto=candidate ? Math.min(end,Math.max(R20.along+260,(navStepStart[candidate.index]||end)+80)) : Math.min(end,R20.along+650);
+        const c=lineForOffset20(start,upto,o); if(c.length>1) feats.push({type:'Feature',properties:{kind:'preferred'},geometry:{type:'LineString',coordinates:c}});
+      });
+      map3d.getSource('r20-world-lanes').setData({type:'FeatureCollection',features:feats});
+    }catch(e){ console.warn('World-space lane geometry partial',e); }
+  }
+
+  // Replace prior pixel-offset lane renderer with physical meter offsets.
+  add3dLaneRoad=function round20Lanes(){ refreshWorldLanes20(true); };
+
+  /* ---------------- conservative exit state machine ---------------- */
+  function highwayNow20(){
+    try{
+      if(!navSteps||navStepIndex<=0) return null;
+      const s=navSteps[navStepIndex]||{}, m=s.maneuver||{};
+      const type=String(m.type||'').toLowerCase();
+      if(/depart|on ramp/.test(type)) return null;
+      const ref=String((typeof currentRoadRef==='function'&&currentRoadRef(s))||s.ref||s.name||'');
+      if(!/(\bI[-\s]?\d+\b|\bUS[-\s]?\d+\b|interstate|freeway|motorway|expressway|turnpike|parkway)/i.test(ref)) return null;
+      const start=(navStepStart&&Number.isFinite(navStepStart[navStepIndex]))?navStepStart[navStepIndex]:0;
+      if((navDistAlong||0)-start<90) return null;
+      return ref;
+    }catch(e){return null}
+  }
+  function nextExit20(){
+    const h=highwayNow20(); if(!h) return null;
+    for(let i=navStepIndex;i<Math.min(navSteps.length,navStepIndex+8);i++){
+      const s=navSteps[i], exit=typeof stepExit==='function'?stepExit(s):null;
+      const mt=String(s&&s.maneuver&&s.maneuver.type||'').toLowerCase();
+      if(!exit && !/off ramp|exit/.test(mt)) continue;
+      const d=Math.max(0,(navStepStart[i]||0)-(navDistAlong||0));
+      if(d>2600) return null;
+      return {num:exit||'',dist:d,signs:typeof stepSigns==='function'?stepSigns(s):'',step:s,index:i};
+    }
+    return null;
+  }
+  currentHighwayRef=highwayNow20;
+  upcomingExit=nextExit20;
+  nextExitLabel=function(){const e=nextExit20();return e&&e.num?e.num:null};
+  updateCardExit=function round20ExitCard(){
+    const e=nextExit20(), road=byId('roadExit'), turn=byId('turnExit'), signs=byId('turnSigns');
+    if(!e){
+      R20.exitPhase='NORMAL';
+      [road,turn,signs].forEach(x=>x&&x.classList.add('hidden')); return;
+    }
+    R20.exitPhase=e.dist>1500?'APPROACHING_EXIT':e.dist>80?'EXIT_ACTIVE':'EXIT_COMPLETE';
+    if(road){
+      const n=byId('roadExitNum'); if(n)n.textContent=e.num||'EXIT';
+      road.classList.toggle('hidden',R20.exitPhase==='APPROACHING_EXIT');
+    }
+    if(turn){
+      const n=byId('turnExitNum'); if(n)n.textContent=e.num||'EXIT';
+      turn.classList.remove('hidden'); turn.classList.toggle('soon',e.dist<900);
+    }
+    if(signs){
+      if(e.signs&&e.dist<1700){signs.textContent=e.signs;signs.classList.remove('hidden')}
+      else signs.classList.add('hidden');
+    }
+  };
+
+  /* ---------------- camera + compass ---------------- */
+  setCameraTarget=function round20Camera(lat,lng,bearingDeg,speedMps,metresToTurn){
+    const mph=(speedMps||0)*2.23694;
+    const along=Math.max(R20.along||0,typeof navDistAlong!=='undefined'?navDistAlong||0:0);
+    const raw=(typeof northUp!=='undefined'&&northUp)?0:routeHeading20(along,speedMps);
+    R20.heading=angleLerp(R20.heading,raw,.28);
+    const heading=(typeof northUp!=='undefined'&&northUp)?0:R20.heading;
+    const car=pointAtNavDistance(along)||{lat,lng};
+
+    // Look-ahead is speed bounded, then the visual center is shifted behind
+    // that target so the car stays in the lower third without losing the route.
+    const look=clamp20((speedMps||0)*2.25+24,28,105);
+    const ahead=pointAtNavDistance(along+look)||car;
+    const behind=destination20(ahead,heading+180,clamp20(look*.60,22,62));
+
+    let zoom=mph>62?16.35:mph>42?16.72:mph>22?17.12:17.48;
+    if(metresToTurn!=null&&metresToTurn<550) zoom-=.16;
+    if(metresToTurn!=null&&metresToTurn<220) zoom-=.12;
+    const pitch=mph>55?56:60;
+    camZoomWant=zoom;
+    camTarget={lat:behind.lat,lng:behind.lng,bearing:heading,zoom,pitch};
+    if(!camNow) camNow={...camTarget};
+    if(typeof startCameraLoop==='function') startCameraLoop();
+  };
+
+  function compass20(){
+    try{
+      const c=byId('tripCompass'); if(!c)return;
+      const needle=c.querySelector('.tc-needle');
+      const b=(typeof map3d!=='undefined'&&map3d&&map3d.getBearing)?map3d.getBearing():R20.heading;
+      if(needle) needle.style.transform='rotate('+(-b)+'deg)';
+      c.setAttribute('aria-label','Compass, map bearing '+Math.round((b+360)%360)+' degrees');
+    }catch(e){}
+  }
+  setInterval(compass20,120);
+
+  /* ---------------- buildings: vector + OSM supplement ---------------- */
+  const priorBuildings20=typeof style3dBuildings==='function'?style3dBuildings:null;
+  style3dBuildings=function round20Buildings(){
+    if(priorBuildings20) priorBuildings20();
+    if(!map3d||!map3d.getStyle()) return;
+    try{
+      const style=map3d.getStyle();
+      const bLayer=(style.layers||[]).find(l=>l['source-layer']==='building'&&style.sources&&style.sources[l.source]);
+      if(bLayer){
+        const id='r20-all-buildings';
+        if(map3d.getLayer(id)) map3d.removeLayer(id);
+        const before=(style.layers||[]).find(l=>l.type==='symbol');
+        map3d.addLayer({
+          id,type:'fill-extrusion',source:bLayer.source,'source-layer':'building',minzoom:13,
+          paint:{
+            'fill-extrusion-color':lightMode?'#c8d1d6':'#4f606c',
+            'fill-extrusion-height':[
+              'coalesce',
+              ['to-number',['get','render_height'],null],
+              ['to-number',['get','height'],null],
+              ['*',['coalesce',['to-number',['get','building:levels'],null],['to-number',['get','levels'],null],3],3.2],
+              9.6
+            ],
+            'fill-extrusion-base':['coalesce',['to-number',['get','render_min_height'],null],['to-number',['get','min_height'],null],0],
+            'fill-extrusion-opacity':.94
+          }
+        },before&&before.id);
+      }
+      if(map3d.getLayer('wl-building-supplement-3d')){
+        map3d.setLayerZoomRange('wl-building-supplement-3d',12.8,24);
+        map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-opacity',.96);
+      }
+      if(typeof refreshSupplementalBuildings==='function' && Date.now()-R20.lastBuildingRefresh>45000){
+        R20.lastBuildingRefresh=Date.now();
+        refreshSupplementalBuildings(false);
+      }
+    }catch(e){console.warn('Expanded buildings partial',e)}
+  };
+
+  /* ---------------- richer style, preserve readable night colors ---------------- */
+  const priorPalette20=typeof style3dPalette==='function'?style3dPalette:null;
+  style3dPalette=function round20Palette(){
+    if(priorPalette20) priorPalette20();
+    if(!map3d||!map3d.getStyle())return;
+    const dark=!lightMode;
+    try{
+      (map3d.getStyle().layers||[]).forEach(l=>{
+        const id=String(l.id||'');
+        try{
+          if(l.type==='background') map3d.setPaintProperty(id,'background-color',dark?'#111a21':'#eef2f4');
+          if(l.type==='fill'){
+            if(/water|ocean|river|lake/i.test(id))map3d.setPaintProperty(id,'fill-color',dark?'#143b59':'#8fc6e8');
+            else if(/park|grass|forest|wood|garden|green/i.test(id))map3d.setPaintProperty(id,'fill-color',dark?'#214532':'#b9d9b4');
+            else if(/landuse|residential|commercial|industrial/i.test(id))map3d.setPaintProperty(id,'fill-color',dark?'#2b3339':'#e1e5e7');
+          }
+          if(l.type==='line'&&/transportation|road|street|motorway|trunk/i.test(id)){
+            map3d.setPaintProperty(id,'line-opacity',.98);
+          }
+        }catch(e){}
+      });
+      style3dBuildings();
+      refreshWorldLanes20(true);
+    }catch(e){}
+  };
+
+  /* Auto day/night remains based on the existing sunrise/sunset lookup.
+     Force it back to auto if another UI action persisted a stale manual mode. */
+  async function autoTheme20(){
+    try{
+      if(typeof themeMode!=='undefined') themeMode='auto';
+      if(typeof Store!=='undefined'&&Store.setGlobal)Store.setGlobal('themeMode','auto');
+      if(typeof applyAutoTheme==='function') await applyAutoTheme();
+      if(map3d&&map3dReady) style3dPalette();
+    }catch(e){}
+  }
+  setTimeout(autoTheme20,200);
+  setInterval(autoTheme20,60000);
+
+  /* UI wording and duplicate-control cleanup. */
+  const report=byId('navAlertsBtn');
+  if(report){ const l=report.querySelector('.nav-btn-label'); if(l)l.textContent='Report'; report.title='Report road condition or hazard'; }
+  const voice=byId('navVoiceBtn');
+  if(voice){ const l=byId('navVoiceLabel')||voice.querySelector('.nav-btn-label'); if(l)l.textContent='Voice Guide'; voice.title='Voice Guide'; }
+  const remain=byId('remainMin');
+  if(remain&&remain.parentElement){const s=remain.parentElement.querySelector('span');if(s)s.textContent='Time left';}
+
+  // Some older rounds can re-show a second alerts/voice FAB. Hide only duplicates,
+  // never the top-right Report and Voice Guide controls.
+  document.querySelectorAll('#fabStack [data-action="alerts"],#fabStack .alerts-fab,#fabStack .voice-fab').forEach(el=>el.style.display='none');
+
+  const recenter=byId('recenterFab'); if(recenter){recenter.style.display='inline-flex';recenter.removeAttribute('hidden');}
+
+  function bindMap20(){
+    if(typeof map3d==='undefined'||!map3d)return;
+    if(map3d.__wlRound20Bound)return;
+    map3d.__wlRound20Bound=true;
+    map3d.on('load',()=>{setTimeout(()=>{install3dCar20();style3dPalette();refreshWorldLanes20(true)},250)});
+    map3d.on('styledata',()=>setTimeout(()=>{try{style3dBuildings();refreshWorldLanes20(true);if(!map3d.getLayer('wl-real-webgl-car'))install3dCar20()}catch(e){}},80));
+    map3d.on('moveend',()=>{if(typeof navActive==='function'&&navActive())style3dBuildings()});
+    if(map3d.loaded&&map3d.loaded()) setTimeout(()=>{install3dCar20();style3dPalette();refreshWorldLanes20(true)},80);
+  }
+  setTimeout(bindMap20,350);
+  setInterval(()=>{ if(typeof map3d!=='undefined'&&map3d){bindMap20();if(map3dReady&&!R20.ready)install3dCar20()} },1500);
+})();
+</script>
+
+<
+<script id="wl-round21-business-branding-js">
+(function(){
+  'use strict';
+
+  const BRAND_CACHE_PREFIX='wl_brand_v3:';
+  const brandPending=new Map();
+  const brandMemory=new Map();
+
+  function normName(s){
+    return String(s||'').toLowerCase().normalize('NFKD')
+      .replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+  }
+  function safeUrl(u){
+    if(!u)return '';
+    try{
+      let s=String(u).trim();
+      if(!/^https?:\/\//i.test(s))s='https://'+s;
+      const x=new URL(s);
+      if(x.protocol!=='http:'&&x.protocol!=='https:')return '';
+      return x.href;
+    }catch(e){return ''}
+  }
+  function websiteFromTags(t){
+    t=t||{};
+    return safeUrl(t.website||t['contact:website']||t.url||t['contact:url']||'');
+  }
+  function commonsFileUrl(file,width){
+    if(!file)return '';
+    return 'https://commons.wikimedia.org/wiki/Special:Redirect/file/'+
+      encodeURIComponent(String(file).replace(/^File:/i,''))+'?width='+(width||160);
+  }
+  function googleFavicon(site,size){
+    const u=safeUrl(site); if(!u)return '';
+    try{
+      return 'https://www.google.com/s2/favicons?sz='+(size||128)+'&domain_url='+
+        encodeURIComponent(new URL(u).origin);
+    }catch(e){return ''}
+  }
+  function initials(name){
+    const a=String(name||'').trim().split(/\s+/).filter(Boolean).slice(0,2);
+    return (a.map(x=>x[0]).join('')||'POI').toUpperCase();
+  }
+  function brandId(el,key){
+    const t=el.tags||{};
+    return [t['brand:wikidata']||'',t.wikidata||'',t.brand||'',t.name||el.googleName||'',
+      (+el.lat||0).toFixed(5),(+el.lng||0).toFixed(5)].join('|');
+  }
+  function cacheRead(id){
+    if(brandMemory.has(id))return brandMemory.get(id);
+    try{
+      const r=JSON.parse(localStorage.getItem(BRAND_CACHE_PREFIX+id)||'null');
+      if(r&&Date.now()-r.at<7*864e5){brandMemory.set(id,r.data);return r.data}
+    }catch(e){}
+    return null;
+  }
+  function cacheWrite(id,data){
+    brandMemory.set(id,data);
+    try{localStorage.setItem(BRAND_CACHE_PREFIX+id,JSON.stringify({at:Date.now(),data}))}catch(e){}
+  }
+
+  async function wikidataBrand(qid){
+    if(!/^Q\d+$/i.test(String(qid||'')))return null;
+    try{
+      const r=await fetch('https://www.wikidata.org/wiki/Special:EntityData/'+encodeURIComponent(qid)+'.json');
+      if(!r.ok)return null;
+      const d=await r.json(), e=d.entities&&d.entities[qid];
+      if(!e)return null;
+      const claim=(p)=>{
+        const c=e.claims&&e.claims[p]&&e.claims[p][0];
+        return c&&c.mainsnak&&c.mainsnak.datavalue&&c.mainsnak.datavalue.value;
+      };
+      return {logo:claim('P154')||'',image:claim('P18')||'',website:safeUrl(claim('P856')||'')};
+    }catch(e){return null}
+  }
+
+  async function commonsMeta(file){
+    if(!file)return null;
+    try{
+      const url='https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*'+
+        '&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=180&titles='+
+        encodeURIComponent('File:'+String(file).replace(/^File:/i,''));
+      const r=await fetch(url); if(!r.ok)return null;
+      const d=await r.json(), pages=d.query&&d.query.pages;
+      const p=pages&&Object.values(pages)[0], ii=p&&p.imageinfo&&p.imageinfo[0];
+      if(!ii)return null;
+      const m=ii.extmetadata||{};
+      return {
+        logo:ii.thumburl||ii.url||commonsFileUrl(file,180),
+        sourceUrl:ii.descriptionurl||'',
+        source:'Wikimedia Commons',
+        license:m.LicenseShortName&&m.LicenseShortName.value||'',
+        artist:m.Artist&&String(m.Artist.value||'').replace(/<[^>]+>/g,'').slice(0,120)||''
+      };
+    }catch(e){return null}
+  }
+
+  async function wikipediaBrand(title){
+    if(!title)return null;
+    try{
+      const clean=String(title).replace(/^[a-z-]+:/i,'');
+      const r=await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(clean));
+      if(!r.ok)return null;
+      const d=await r.json();
+      return {
+        logo:d.thumbnail&&d.thumbnail.source||d.originalimage&&d.originalimage.source||'',
+        sourceUrl:d.content_urls&&d.content_urls.desktop&&d.content_urls.desktop.page||'',
+        source:'Wikipedia'
+      };
+    }catch(e){return null}
+  }
+
+  async function commonsSearchLogo(name){
+    const n=String(name||'').trim();
+    if(n.length<3)return null;
+    try{
+      const q=n+' logo';
+      const url='https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*'+
+        '&generator=search&gsrnamespace=6&gsrlimit=6&gsrsearch='+encodeURIComponent(q)+
+        '&prop=imageinfo&iiprop=url%7Cextmetadata&iiurlwidth=180';
+      const r=await fetch(url); if(!r.ok)return null;
+      const d=await r.json(), pages=Object.values(d.query&&d.query.pages||{});
+      const wanted=normName(n).split(' ').filter(x=>x.length>2);
+      const scored=pages.map(p=>{
+        const title=normName(String(p.title||'').replace(/^file:/i,''));
+        const score=wanted.reduce((s,w)=>s+(title.includes(w)?1:0),0)+(title.includes('logo')?2:0);
+        return {p,score};
+      }).sort((a,b)=>b.score-a.score);
+      if(!scored.length||scored[0].score<Math.min(2,Math.max(1,wanted.length)))return null;
+      const p=scored[0].p, ii=p.imageinfo&&p.imageinfo[0]; if(!ii)return null;
+      const m=ii.extmetadata||{};
+      return {
+        logo:ii.thumburl||ii.url||'',
+        sourceUrl:ii.descriptionurl||'',
+        source:'Wikimedia Commons',
+        license:m.LicenseShortName&&m.LicenseShortName.value||''
+      };
+    }catch(e){return null}
+  }
+
+  async function resolveBrand(el,key){
+    const id=brandId(el,key), cached=cacheRead(id);
+    if(cached)return cached;
+    if(brandPending.has(id))return brandPending.get(id);
+
+    const job=(async()=>{
+      const t=el.tags||{}, name=t.brand||t.name||el.googleName||el.googleCategory||POI[key]?.label||'';
+      let website=safeUrl(el.googleWebsite)||websiteFromTags(t);
+      let result={name,website,logo:'',source:'',sourceUrl:'',license:'',artist:''};
+
+      // Explicit OSM image/logo URL is the strongest direct signal.
+      const explicit=safeUrl(t.logo||t.image||'');
+      if(explicit)result.logo=explicit;
+
+      // Prefer brand Wikidata, then place Wikidata.
+      const qid=t['brand:wikidata']||t.wikidata||'';
+      if(qid){
+        const wd=await wikidataBrand(qid);
+        if(wd){
+          if(!website&&wd.website)website=wd.website;
+          const file=wd.logo||wd.image;
+          if(file){
+            const cm=await commonsMeta(file);
+            if(cm)result=Object.assign(result,cm);
+            else result.logo=commonsFileUrl(file,180);
+          }
+        }
+      }
+
+      // Wikipedia page image is a useful second source.
+      if(!result.logo&&(t.wikipedia||t['wikipedia:en'])){
+        const wp=await wikipediaBrand(t.wikipedia||t['wikipedia:en']);
+        if(wp&&wp.logo)result=Object.assign(result,wp);
+      }
+
+      // Search Commons conservatively by exact business/brand name.
+      if(!result.logo&&name){
+        const cs=await commonsSearchLogo(name);
+        if(cs&&cs.logo)result=Object.assign(result,cs);
+      }
+
+      // Official site favicon is a last-resort brand image. It is better than a
+      // category burger/fork icon, but the site remains the authoritative source.
+      result.website=website;
+      if(!result.logo&&website){
+        result.logo=googleFavicon(website,128);
+        result.source='Official website favicon';
+        result.sourceUrl=website;
+      }
+
+      // Google Places business imagery may exist, but a photo is not treated as a logo.
+      // Generic category icons are intentionally NOT used here.
+      result.logo=result.logo||'';
+      cacheWrite(id,result);
+      return result;
+    })().finally(()=>brandPending.delete(id));
+    brandPending.set(id,job);
+    return job;
+  }
+
+  function visualHtml(el,cfg,color,size){
+    const px=size||34, id=brandId(el,cfg&&cfg.label||'poi');
+    const cached=cacheRead(id), site=safeUrl(el.googleWebsite)||websiteFromTags(el.tags||{});
+    const src=(cached&&cached.logo)|| (site?googleFavicon(site,128):'');
+    const name=(el.tags&&((el.tags.brand)||(el.tags.name)))||el.googleName||cfg.label||'POI';
+    return '<span class="wl-poi-brand'+(src?' has-logo':'')+'" data-wl-brand="'+esc(id)+
+      '" style="width:'+px+'px;height:'+px+'px">'+
+      '<img loading="lazy" decoding="async" referrerpolicy="no-referrer" src="'+esc(src||'')+
+      '" alt="'+esc(name)+' logo" onload="this.parentElement.classList.add(\'has-logo\')" '+
+      'onerror="this.parentElement.classList.remove(\'has-logo\');this.removeAttribute(\'src\')" />'+
+      '<span class="wl-brand-fallback">'+esc(initials(name))+'</span></span>';
+  }
+
+  function updateBrandDom(el,key,data){
+    const id=brandId(el,key);
+    document.querySelectorAll('[data-wl-brand="'+CSS.escape(id)+'"]').forEach(box=>{
+      const img=box.querySelector('img');
+      if(img&&data.logo&&img.src!==data.logo){img.src=data.logo}
+      if(data.logo)box.classList.add('has-logo');
+    });
+    document.querySelectorAll('[data-wl-site="'+CSS.escape(id)+'"]').forEach(a=>{
+      if(data.website){a.href=data.website;a.hidden=false}else a.hidden=true;
+    });
+    document.querySelectorAll('[data-wl-source="'+CSS.escape(id)+'"]').forEach(s=>{
+      if(data.source){
+        s.innerHTML='Logo source: '+(data.sourceUrl?'<a target="_blank" rel="noopener" href="'+esc(data.sourceUrl)+'">'+esc(data.source)+'</a>':esc(data.source))+
+          (data.license?' · '+esc(data.license):'');
+        s.hidden=false;
+      }
+    });
+  }
+
+  function warmBrand(el,key){
+    resolveBrand(el,key).then(d=>{
+      el.businessLogo=d.logo||'';
+      el.businessWebsite=d.website||'';
+      el.businessLogoSource=d.source||'';
+      el.businessLogoSourceUrl=d.sourceUrl||'';
+      updateBrandDom(el,key,d);
+    }).catch(()=>{});
+  }
+
+  // Google Places: include websiteUri, which lets us link to the exact business
+  // and use its own site favicon when Commons/Wikidata has no logo.
+  if(typeof wlGooglePoiSearch==='function'){
+    wlGooglePoiSearch=async function wlGooglePoiSearchBrand(key){
+      if(!GOOGLE_PLACES_KEY||!WL_GOOGLE_POI_QUERY[key])return [];
+      const a=wlPoiCacheAnchor(); if(!a)return [];
+      const res=await fetch(GOOGLE_PLACES_BASE+'/places:searchText',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'X-Goog-Api-Key':GOOGLE_PLACES_KEY,
+          'X-Goog-FieldMask':'places.id,places.displayName,places.formattedAddress,places.location,places.primaryTypeDisplayName,places.photos,places.rating,places.userRatingCount,places.websiteUri'
+        },
+        body:JSON.stringify({
+          textQuery:WL_GOOGLE_POI_QUERY[key],maxResultCount:20,
+          locationBias:{circle:{center:{latitude:a.lat,longitude:a.lng},radius:Math.min(50000,Math.max(2500,poiRadiusMi*1609.34))}}
+        })
+      });
+      if(!res.ok)throw new Error('Google Places '+res.status);
+      const d=await res.json();
+      return (d.places||[]).map(p=>{
+        const photo=p.photos&&p.photos[0]&&p.photos[0].name
+          ? GOOGLE_PLACES_BASE+'/'+p.photos[0].name+'/media?maxWidthPx=180&key='+GOOGLE_PLACES_KEY:'';
+        return {
+          id:'google:'+p.id,lat:p.location.latitude,lng:p.location.longitude,
+          tags:{name:(p.displayName&&p.displayName.text)||POI[key].label,amenity:key,
+            google_rating:p.rating||'',google_ratings:p.userRatingCount||''},
+          googleName:(p.displayName&&p.displayName.text)||'',
+          googlePhoto:photo,googleAddress:p.formattedAddress||'',
+          googleCategory:(p.primaryTypeDisplayName&&p.primaryTypeDisplayName.text)||'',
+          googleWebsite:safeUrl(p.websiteUri||''),source:'google'
+        };
+      });
+    };
+  }
+
+  // Replace category emoji visuals with brand-aware visuals.
+  if(typeof wlPoiVisual==='function'){
+    wlPoiVisual=function wlPoiVisualBrand(el,cfg,color,size){
+      return visualHtml(el,cfg,color,size||34);
+    };
+  }
+
+  // Keep the exact business website and logo on the place object.
+  if(typeof poiToPlace==='function'){
+    const prevPoiToPlace21=poiToPlace;
+    poiToPlace=function wlPoiToPlaceBrand(key,el){
+      const p=prevPoiToPlace21(key,el);
+      p.website=el.businessWebsite||el.googleWebsite||websiteFromTags(el.tags||{})||p.website||'';
+      p.brandLogo=el.businessLogo||'';
+      p.brandLogoSource=el.businessLogoSource||'';
+      p.brandLogoSourceUrl=el.businessLogoSourceUrl||'';
+      p._brandEl=el;p._brandKey=key;
+      return p;
+    };
+  }
+
+  // 2D + 3D marker override so both navigation views show the same business logo.
+  if(typeof drawPoi==='function'){
+    drawPoi=function wlDrawPoiBrand(key,items){
+      clearPoi(key);
+      const cfg=POI[key],color=cssVar(cfg.color,'#888');
+      const layer=L.layerGroup().addTo(map);poiLayers[key]=layer;poi3d[key]=[];
+      items.slice(0,60).forEach(el=>{
+        const place=poiToPlace(key,el),id=brandId(el,key),visual=visualHtml(el,cfg,color,38);
+        const site=el.businessWebsite||el.googleWebsite||websiteFromTags(el.tags||{});
+        const popup='<div style="display:flex;gap:10px;align-items:center">'+visual+
+          '<div><div class="pp-name">'+esc(place.name)+'</div><div class="pp-sub">'+esc(place.label||el.googleCategory||'')+
+          (el.metersFromMe!=null?' · '+fmtDistance(el.metersFromMe)+' away':'')+'</div></div></div>'+
+          '<div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">'+
+          '<button class="pp-btn" onclick="window.WayLyn.openPlace('+el.lat+','+el.lng+',\''+key+'\')">View details</button>'+
+          '<a class="pp-btn wl-business-link" data-wl-site="'+esc(id)+'" '+(!site?'hidden ':'')+
+          'href="'+esc(site||'#')+'" target="_blank" rel="noopener">Website ↗</a></div>'+
+          '<div class="wl-brand-source" data-wl-source="'+esc(id)+'" hidden></div>';
+        const icon=L.divIcon({className:'',html:visual,iconSize:[38,38],iconAnchor:[19,19]});
+        L.marker([el.lat,el.lng],{icon}).addTo(layer).bindPopup(popup);
+
+        if(map3d&&map3dReady&&typeof maplibregl!=='undefined'){
+          const node=document.createElement('div');node.innerHTML=visual;
+          const marker=new maplibregl.Marker({element:node.firstElementChild})
+            .setLngLat([el.lng,el.lat]).addTo(map3d);
+          marker.setPopup(new maplibregl.Popup({offset:22,maxWidth:'290px'}).setHTML(popup));
+          (poi3d[key]=poi3d[key]||[]).push(marker);
+        }
+        warmBrand(el,key);
+      });
+    };
+  }
+
+  // Brand-aware POI side panel with direct website access.
+  if(typeof renderPoiPanel==='function'){
+    renderPoiPanel=function wlRenderPoiPanelBrand(key,items){
+      const panel=$('poiPanel'),cfg=POI[key],color=cssVar(cfg.color,'#888');
+      closeOtherRightPanels('poi');
+      panel.innerHTML='<div class="panel-title">'+cfg.label+
+        ' <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-faint)">'+items.length+
+        ' found</span><button class="icon-act" id="poiHide" title="Hide">✕</button></div>'+
+        (items.length?items.slice(0,40).map((el,i)=>{
+          const p=poiToPlace(key,el),near=fmtDistance(el.metersFromMe),along=el.mileAlong!=null&&allRoutes.length?' · '+el.mileAlong.toFixed(1)+' mi into the trip':'';
+          const id=brandId(el,key),site=el.businessWebsite||el.googleWebsite||websiteFromTags(el.tags||{});
+          return '<div class="panel-item">'+visualHtml(el,cfg,color,34)+
+            '<span class="panel-item-text" data-open="'+i+'" style="cursor:pointer">'+esc(p.name)+
+            '<span class="sub num">'+esc(p.label)+' · '+near+along+'</span></span>'+
+            '<a class="icon-act wl-business-link" data-wl-site="'+esc(id)+'" '+(!site?'hidden ':'')+
+            'href="'+esc(site||'#')+'" target="_blank" rel="noopener" title="Official website">↗</a>'+
+            '<button class="icon-act" data-stop="'+i+'" title="Add as a stop">➕</button></div>';
+        }).join(''):'<div class="panel-empty">No mapped places found in this category.</div>');
+      panel.classList.remove('hidden');
+      $('poiHide')?.addEventListener('click',()=>closePoi(key));
+      panel.querySelectorAll('[data-open]').forEach(node=>node.addEventListener('click',()=>{
+        const item=items[parseInt(node.dataset.open,10)];
+        map.setView([item.lat,item.lng],17,{animate:true});
+        if(map3d&&map3dReady)map3d.easeTo({center:[item.lng,item.lat],zoom:17});
+        showPlaceCard(poiToPlace(key,item));
+      }));
+      panel.querySelectorAll('[data-stop]').forEach(node=>node.addEventListener('click',async ev=>{
+        ev.stopPropagation();const item=items[parseInt(node.dataset.stop,10)];
+        if(key==='ev'){await addChargeStop(item.lat,item.lng,poiName(key,item.tags));return}
+        await addStopSmart(poiToPlace(key,item),POI[key].dwell);
+      }));
+      items.slice(0,40).forEach(el=>warmBrand(el,key));
+    };
+  }
+
+  // Add logo/source + exact official website to the existing place card after render.
+  if(typeof showPlaceCard==='function'){
+    const prevShowPlaceCard21=showPlaceCard;
+    showPlaceCard=async function wlShowPlaceCardBrand(place){
+      if(place&&place._brandEl){
+        try{
+          const d=await resolveBrand(place._brandEl,place._brandKey);
+          place.brandLogo=d.logo||place.brandLogo||'';
+          place.website=d.website||place.website||'';
+          place.brandLogoSource=d.source||'';
+          place.brandLogoSourceUrl=d.sourceUrl||'';
+        }catch(e){}
+      }
+      await prevShowPlaceCard21(place);
+      try{
+        const body=elCard&&elCard.querySelector('.pc-body');
+        if(!body)return;
+        const logo=place.brandLogo||googleFavicon(place.website,128);
+        if(logo){
+          const head=document.createElement('div');head.className='wl-brand-card-head';
+          head.innerHTML='<span class="wl-poi-brand has-logo"><img src="'+esc(logo)+'" alt="'+esc(place.name||'Business')+
+            ' logo" referrerpolicy="no-referrer"></span><div class="wl-brand-card-title"><b>'+esc(place.name||place.label||'')+
+            '</b><div class="wl-brand-source">'+
+            (place.brandLogoSourceUrl?'<a href="'+esc(place.brandLogoSourceUrl)+'" target="_blank" rel="noopener">'+esc(place.brandLogoSource||'Logo source')+'</a>':esc(place.brandLogoSource||''))+
+            '</div></div>';
+          const existing=body.querySelector('.pc-name');if(existing)existing.style.display='none';
+          body.insertBefore(head,body.firstChild);
+        }
+      }catch(e){}
+    };
+  }
+
+  // Rebuild any currently visible POIs when the patch loads.
+  setTimeout(()=>{try{refreshAllPoiLayers()}catch(e){}},700);
+})();
+</script>
+
 </body>
 </html>
