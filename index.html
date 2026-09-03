@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5705,6 +5706,44 @@ body.navigating #navMenu {
 .wl-brand-card-title .pc-name{margin:0}
 </style>
 
+
+<style id="wl-final-navigation-css">
+body.navigating #navTop{width:min(90vw,350px)!important}
+body.navigating #navTop .nav-card{
+  background:rgba(70,78,88,.64)!important;
+  border:1px solid rgba(210,225,238,.20)!important;
+  box-shadow:0 12px 32px rgba(0,0,0,.28)!important;
+  backdrop-filter:blur(18px)!important;
+  -webkit-backdrop-filter:blur(18px)!important;
+}
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card *{color:#f4f8fc}
+body.navigating #turnStreet,
+body.navigating #tripLine,
+body.navigating #roadLeft{color:#d8e5ef!important}
+body.navigating #turnDistance,
+body.navigating #roadName{color:#fff!important}
+body.navigating #tripCompass,
+body.navigating #tripLine .compass{color:#5ac8fa!important}
+#laneBar .lane,#laneGuide .lane{
+  display:inline-grid;place-items:center;min-width:38px;height:46px;padding:0 8px;
+  margin:0 2px;border-radius:8px;font-size:25px;background:rgba(40,48,56,.72);
+  color:rgba(230,237,243,.42);border:1px solid rgba(255,255,255,.10)
+}
+#laneBar .lane.valid,#laneGuide .lane.valid{color:#dcecff}
+#laneBar .lane.preferred,#laneGuide .lane.preferred{
+  color:#fff;background:rgba(43,143,255,.72);border-color:rgba(120,195,255,.9)
+}
+#laneBar.hidden,#laneGuide.hidden{display:none!important}
+#map3d canvas{filter:none!important}
+@media(max-width:720px){
+  body.navigating #navTop{width:min(calc(100vw - 20px),330px)!important;left:10px!important;top:10px!important}
+  body.navigating #navTop .nav-card-main{padding:11px 12px 9px!important;gap:10px!important}
+  body.navigating #turnDistance{font-size:2.15rem!important}
+  body.navigating #turnStreet{font-size:1.05rem!important}
+}
+</style>
+
 </head>
 <body>
 
@@ -6424,11 +6463,6 @@ window.WL_CARTO_KEY = '';
   </div>
 </div>
 
-<div id="poiRange" class="hidden">
-  <span class="pr-label">Search within</span>
-  <input type="range" id="poiRad" min="1" max="100" step="1" value="5" aria-label="Search radius in miles" />
-  <b id="poiRadL" class="num">5 mi</b>
-</div>
 
 <div id="dock">
   <button class="dock-arrow left" id="dockLeft" type="button" aria-label="Scroll left">&#8249;</button>
@@ -10730,25 +10764,11 @@ window.onSpotifyIframeApiReady = function (api) {
   });
 
   (function () {
-    const box = $('poiRange'), sl = $('poiRad'), lbl = $('poiRadL');
-    let t = null;
-    sl.addEventListener('input', () => {
-      poiRadiusMi = +sl.value;
-      lbl.textContent = poiRadiusMi + ' mi';
-      clearTimeout(t);
-      t = setTimeout(() => {
-        if (poiActiveKey) { poiState[poiActiveKey] = null; const k = poiActiveKey; poiActiveKey = null; togglePoi(k); }
-      }, 450);
-    });
-    window.syncPoiRange = function () {
-      // Shown whenever a category is open. With a route the reach is spread
-      // along the road ahead; without one it is a single circle, so the label
-      // says what is actually being searched.
-      box.classList.toggle('hidden', !poiActiveKey);
-      $('poiRadL').textContent = poiRadiusMi + ' mi';
-      const lab = $('poiRange').querySelector('.pr-label');
-      if (lab) lab.textContent = allRoutes.length ? 'Along the route' : 'Around you';
-    };
+    // Fixed POI corridor: the old 0-100 mile Along the Route slider is gone.
+    // Search relevance is now enforced automatically at a maximum 1.0-mile
+    // route/exit detour, so there is no driver-facing radius control.
+    poiRadiusMi = 1;
+    window.syncPoiRange = function () {};
   })();
 
   const navAlerts = $('navAlertsBtn');
@@ -22065,5 +22085,1320 @@ body.navigating #laneBar.wl-real-lanes {
 })();
 </script>
 
-</body>
+
+<script>
+/* ======================================================================
+   WAYLYN — AUTHORITATIVE NAVIGATION CONSOLIDATION
+   Final coordination layer for route progress, camera, lanes, exits,
+   3D palette/buildings, compass and automatic day/night behavior.
+   ====================================================================== */
+(() => {
+  'use strict';
+
+  const WLNAV = window.WLNAV_FINAL = window.WLNAV_FINAL || {
+    routeKey: '',
+    along: 0,
+    renderedAlong: 0,
+    heading: 0,
+    lastFixAt: 0,
+    sun: { key:'', lat:null, lng:null, sunrise:0, sunset:0, fetched:0 },
+    buildingTimer: 0,
+    laneSignature: ''
+  };
+
+  const clamp = (v,a,b) => Math.max(a, Math.min(b,v));
+  const deltaAngle = (a,b) => ((b-a+540)%360)-180;
+  const lerpAngle = (a,b,t) => (a + deltaAngle(a,b)*t + 360) % 360;
+  const nowMs = () => Date.now();
+
+  function routeIdentity(){
+    try {
+      const n = navCoords && navCoords.length || 0;
+      if (!n) return '';
+      const a = navCoords[0], b = navCoords[n-1];
+      return [n, a.lat.toFixed(5), a.lng.toFixed(5), b.lat.toFixed(5), b.lng.toFixed(5)].join(':');
+    } catch(e){ return ''; }
+  }
+
+  function totalRouteDistance(){
+    try { return navCum && navCum.length ? navCum[navCum.length-1] : 0; }
+    catch(e){ return 0; }
+  }
+
+  function pointAt(along){
+    try { return pointAtNavDistance(clamp(along,0,totalRouteDistance())); }
+    catch(e){ return null; }
+  }
+
+  function roadHeading(along){
+    const p0 = pointAt(Math.max(0,along-7));
+    const p1 = pointAt(Math.min(totalRouteDistance(),along+12));
+    if (!p0 || !p1) return WLNAV.heading || 0;
+    if (typeof bearing === 'function') return bearing(p0.lat,p0.lng,p1.lat,p1.lng);
+    const y = Math.sin((p1.lng-p0.lng)*Math.PI/180)*Math.cos(p1.lat*Math.PI/180);
+    const x = Math.cos(p0.lat*Math.PI/180)*Math.sin(p1.lat*Math.PI/180) -
+      Math.sin(p0.lat*Math.PI/180)*Math.cos(p1.lat*Math.PI/180)*Math.cos((p1.lng-p0.lng)*Math.PI/180);
+    return (Math.atan2(y,x)*180/Math.PI+360)%360;
+  }
+
+  function syncProgress(v){
+    WLNAV.along = Math.max(WLNAV.along, Number.isFinite(v) ? v : 0);
+    try { navDistAlong = WLNAV.along; } catch(e){}
+    try { matchedAlong = WLNAV.along; } catch(e){}
+    try { refinedMarkerAlong = WLNAV.along; } catch(e){}
+    try { smoothAlong = WLNAV.along; } catch(e){}
+    try { fixAlong = WLNAV.along; } catch(e){}
+  }
+
+  function resetForRoute(){
+    const key = routeIdentity();
+    if (key === WLNAV.routeKey) return;
+    WLNAV.routeKey = key;
+    let seed = 0;
+    try {
+      const candidates = [navDistAlong, matchedAlong, refinedMarkerAlong, smoothAlong, fixAlong]
+        .filter(Number.isFinite);
+      if (candidates.length) seed = Math.max(0, Math.min(...candidates));
+    } catch(e){}
+    WLNAV.along = WLNAV.renderedAlong = seed;
+    syncProgress(seed);
+  }
+
+  function projectFixForward(lat,lng){
+    resetForRoute();
+    let projected = null;
+    try {
+      if (navCoords && navCoords.length > 1 && typeof projectOnRouteNear === 'function') {
+        projected = projectOnRouteNear(navCoords, navCum, {lat,lng}, WLNAV.along, 55, 1000);
+      }
+    } catch(e){}
+    if (!projected || !Number.isFinite(projected.distAlong)) return WLNAV.along;
+
+    const accuracy = Number.isFinite(window.lastGpsAccuracy) ? window.lastGpsAccuracy :
+      (Number.isFinite(window.gpsAccuracy) ? window.gpsAccuracy : 35);
+    const stale = WLNAV.lastFixAt && nowMs()-WLNAV.lastFixAt > 12000;
+    const offRouteLimit = clamp(Math.max(55, accuracy*2.25),55,145);
+
+    if (projected.distToRoute > offRouteLimit) return WLNAV.along;
+    if (projected.distAlong < WLNAV.along - Math.max(4,accuracy*.18)) return WLNAV.along;
+    if (stale && projected.distAlong < WLNAV.along + 2) return WLNAV.along;
+
+    WLNAV.lastFixAt = nowMs();
+    return Math.max(WLNAV.along, projected.distAlong);
+  }
+
+  /* One authoritative forward-only marker update. It calls the existing
+     renderer only with a point snapped to detailed route geometry. */
+  if (typeof updateMap3dUser === 'function') {
+    const renderVehicle = updateMap3dUser;
+    updateMap3dUser = function wlFinalVehicle(lat,lng){
+      const next = projectFixForward(lat,lng);
+      syncProgress(next);
+      const snapped = pointAt(WLNAV.along);
+      const h = roadHeading(WLNAV.along);
+      WLNAV.heading = lerpAngle(WLNAV.heading || h, h, .34);
+      WLNAV.renderedAlong = Math.max(WLNAV.renderedAlong, WLNAV.along);
+      try { if (typeof updateTripCompass === 'function') updateTripCompass(WLNAV.heading); } catch(e){}
+      return renderVehicle(snapped ? snapped.lat : lat, snapped ? snapped.lng : lng);
+    };
+  }
+
+  /* Camera: 20–60 m look-ahead, never hundreds of metres, and heading always
+     follows the road even when north-up changes only the map bearing. */
+  setCameraTarget = function wlFinalCamera(lat,lng,bearingDeg,speedMps,metresToTurn){
+    if (!map3d || !map3dReady) return;
+    resetForRoute();
+    const speed = Number.isFinite(speedMps) && speedMps > .4 ? speedMps : 0;
+    const look = speed ? clamp(20 + speed*1.45,20,60) : 20;
+    const car = pointAt(WLNAV.along) || {lat,lng};
+    const ahead = pointAt(Math.min(totalRouteDistance(),WLNAV.along+look)) || car;
+    const road = roadHeading(WLNAV.along);
+    WLNAV.heading = lerpAngle(WLNAV.heading || road,road,.28);
+    const mapBearing = northUp ? 0 : WLNAV.heading;
+    const nearTurn = Number.isFinite(metresToTurn) && metresToTurn < 170;
+    const zoom = nearTurn ? 17.25 : clamp(16.25 + speed*.018,16.25,17.05);
+    const pitch = nearTurn ? 54 : 58;
+    try {
+      map3d.easeTo({
+        center:[ahead.lng,ahead.lat],
+        bearing:mapBearing,
+        pitch, zoom,
+        duration:650,
+        easing:t=>1-Math.pow(1-t,3)
+      });
+    } catch(e){}
+    try { if (typeof updateTripCompass === 'function') updateTripCompass(WLNAV.heading); } catch(e){}
+  };
+
+  /* Lane data must come from routing metadata. No road-name-based fake count. */
+  function laneData(step){
+    if (!step || !Array.isArray(step.intersections)) return null;
+    for (const it of step.intersections) {
+      if (Array.isArray(it.lanes) && it.lanes.length) return it.lanes;
+    }
+    return null;
+  }
+
+  function laneIndication(l){
+    const arr = Array.isArray(l.indications) ? l.indications : [];
+    const s = arr.join(' ').toLowerCase();
+    if (/uturn|u-turn/.test(s)) return '↶';
+    if (/sharp left/.test(s)) return '↰';
+    if (/slight left/.test(s)) return '↖';
+    if (/\bleft\b/.test(s)) return '←';
+    if (/sharp right/.test(s)) return '↱';
+    if (/slight right/.test(s)) return '↗';
+    if (/\bright\b/.test(s)) return '→';
+    if (/merge|fork/.test(s)) return '↗';
+    return '↑';
+  }
+
+  renderLanes = function wlFinalRenderLanes(step, metresToTurn){
+    const host = document.getElementById('laneBar') || document.getElementById('laneGuide');
+    const lanes = laneData(step);
+    const show = lanes && lanes.length && Number.isFinite(metresToTurn) && metresToTurn <= 900;
+    if (host) {
+      host.classList.toggle('hidden',!show);
+      if (show) {
+        host.innerHTML = lanes.map(l => {
+          const preferred = l.active === true;
+          const valid = preferred || l.valid === true;
+          return '<span class="lane '+(preferred?'preferred':valid?'valid':'invalid')+'">'+laneIndication(l)+'</span>';
+        }).join('');
+      } else host.innerHTML = '';
+    }
+    try {
+      if (typeof refreshWorldLanes20 === 'function') {
+        WLNAV.laneSignature = show ? lanes.map(l=>[l.active,l.valid,(l.indications||[]).join(',')].join(':')).join('|') : '';
+        refreshWorldLanes20(true);
+      }
+    } catch(e){}
+  };
+
+  /* Ensure any world-space lane renderer also refuses invented lane counts. */
+  if (typeof laneCount20 === 'function') {
+    laneCount20 = function wlFinalLaneCount(){
+      try {
+        const s = navSteps && navSteps[navStepIndex];
+        const l = laneData(s);
+        return l && l.length ? clamp(l.length,1,8) : 0;
+      } catch(e){ return 0; }
+    };
+  }
+
+  /* Contextual exits: only current/next maneuver, only after current road is
+     confirmed as a highway, and never a future-highway exit at trip start. */
+  function highwayRef(s){
+    const raw = String((typeof currentRoadRef==='function' && currentRoadRef(s)) || s?.ref || s?.name || '');
+    return /(\bI[-\s]?\d+\b|\bUS[-\s]?\d+\b|interstate|freeway|motorway|expressway|turnpike|parkway)/i.test(raw) ? raw : '';
+  }
+  function currentExit(){
+    try {
+      if (!navSteps || !navSteps.length) return null;
+      const cur = navSteps[navStepIndex] || {};
+      if (!highwayRef(cur)) return null;
+      const nxt = navSteps[Math.min(navStepIndex+1,navSteps.length-1)] || {};
+      const m = nxt.maneuver || {};
+      const exit = m.exit || nxt.exit || '';
+      if (!exit) return null;
+      const start = navStepStart && Number.isFinite(navStepStart[navStepIndex+1]) ? navStepStart[navStepIndex+1] : Infinity;
+      const d = start - WLNAV.along;
+      return d >= -20 && d <= 2600 ? {exit:String(exit),step:nxt,distance:d} : null;
+    } catch(e){ return null; }
+  }
+
+  updateCardExit = function wlFinalExitCard(){
+    const info = currentExit();
+    const badge = document.getElementById('exitBadge');
+    const signs = document.getElementById('turnSigns');
+    if (badge) {
+      badge.classList.toggle('hidden',!info);
+      if (info) badge.innerHTML = '<small>EXIT</small> '+String(info.exit).replace(/^exit\s*/i,'');
+    }
+    if (!info && signs) signs.classList.add('hidden');
+    return info;
+  };
+
+  /* Natural MapLibre palette. No canvas filter and no black-on-black blanket. */
+  function paintLayer(id,type,night){
+    try {
+      if (type==='background') map3d.setPaintProperty(id,'background-color',night?'#17222b':'#edf1ed');
+      if (type==='fill') {
+        const lid=id.toLowerCase();
+        if (/water/.test(lid)) map3d.setPaintProperty(id,'fill-color',night?'#173b55':'#86bfe3');
+        else if (/park|grass|wood|landcover|landuse/.test(lid)) map3d.setPaintProperty(id,'fill-color',night?'#213c34':'#cfe4c4');
+      }
+      if (type==='line') {
+        const lid=id.toLowerCase();
+        if (/motorway|trunk/.test(lid)) map3d.setPaintProperty(id,'line-color',night?'#778895':'#ffffff');
+        else if (/primary|secondary|tertiary|road/.test(lid)) map3d.setPaintProperty(id,'line-color',night?'#5f707c':'#f8fafb');
+      }
+      if (type==='symbol') {
+        map3d.setPaintProperty(id,'text-color',night?'#e7eef4':'#27343c');
+        map3d.setPaintProperty(id,'text-halo-color',night?'#17222b':'#f6f8f6');
+        map3d.setPaintProperty(id,'text-halo-width',1.2);
+      }
+    } catch(e){}
+  }
+
+  style3dPalette = function wlFinalPalette(){
+    if (!map3d || !map3dReady) return;
+    const night = !lightMode;
+    try {
+      const canvas = map3d.getCanvas();
+      if (canvas) { canvas.style.filter='none'; canvas.style.background=night?'#17222b':'#edf1ed'; }
+      const layers=(map3d.getStyle()&&map3d.getStyle().layers)||[];
+      layers.forEach(l=>paintLayer(l.id,l.type,night));
+      ['wl-route-casing','wl-route-live','wl-route'].forEach(id=>{
+        if(map3d.getLayer(id)){
+          try { map3d.setPaintProperty(id,'line-opacity',1); } catch(e){}
+        }
+      });
+      if(map3d.getLayer('wl-route-casing')) map3d.setPaintProperty('wl-route-casing','line-width',12);
+      if(map3d.getLayer('wl-route-live')) map3d.setPaintProperty('wl-route-live','line-width',8);
+    } catch(e){}
+  };
+
+  /* Dynamically discover building source-layers; retain provider buildings and
+     add extrusion only when a usable vector source-layer exists. */
+  style3dBuildings = function wlFinalBuildings(){
+    if (!map3d || !map3dReady || !map3d.isStyleLoaded || !map3d.isStyleLoaded()) return;
+    try {
+      const style=map3d.getStyle(), layers=style.layers||[];
+      const candidates=[];
+      layers.forEach(l=>{
+        const sl=String(l['source-layer']||'').toLowerCase();
+        const id=String(l.id||'').toLowerCase();
+        if(l.source && (/building/.test(sl)||/building/.test(id))) candidates.push({source:l.source,sourceLayer:l['source-layer']});
+      });
+      const unique=[];
+      candidates.forEach(c=>{
+        if(c.sourceLayer && !unique.some(x=>x.source===c.source&&x.sourceLayer===c.sourceLayer)) unique.push(c);
+      });
+      unique.slice(0,4).forEach((c,i)=>{
+        const id='wl-final-buildings-'+i;
+        if(map3d.getLayer(id)) return;
+        const before=(layers.find(l=>l.type==='symbol')||{}).id;
+        map3d.addLayer({
+          id,type:'fill-extrusion',source:c.source,'source-layer':c.sourceLayer,
+          minzoom:14,
+          filter:['any',['has','render_height'],['has','height'],['has','building:levels'],['has','building']],
+          paint:{
+            'fill-extrusion-color': lightMode ? '#c8cdd0' : '#59656d',
+            'fill-extrusion-height':['coalesce',['to-number',['get','render_height']],['to-number',['get','height']],['*',['to-number',['get','building:levels']],3],8],
+            'fill-extrusion-base':['coalesce',['to-number',['get','render_min_height']],['to-number',['get','min_height']],0],
+            'fill-extrusion-opacity': lightMode ? .78 : .84
+          }
+        },before);
+      });
+    } catch(e){ console.warn('WayLyn building styling partial',e); }
+  };
+
+  /* Debounced viewport building refresh for existing supplemental Overpass code. */
+  if (map3d && typeof map3d.on === 'function') {
+    const refreshBuildings = () => {
+      clearTimeout(WLNAV.buildingTimer);
+      WLNAV.buildingTimer=setTimeout(()=>{
+        try { style3dBuildings(); } catch(e){}
+        try {
+          if(typeof refreshSupplementalBuildings==='function') refreshSupplementalBuildings();
+          else if(typeof fetch3dBuildings==='function') fetch3dBuildings();
+        } catch(e){}
+      },500);
+    };
+    map3d.on('moveend',refreshBuildings);
+    map3d.on('styledata',refreshBuildings);
+  }
+
+  /* Heading-up is the default. Compass stays in the trip line and toggles mode. */
+  try { northUp = false; } catch(e){}
+  toggleNorthUp = function wlFinalNorthToggle(){
+    try { northUp=!northUp; } catch(e){ return; }
+    const h=WLNAV.heading||roadHeading(WLNAV.along);
+    try {
+      if(map3d&&map3dReady) map3d.easeTo({bearing:northUp?0:h,duration:420});
+      if(typeof updateTripCompass==='function') updateTripCompass(h);
+    } catch(e){}
+  };
+
+  /* Automatic solar theme using Open-Meteo UTC timestamps, avoiding browser-
+     timezone misinterpretation of location-local strings. Manual mode is untouched. */
+  applyAutoTheme = async function wlFinalAutoTheme(){
+    if (themeMode !== 'auto') return;
+    let lat=null,lng=null;
+    try {
+      if (lastFix && Number.isFinite(lastFix.lat)) { lat=lastFix.lat; lng=lastFix.lng; }
+      else if (map && map.getCenter) { const c=map.getCenter(); lat=c.lat; lng=c.lng; }
+    } catch(e){}
+    if (!Number.isFinite(lat)||!Number.isFinite(lng)) return;
+
+    const d=new Date(), dateKey=d.toISOString().slice(0,10);
+    const moved = WLNAV.sun.lat==null ? Infinity :
+      (typeof haversine==='function' ? haversine(WLNAV.sun.lat,WLNAV.sun.lng,lat,lng) : Infinity);
+    const stale = nowMs()-WLNAV.sun.fetched > 6*60*60*1000;
+    if(WLNAV.sun.key!==dateKey || moved>50000 || stale){
+      try{
+        const u='https://api.open-meteo.com/v1/forecast?latitude='+encodeURIComponent(lat)+
+          '&longitude='+encodeURIComponent(lng)+'&daily=sunrise,sunset&timezone=UTC&forecast_days=2';
+        const r=await fetch(u); if(!r.ok) throw new Error('sun '+r.status);
+        const j=await r.json();
+        const rise=j.daily&&j.daily.sunrise&&j.daily.sunrise[0];
+        const set=j.daily&&j.daily.sunset&&j.daily.sunset[0];
+        WLNAV.sun={key:dateKey,lat,lng,sunrise:Date.parse(rise+'Z'),sunset:Date.parse(set+'Z'),fetched:nowMs()};
+      }catch(e){ return; }
+    }
+    const t=nowMs();
+    const shouldLight = !(WLNAV.sun.sunrise && WLNAV.sun.sunset) ? lightMode :
+      (t>=WLNAV.sun.sunrise && t<WLNAV.sun.sunset);
+    if(shouldLight!==lightMode){
+      lightMode=shouldLight;
+      try { if(typeof applyTheme==='function') applyTheme(); } catch(e){}
+    }
+    try { style3dPalette(); style3dBuildings(); } catch(e){}
+  };
+
+  /* UI cleanup and requested labels. */
+  function polishNavUI(){
+    const top=document.getElementById('navTop');
+    if(top) top.style.width='min(90vw,350px)';
+    document.querySelectorAll('#navMode .nav-card').forEach(el=>{
+      el.style.background='rgba(70,78,88,.64)';
+      el.style.backdropFilter='blur(18px)';
+      el.style.webkitBackdropFilter='blur(18px)';
+      el.style.borderColor='rgba(210,225,238,.20)';
+      el.style.color='#f4f8fc';
+    });
+    document.querySelectorAll('#navMode *').forEach(el=>{
+      if(/drive time|driving time/i.test(el.textContent||'') && el.children.length===0)
+        el.textContent=(el.textContent||'').replace(/drive time|driving time/ig,'Time left');
+    });
+    const labels=document.querySelectorAll('#navStats .stat-label,#navStats small,#navStats span');
+    labels.forEach(el=>{
+      if(/distance|miles/i.test(el.textContent||'')) el.textContent='Miles left';
+      if(/duration|drive|time/i.test(el.textContent||'')) el.textContent='Time left';
+    });
+    document.querySelectorAll('#navTopRight button').forEach(b=>{
+      const t=(b.textContent||'').trim();
+      if(/alerts/i.test(t)) b.innerHTML=b.innerHTML.replace(/Alerts/ig,'Report');
+    });
+    const compass=document.getElementById('tripCompass')||document.querySelector('#tripLine .compass');
+    if(compass){ compass.style.color='#5ac8fa'; compass.onclick=(e)=>{e.stopPropagation();toggleNorthUp();}; }
+  }
+
+  setTimeout(()=>{ polishNavUI(); resetForRoute(); if(themeMode==='auto') applyAutoTheme(); },100);
+  setInterval(()=>{ if(themeMode==='auto') applyAutoTheme(); },2*60*1000);
+})();
+</script>
+
+
+
+<style id="wl-r22-poi-lanes-buildings-css">
+/* Bigger, clearer POI markers */
+.wl-poi-chip{
+  width:42px!important;
+  height:42px!important;
+  font-size:22px!important;
+  border-width:3px!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.48)!important;
+}
+.leaflet-marker-icon:has(.wl-poi-chip){
+  width:42px!important;
+  height:42px!important;
+}
+
+/* POI card hero: one business-specific logo/image rather than two satellite tiles */
+.pc-photos{
+  height:172px!important;
+  display:grid!important;
+  place-items:center!important;
+  overflow:hidden!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.07),rgba(77,155,255,.10))!important;
+}
+.pc-photos img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:contain!important;
+  padding:18px!important;
+  box-sizing:border-box!important;
+  background:transparent!important;
+}
+.pc-photos img + img{display:none!important}
+
+/* Lane UI remains guidance; the road itself gets realistic markings in MapLibre. */
+#laneBar .lane,#laneGuide .lane{
+  min-width:34px!important;
+  height:42px!important;
+  border-radius:7px!important;
+}
+</style>
+
+<script>
+/* ======================================================================
+   WAYLYN ROUND 22 — REAL ROAD MARKINGS, BUILDING COVERAGE, POI BRANDING
+   ====================================================================== */
+(() => {
+  'use strict';
+
+  /* ---------------- POI marker scale ---------------- */
+  try {
+    poiChipHtml = function round22PoiChipHtml(emoji,color){
+      return '<div class="wl-poi-chip" style="background:'+color+'">'+emoji+'</div>';
+    };
+    poiIcon = function round22PoiIcon(emoji,color){
+      return L.divIcon({
+        className:'',
+        html:poiChipHtml(emoji,color),
+        iconSize:[42,42],
+        iconAnchor:[21,21]
+      });
+    };
+  } catch(e){}
+
+  /* Business logo helper: uses the POI's published website when available.
+     Fallback mappings cover common chains without introducing an API key. */
+  const BRAND_DOMAINS_22 = [
+    [/dunkin/i,'dunkindonuts.com'],
+    [/starbucks/i,'starbucks.com'],
+    [/mcdonald/i,'mcdonalds.com'],
+    [/burger king/i,'bk.com'],
+    [/wendy'?s/i,'wendys.com'],
+    [/chipotle/i,'chipotle.com'],
+    [/taco bell/i,'tacobell.com'],
+    [/chick[- ]?fil[- ]?a/i,'chick-fil-a.com'],
+    [/subway/i,'subway.com'],
+    [/domino/i,'dominos.com'],
+    [/pizza hut/i,'pizzahut.com'],
+    [/panera/i,'panerabread.com'],
+    [/wawa/i,'wawa.com'],
+    [/quickchek/i,'quickchek.com'],
+    [/7[- ]?eleven/i,'7-eleven.com'],
+    [/shell/i,'shell.com'],
+    [/exxon|mobil/i,'exxon.com'],
+    [/bp\b/i,'bp.com'],
+    [/chevron/i,'chevron.com'],
+    [/costco/i,'costco.com'],
+    [/walmart/i,'walmart.com'],
+    [/target/i,'target.com'],
+    [/walgreens/i,'walgreens.com'],
+    [/cvs/i,'cvs.com'],
+    [/home depot/i,'homedepot.com'],
+    [/lowe'?s/i,'lowes.com']
+  ];
+
+  function domain22(place){
+    const t=place&&place.tags||{};
+    const website=place&&place.website || t.website || t['contact:website'] || '';
+    if(website){
+      try{
+        const u=new URL(/^https?:\/\//i.test(website)?website:'https://'+website);
+        return u.hostname.replace(/^www\./,'');
+      }catch(e){}
+    }
+    const name=String(place&& (place.name||place.label) || '');
+    const hit=BRAND_DOMAINS_22.find(x=>x[0].test(name));
+    return hit ? hit[1] : '';
+  }
+  function businessLogo22(place){
+    const d=domain22(place);
+    return d ? 'https://www.google.com/s2/favicons?domain='+encodeURIComponent(d)+'&sz=256' : '';
+  }
+
+  /* Replace the card's initial two aerial fallback images with a single
+     business-specific logo when possible. Keep a real POI photo if provider
+     data actually supplies one. */
+  try {
+    const oldShowPlaceCard22 = showPlaceCard;
+    showPlaceCard = async function round22ShowPlaceCard(place){
+      await oldShowPlaceCard22(place);
+      if(cardPlace!==place) return;
+      const wrap=document.getElementById('pcPhotos');
+      if(!wrap) return;
+
+      const supplied = place.photos && place.photos.length ? place.photos[0] : '';
+      const logo = businessLogo22(place);
+      if(supplied){
+        wrap.innerHTML='<img src="'+esc(supplied)+'" alt="'+esc((place.name||place.label||'Business')+' photo')+'" loading="lazy">';
+      } else if(logo){
+        wrap.innerHTML='<img src="'+esc(logo)+'" alt="'+esc((place.name||place.label||'Business')+' logo')+'" loading="lazy">';
+      } else {
+        /* No fake satellite pair. Use a clean category/business identity card. */
+        const initial=esc(String(place.name||place.label||'POI').trim().charAt(0).toUpperCase());
+        wrap.innerHTML='<div style="font-family:var(--font-display);font-size:4.4rem;font-weight:750;color:var(--signal);">'+initial+'</div>';
+      }
+    };
+  } catch(e){}
+
+  /* ---------------- realistic lane geometry ---------------- */
+  function laneMeta22(){
+    try{
+      const s=navSteps&&navSteps[navStepIndex];
+      if(!s||!Array.isArray(s.intersections)) return null;
+      for(const i of s.intersections){
+        if(Array.isArray(i.lanes)&&i.lanes.length) return i.lanes;
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function ensureRoadMarkingLayers22(){
+    if(!map3d||!map3dReady||!map3d.getSource('r20-world-lanes')) return false;
+    const before=map3d.getLayer('wl-route-casing')?'wl-route-casing':undefined;
+
+    /* Suppress the old bold blue world-space lane stripe. */
+    if(map3d.getLayer('r20-lane-preferred')){
+      try{
+        map3d.setPaintProperty('r20-lane-preferred','line-opacity',0);
+        map3d.setPaintProperty('r20-lane-preferred','line-width',0.1);
+      }catch(e){}
+    }
+
+    if(!map3d.getLayer('r22-road-edge-lines')){
+      map3d.addLayer({
+        id:'r22-road-edge-lines',
+        type:'line',
+        source:'r20-world-lanes',
+        filter:['==',['get','kind'],'edge'],
+        layout:{'line-join':'round','line-cap':'round'},
+        paint:{
+          'line-color':'#ffffff',
+          'line-width':2.35,
+          'line-opacity':.96
+        }
+      },before);
+    }
+    if(!map3d.getLayer('r22-lane-dashes')){
+      map3d.addLayer({
+        id:'r22-lane-dashes',
+        type:'line',
+        source:'r20-world-lanes',
+        filter:['==',['get','kind'],'divider'],
+        layout:{'line-join':'round','line-cap':'butt'},
+        paint:{
+          'line-color':'#ffffff',
+          'line-width':1.7,
+          'line-dasharray':[4.2,6.2],
+          'line-opacity':.94
+        }
+      },before);
+    }
+    return true;
+  }
+
+  try {
+    const oldRefreshLanes22=refreshWorldLanes20;
+    refreshWorldLanes20=function round22RefreshWorldLanes(force){
+      const lanes=laneMeta22();
+      /* No metadata = no invented lane dividers. */
+      if(!lanes||!lanes.length){
+        try{
+          if(map3d&&map3d.getSource('r20-world-lanes'))
+            map3d.getSource('r20-world-lanes').setData({type:'FeatureCollection',features:[]});
+        }catch(e){}
+        return;
+      }
+      oldRefreshLanes22(force);
+      ensureRoadMarkingLayers22();
+    };
+    add3dLaneRoad=function round22AddLaneRoad(){
+      refreshWorldLanes20(true);
+      ensureRoadMarkingLayers22();
+    };
+  } catch(e){}
+
+  /* ---------------- broader 3D building coverage ---------------- */
+  async function refreshBuildings22(force){
+    if(!map3d||!map3dReady) return;
+    if(map3d.getZoom&&map3d.getZoom()<13.6) return;
+
+    try{ style3dBuildings(); }catch(e){}
+
+    /* Existing vector style remains primary. Supplemental OSM geometry fills
+       gaps around the whole visible navigation area. */
+    const c=map3d.getCenter();
+    const b=map3d.getBounds&&map3d.getBounds();
+    let radius=1700;
+    if(b){
+      try{
+        const ne=b.getNorthEast(), sw=b.getSouthWest();
+        radius=Math.min(3000,Math.max(1500,haversine(
+          {lat:c.lat,lng:c.lng},{lat:ne.lat,lng:ne.lng}
+        )*1.35));
+      }catch(e){}
+    }
+
+    try{
+      const q='[out:json][timeout:18];way["building"](around:'+Math.round(radius)+','+
+        c.lat.toFixed(5)+','+c.lng.toFixed(5)+');out tags geom;';
+      const data=await overpassFast(q);
+      const features=[];
+      (data.elements||[]).forEach(el=>{
+        if(!el.geometry||el.geometry.length<4) return;
+        const ring=el.geometry.map(p=>[p.lon,p.lat]);
+        const f=ring[0],l=ring[ring.length-1];
+        if(f[0]!==l[0]||f[1]!==l[1]) ring.push(f.slice());
+        const tags=el.tags||{};
+        let h=0;
+        try{ h=wlParseHeight(tags); }catch(e){}
+        if(!h||!isFinite(h)){
+          const levels=parseFloat(tags['building:levels']);
+          h=isFinite(levels)?Math.max(3,levels*3.05):6.6;
+        }
+        features.push({
+          type:'Feature',
+          properties:{
+            h:Math.min(350,Math.max(2.8,h)),
+            base:Math.max(0,parseFloat(tags.min_height||tags.render_min_height)||0),
+            kind:tags.building||'yes'
+          },
+          geometry:{type:'Polygon',coordinates:[ring]}
+        });
+      });
+
+      const gj={type:'FeatureCollection',features};
+      if(map3d.getSource('wl-building-supplement')){
+        map3d.getSource('wl-building-supplement').setData(gj);
+      }else{
+        map3d.addSource('wl-building-supplement',{type:'geojson',data:gj});
+      }
+
+      if(!map3d.getLayer('wl-building-supplement-3d')){
+        const layers=(map3d.getStyle().layers||[]);
+        const label=(layers.find(l=>l.type==='symbol'&&l.layout&&l.layout['text-field'])||{}).id;
+        map3d.addLayer({
+          id:'wl-building-supplement-3d',
+          type:'fill-extrusion',
+          source:'wl-building-supplement',
+          minzoom:13.6,
+          paint:{
+            'fill-extrusion-color':lightMode?'#c7cdd1':'#53626c',
+            'fill-extrusion-height':['get','h'],
+            'fill-extrusion-base':['get','base'],
+            'fill-extrusion-opacity':.88
+          }
+        },label);
+      }else{
+        try{
+          map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-color',lightMode?'#c7cdd1':'#53626c');
+          map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-opacity',.88);
+        }catch(e){}
+      }
+    }catch(e){
+      console.warn('Expanded 3D building coverage partial',e);
+      /* Fall back to the prior cached/debounced implementation. */
+      try{ if(typeof refreshSupplementalBuildings==='function') refreshSupplementalBuildings(force); }catch(_){}
+    }
+  }
+
+  let r22BuildingTimer=0;
+  function queueBuildings22(force){
+    clearTimeout(r22BuildingTimer);
+    r22BuildingTimer=setTimeout(()=>refreshBuildings22(force),force?80:550);
+  }
+
+  try{
+    if(map3d&&map3d.on){
+      map3d.on('load',()=>queueBuildings22(true));
+      map3d.on('moveend',()=>queueBuildings22(false));
+      map3d.on('zoomend',()=>queueBuildings22(false));
+      map3d.on('styledata',()=>queueBuildings22(false));
+    }
+  }catch(e){}
+
+  /* Hook route setup so lane lines and buildings are refreshed as navigation starts. */
+  try{
+    const baseSetup22=setup3dRoute;
+    setup3dRoute=function round22Setup3dRoute(){
+      const r=baseSetup22.apply(this,arguments);
+      setTimeout(()=>{try{add3dLaneRoad();}catch(e){} queueBuildings22(true);},120);
+      return r;
+    };
+  }catch(e){}
+})();
+</script>
+
+
+<style id="wl-r23-final-poi-performance">
+.pc-photos{height:190px!important;background:rgba(16,23,31,.92)!important}
+.pc-photos img{width:100%!important;height:100%!important;object-fit:cover!important;padding:0!important}
+.pc-photos .wl-brand-fallback{width:100%;height:100%;display:grid;place-items:center;padding:26px;box-sizing:border-box}
+.pc-photos .wl-brand-fallback img{max-width:72%;max-height:72%;object-fit:contain!important;padding:0!important}
+.wl-poi-brand,.wl-poi-chip{width:44px!important;height:44px!important;min-width:44px!important;min-height:44px!important}
+.wl-poi-brand img{width:100%!important;height:100%!important;object-fit:contain!important}
+</style>
+<script>
+/* WAYLYN ROUND 23 — FINAL POI PERFORMANCE + REAL BUSINESS MEDIA */
+(()=>{'use strict';
+  const R23_TTL=20*60*1000, R23_MEM=new Map(), R23_PENDING=new Map();
+  const R23_KEYS=['food','fastfood','gas','ev','hospital','services','events','parking','safety'];
+
+  function anchor23(){
+    try{return wlPoiCacheAnchor()||livePosition||map.getCenter();}catch(e){return livePosition||null;}
+  }
+  function cell23(a){return a?(Math.round(a.lat*160)/160)+':'+(Math.round(a.lng*160)/160):'none';}
+  function cacheKey23(k,a){return 'wl-poi-r23:'+k+':'+cell23(a);}
+  function read23(k,a){
+    const mk=cacheKey23(k,a), m=R23_MEM.get(mk); if(m&&Date.now()-m.at<R23_TTL)return m.items;
+    try{const x=JSON.parse(localStorage.getItem(mk)||'null');if(x&&x.items&&Date.now()-x.at<R23_TTL){R23_MEM.set(mk,x);return x.items;}}catch(e){}
+    return null;
+  }
+  function write23(k,a,items){if(!items||!items.length)return;const row={at:Date.now(),items:items.slice(0,80)};R23_MEM.set(cacheKey23(k,a),row);try{localStorage.setItem(cacheKey23(k,a),JSON.stringify(row));}catch(e){}}
+
+  /* One Overpass request warms every major category around the user instead of
+     waiting for a separate network request after each button tap. */
+  async function warmAll23(force){
+    const a=anchor23(); if(!a)return;
+    const ck='ALL:'+cell23(a); if(!force&&R23_PENDING.has(ck))return R23_PENDING.get(ck);
+    const already=R23_KEYS.every(k=>read23(k,a)); if(already&&!force)return;
+    const filters=R23_KEYS.map(k=>POI[k]&&POI[k].filter).filter(Boolean);
+    const radius=Math.min(18000,Math.max(6500,Math.round((poiRadiusMi||5)*1609.34)));
+    const q='[out:json][timeout:5];('+filters.map(f=>'nwr'+f+'(around:'+radius+','+a.lat.toFixed(4)+','+a.lng.toFixed(4)+');').join('')+');out center 500;';
+    const job=(async()=>{
+      try{
+        const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('poi warm timeout')),1450));
+        const d=await Promise.race([overpassFast(q),timeout]);
+        const buckets={};R23_KEYS.forEach(k=>buckets[k]=[]);
+        (d.elements||[]).forEach(el=>{
+          const lat=el.lat!=null?el.lat:el.center&&el.center.lat, lng=el.lon!=null?el.lon:el.center&&el.center.lon;
+          if(lat==null||lng==null)return; const tags=el.tags||{};
+          R23_KEYS.forEach(k=>{const c=POI[k];if(!c)return;
+            /* Reuse app categorization by matching the most important tag families. */
+            const v=[tags.amenity,tags.highway,tags.tourism,tags.leisure,tags.shop,tags.enforcement,tags['camera:type']].filter(Boolean).join('|');
+            let ok=false;
+            if(k==='services')ok=/services|rest_area|toilets|shower|drinking_water|picnic_site/.test(v);
+            else if(k==='food')ok=/restaurant|cafe|pub|bar|fast_food/.test(v);
+            else if(k==='fastfood')ok=/fast_food/.test(v);
+            else if(k==='gas')ok=/fuel/.test(v);
+            else if(k==='ev')ok=/charging_station/.test(v);
+            else if(k==='hospital')ok=/hospital|clinic|doctors|pharmacy/.test(v);
+            else if(k==='parking')ok=/parking/.test(v);
+            else if(k==='events')ok=/theatre|cinema|arts_centre|community_centre|events_venue|stadium|sports_centre|attraction/.test(v);
+            else if(k==='safety')ok=/speed_camera|maxspeed|traffic_signals|redlight|fixed/.test(v);
+            if(ok)buckets[k].push({id:el.type+el.id,lat,lng,tags,metersFromMe:haversine(a,{lat,lng})});
+          });
+        });
+        R23_KEYS.forEach(k=>{if(buckets[k].length){buckets[k].sort((x,y)=>x.metersFromMe-y.metersFromMe);write23(k,a,buckets[k]);try{wlWritePoiCache(k,buckets[k]);}catch(e){}}});
+      }catch(e){} finally{R23_PENDING.delete(ck);}
+    })(); R23_PENDING.set(ck,job); return job;
+  }
+
+  const searchBase23=searchPoi;
+  searchPoi=async function finalFastPoi23(key){
+    const a=anchor23();
+    const instant=read23(key,a)||(()=>{try{return wlReadPoiCache(key)}catch(e){return null}})();
+    if(instant&&instant.length){warmAll23(false);return instant;}
+    /* Start the combined warm and the existing provider search simultaneously.
+       Return whichever useful result arrives first, capped at ~1.8s. */
+    warmAll23(true);
+    const base=searchBase23(key).catch(()=>[]);
+    const quick=new Promise(resolve=>setTimeout(()=>resolve(read23(key,a)||[]),900));
+    let items=await Promise.race([base,quick]);
+    if(!items||!items.length){items=await Promise.race([base,new Promise(r=>setTimeout(()=>r(read23(key,a)||[]),850))]);}
+    if(items&&items.length){write23(key,a,items);return items;}
+    /* Do not freeze the UI on a slow free-data mirror. */
+    return [];
+  };
+
+  /* Begin warming immediately and whenever the user changes area. */
+  setTimeout(()=>warmAll23(true),40);
+  setInterval(()=>warmAll23(false),12000);
+  try{map.on('moveend',()=>warmAll23(false));}catch(e){}
+
+  function logo23(place){
+    try{return businessLogo22(place)}catch(e){return ''}
+  }
+  async function googleMedia23(place){
+    if(!GOOGLE_PLACES_KEY)return '';
+    const name=String(place.name||place.label||'').trim(); if(!name)return '';
+    try{
+      const ctrl=new AbortController(); const timer=setTimeout(()=>ctrl.abort(),1300);
+      const res=await fetch(GOOGLE_PLACES_BASE+'/places:searchText',{method:'POST',signal:ctrl.signal,headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_PLACES_KEY,'X-Goog-FieldMask':'places.id,places.photos,places.displayName,places.websiteUri'},body:JSON.stringify({textQuery:name,maxResultCount:1,locationBias:{circle:{center:{latitude:place.lat,longitude:place.lng},radius:1200}}})});
+      clearTimeout(timer); if(!res.ok)return '';
+      const d=await res.json(), p=d.places&&d.places[0];
+      if(p&&p.photos&&p.photos[0]&&p.photos[0].name)return GOOGLE_PLACES_BASE+'/'+p.photos[0].name+'/media?maxWidthPx=720&skipHttpRedirect=true&key='+GOOGLE_PLACES_KEY;
+    }catch(e){} return '';
+  }
+
+  /* Fully synchronous card shell: NEVER create aerial/satellite thumbnails.
+     Business media enriches afterward without blocking the card or ETA. */
+  showPlaceCard=function finalPlaceCard23(place){
+    cardPlace=place; const t=place.tags||{}, name=place.name||place.label||'Place';
+    let rating=place.rating!=null?place.rating:(t.stars?parseFloat(t.stars):null);if(!isFinite(rating))rating=null;
+    const phone=place.phone||t.phone||t['contact:phone']; const site=place.website||t.website||t['contact:website'];
+    const hoursRaw=place.hoursText?place.hoursText.join(' · '):(t.opening_hours||null); const open=place.openNow!=null?place.openNow:parseOpenNow(t.opening_hours);
+    const realPhoto=(place.photos&&place.photos[0])||place.googlePhoto||''; const lg=logo23(place);
+    const hero=realPhoto?'<img src="'+esc(realPhoto)+'" alt="'+esc(name)+'" decoding="async">':lg?'<div class="wl-brand-fallback"><img src="'+esc(lg)+'" alt="'+esc(name)+' logo" decoding="async"></div>':'<div class="wl-brand-fallback" style="font-size:4rem;font-weight:800;color:var(--signal)">'+esc(name.charAt(0).toUpperCase())+'</div>';
+    const starStr=rating?'★'.repeat(Math.round(rating))+'☆'.repeat(Math.max(0,5-Math.round(rating))):'';
+    elCard.innerHTML='<button class="pc-close" id="pcClose" type="button" aria-label="Close">✕</button><div class="pc-photos" id="pcPhotos">'+hero+'</div><div class="pc-body"><div class="pc-name">'+esc(name)+'</div><div class="pc-meta">'+(rating?'<span class="pc-stars num">'+rating.toFixed(1)+' '+starStr+'</span>':'')+'<span class="pc-chip">'+esc(titleCase(place.category||'Place'))+'</span>'+(open===true?'<span class="pc-open is-open">Open now</span>':open===false?'<span class="pc-open is-closed">Closed now</span>':'')+'</div><div class="pc-rows">'+(place.address?'<div class="pc-row"><span class="k">📍</span><span>'+esc(place.address)+'</span></div>':'')+(hoursRaw?'<div class="pc-row"><span class="k">🕑</span><span>'+esc(hoursRaw)+'</span></div>':'')+(phone?'<div class="pc-row"><span class="k">📞</span><a href="tel:'+esc(phone)+'">'+esc(phone)+'</a></div>':'')+(site?'<div class="pc-row"><span class="k">🔗</span><a href="'+esc(site)+'" target="_blank" rel="noopener">Website</a></div>':'')+'</div><div class="pc-eta" id="pcEta"><b class="num">'+toMiles(haversine(livePosition||map.getCenter(),place)).toFixed(1)+' mi</b><span>distance · calculating drive time…</span></div><div class="pc-actions"><button class="pc-btn primary" id="pcGo" type="button">🧭 Directions</button><button class="pc-btn" id="pcStop" type="button">🚩 Add stop</button>'+(phone?'<a class="pc-btn" href="tel:'+esc(phone)+'">📞 Call</a>':'')+'<button class="pc-btn" id="pcSave" type="button">⭐ Save</button></div><div class="pc-src">'+(place.source==='google'?'Business details from Google Places.':'Place data from OpenStreetMap contributors.')+'</div></div>';
+    elCard.classList.add('show');
+    $('pcClose').onclick=hidePlaceCard; $('pcGo').onclick=()=>{hidePlaceCard();routeTo(place)}; $('pcStop').onclick=()=>{hidePlaceCard();addStopSmart(place,0)}; $('pcSave').onclick=()=>toggleFavorite(place.lat,place.lng,name);
+
+    /* If the POI did not already include a real photo, fetch one quickly.
+       A logo remains visible while it loads; satellite imagery is never used. */
+    if(!realPhoto) googleMedia23(place).then(url=>{if(!url||cardPlace!==place)return;const w=$('pcPhotos');if(w)w.innerHTML='<img src="'+esc(url)+'" alt="'+esc(name)+' photo" decoding="async">';});
+    wikiPhoto(place).then(url=>{if(!url||cardPlace!==place)return;const w=$('pcPhotos');if(w&&!w.querySelector('img[alt$=" photo"]'))w.innerHTML='<img src="'+esc(url)+'" alt="'+esc(name)+' photo" decoding="async">';});
+
+    /* ETA is background work and never delays opening the card. */
+    (async()=>{try{const from=await resolveOrigin(),rs=await fetchRoutes([from,place],modeSelect.value,false);if(cardPlace!==place)return;const mult=trafficMultiplierFor(estimateTraffic(rs[0].coords,0)),el=$('pcEta');if(el)el.innerHTML='<b class="num">'+fmtDuration(rs[0].duration*mult)+'</b><span>'+toMiles(rs[0].distance).toFixed(1)+' mi · arrive '+fmtClock(Date.now()+rs[0].duration*mult*1000)+'</span>';}catch(e){}})();
+  };
+
+  /* Make all rendered POIs larger, including cached/restroom markers. */
+  try{
+    const drawBase23=drawPoi;
+    drawPoi=function finalDrawPoi23(key,items){drawBase23(key,items);setTimeout(()=>{try{const layer=poiLayers[key];if(!layer)return;layer.eachLayer(m=>{if(m.setIcon&&m.options&&m.options.icon){const old=m.options.icon,html=old.options&&old.options.html;if(html)m.setIcon(L.divIcon({className:'',html,iconSize:[44,44],iconAnchor:[22,22]}));}})}catch(e){}},0)};
+  }catch(e){}
+})();
+</script>
+
+<
+<style id="wl-final-poi-click-ui-css">
+/* FINAL POI CLICK EXPERIENCE — route-only, logo-first, no satellite photo card */
+#poiRange{display:none!important}
+.wl-nav-poi-marker{display:flex;align-items:center;gap:8px;pointer-events:auto;cursor:pointer;filter:drop-shadow(0 4px 10px rgba(0,0,0,.34));}
+.wl-nav-poi-marker .wl-poi-brand{width:46px!important;height:46px!important;border-radius:50%!important;border:2px solid rgba(255,255,255,.94)!important;background:#fff!important;box-shadow:0 2px 9px rgba(0,0,0,.36)!important}
+.wl-nav-poi-marker .wl-poi-brand img{width:80%!important;height:80%!important;object-fit:contain!important}
+.wl-nav-poi-marker .wl-brand-fallback{font-size:12px!important;border-radius:50%}
+.wl-nav-poi-caption{display:flex;flex-direction:column;min-width:0;padding:6px 10px;border-radius:10px;background:rgba(9,14,20,.88);border:1px solid rgba(255,255,255,.15);backdrop-filter:blur(10px);color:#fff;line-height:1.08;white-space:nowrap;max-width:180px}
+.wl-nav-poi-caption b{font-size:13px;overflow:hidden;text-overflow:ellipsis}
+.wl-nav-poi-caption span{font-size:11px;color:#d2d8df;margin-top:4px}
+.wl-poi-category-logo{width:132px;height:132px;border-radius:50%;display:grid;place-items:center;margin:6px auto 18px;background:linear-gradient(145deg,#162231,#0a0f16);border:3px solid rgba(255,255,255,.88);box-shadow:0 10px 32px rgba(0,0,0,.38);font-family:var(--font-display);font-weight:900;font-size:40px;color:#fff;letter-spacing:-.05em;text-align:center;padding:12px;box-sizing:border-box}
+.wl-poi-detail-logo{width:148px;height:148px;border-radius:50%;display:grid;place-items:center;margin:10px auto 22px;background:#fff;border:3px solid rgba(255,255,255,.9);box-shadow:0 12px 34px rgba(0,0,0,.42);overflow:hidden}
+.wl-poi-detail-logo img{width:82%;height:82%;object-fit:contain;display:block}
+.wl-poi-detail-name{font-family:var(--font-display);font-size:1.7rem;font-weight:780;color:var(--text-bright);line-height:1.08;padding-right:44px}
+.wl-poi-detail-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px}
+.wl-poi-detail-panel .pc-body{padding:22px 26px 26px!important}
+.wl-poi-detail-panel .pc-close{top:18px!important;right:18px!important;width:44px!important;height:44px!important;font-size:1.4rem!important;background:rgba(35,42,51,.88)!important}
+.wl-poi-detail-panel .pc-rows{font-size:1.03rem!important;gap:15px!important;margin-top:8px!important}
+.wl-poi-detail-panel .pc-row{gap:12px!important;align-items:center!important}
+.wl-poi-detail-panel .pc-row .k{font-size:1.08rem;width:22px!important}
+.wl-poi-detail-panel .pc-actions{gap:10px!important;margin-top:22px!important;flex-wrap:nowrap!important}
+.wl-poi-detail-panel .pc-btn{height:54px!important;border-radius:9px!important;min-width:0!important;font-size:1rem!important;padding:0 16px!important}
+.wl-poi-detail-panel .pc-btn.primary{flex:1.4 1 0!important}
+.wl-poi-about{margin-top:22px;padding-top:18px;border-top:1px solid var(--line-soft)}
+.wl-poi-about b{font-family:var(--font-display);font-size:1.05rem;color:var(--text-bright)}
+.wl-poi-about p{margin:8px 0 0;color:var(--text-dim);line-height:1.55;font-size:.96rem}
+body.navigating #placeCard.wl-poi-detail-panel{left:auto!important;right:18px!important;top:18px!important;bottom:18px!important;width:min(44vw,520px)!important;max-height:none!important;border-radius:22px!important;background:rgba(8,13,19,.96)!important;border:1px solid rgba(255,255,255,.10)!important;box-shadow:0 22px 55px rgba(0,0,0,.48)!important;backdrop-filter:blur(22px)!important;transform:none!important;z-index:9800!important}
+body.navigating.light-mode #placeCard.wl-poi-detail-panel{background:rgba(242,246,249,.97)!important}
+@media(max-width:760px){
+  body.navigating #placeCard.wl-poi-detail-panel{left:10px!important;right:10px!important;top:auto!important;bottom:10px!important;width:auto!important;max-height:72vh!important;border-radius:18px!important}
+  .wl-poi-detail-logo{width:104px;height:104px;margin-bottom:14px}.wl-poi-detail-panel .pc-body{padding:18px!important}.wl-poi-detail-panel .pc-actions{flex-wrap:wrap!important}.wl-poi-detail-panel .pc-btn{flex:1 1 44%!important}
+}
+</style>
+<script id="wl-final-poi-click-ui-js">
+(() => {
+  'use strict';
+  const ROUTE_POI_MAX_OFF_M = 1609.344;
+  const ROUTE_POI_BACK_TOLERANCE_M = 220;
+  const BRAND_DOMAINS_FINAL = [
+    [/dunkin/i,'dunkindonuts.com'],[/starbucks/i,'starbucks.com'],[/mcdonald/i,'mcdonalds.com'],
+    [/burger king/i,'bk.com'],[/wendy'?s/i,'wendys.com'],[/chipotle/i,'chipotle.com'],[/taco bell/i,'tacobell.com'],
+    [/chick[- ]?fil[- ]?a/i,'chick-fil-a.com'],[/subway/i,'subway.com'],[/domino/i,'dominos.com'],
+    [/pizza hut/i,'pizzahut.com'],[/panera/i,'panerabread.com'],[/wawa/i,'wawa.com'],[/quickchek/i,'quickchek.com'],
+    [/7[- ]?eleven/i,'7-eleven.com'],[/shell/i,'shell.com'],[/exxon|mobil/i,'exxon.com'],[/bp\b/i,'bp.com'],
+    [/chevron/i,'chevron.com'],[/costco/i,'costco.com'],[/walmart/i,'walmart.com'],[/target/i,'target.com'],
+    [/walgreens/i,'walgreens.com'],[/cvs/i,'cvs.com'],[/home depot/i,'homedepot.com'],[/lowe'?s/i,'lowes.com']
+  ];
+
+  try { poiRadiusMi = 1; } catch(e) {}
+  window.syncPoiRange = function () {};
+
+  function activeRouteProjection(el){
+    try{
+      const r=allRoutes&&allRoutes[activeRouteIndex];
+      if(!r||!r.coords||r.coords.length<2)return null;
+      const cum=cumulative(r.coords);
+      const p=projectOnRoute(r.coords,cum,{lat:+el.lat,lng:+el.lng});
+      return {off:p.distToRoute,along:p.distAlong,total:cum[cum.length-1]||0};
+    }catch(e){return null}
+  }
+  function currentAlong(){
+    const vals=[];
+    try{ if(Number.isFinite(navDistAlong)) vals.push(navDistAlong); }catch(e){}
+    try{ if(Number.isFinite(window.WLNAV_FINAL&&window.WLNAV_FINAL.along)) vals.push(window.WLNAV_FINAL.along); }catch(e){}
+    return vals.length?Math.max.apply(null,vals):0;
+  }
+  function routeRelevant(items){
+    const list=Array.isArray(items)?items:[];
+    const hasRoute=!!(allRoutes&&allRoutes.length);
+    const anchor=livePosition || (map&&map.getCenter ? map.getCenter():null);
+    const from=navActive&&navActive()?currentAlong():0;
+    return list.filter(el=>{
+      if(!el||!Number.isFinite(+el.lat)||!Number.isFinite(+el.lng))return false;
+      if(hasRoute){
+        const p=activeRouteProjection(el); if(!p)return false;
+        el.routeOffMeters=p.off; el.routeAlongMeters=p.along; el.mileAlong=toMiles(p.along);
+        el.routeMilesAhead=Math.max(0,toMiles(p.along-from));
+        return p.off<=ROUTE_POI_MAX_OFF_M && p.along>=from-ROUTE_POI_BACK_TOLERANCE_M && p.along<=p.total+30;
+      }
+      if(anchor){ el.metersFromMe=haversine(anchor,el); return el.metersFromMe<=ROUTE_POI_MAX_OFF_M; }
+      return false;
+    }).sort((a,b)=>{
+      if(hasRoute) return (a.routeAlongMeters||0)-(b.routeAlongMeters||0) || (a.routeOffMeters||0)-(b.routeOffMeters||0);
+      return (a.metersFromMe||0)-(b.metersFromMe||0);
+    });
+  }
+
+  const baseSearchPoiFinal = typeof searchPoi==='function' ? searchPoi : null;
+  if(baseSearchPoiFinal){
+    searchPoi=async function finalRoutePoiSearch(key){
+      try{ poiRadiusMi=1; }catch(e){}
+      return routeRelevant(await baseSearchPoiFinal(key));
+    };
+  }
+
+  function safeSite(u){
+    if(!u)return '';
+    try{let s=String(u).trim();if(!/^https?:\/\//i.test(s))s='https://'+s;const x=new URL(s);return /^https?:$/.test(x.protocol)?x.href:''}catch(e){return ''}
+  }
+  function siteFor(place){
+    const t=place&&place.tags||{};
+    return safeSite(place&&place.website || t.website || t['contact:website'] || '');
+  }
+  function brandDomain(place){
+    const site=siteFor(place); if(site){try{return new URL(site).hostname.replace(/^www\./,'')}catch(e){}}
+    const name=String(place&&(place.name||place.label)||''); const hit=BRAND_DOMAINS_FINAL.find(x=>x[0].test(name));
+    return hit?hit[1]:'';
+  }
+  function logoFor(place){
+    if(place&&place.brandLogo)return place.brandLogo;
+    const d=brandDomain(place); return d?'https://www.google.com/s2/favicons?domain='+encodeURIComponent(d)+'&sz=256':'';
+  }
+  function initialsFinal(name){
+    const a=String(name||'POI').trim().split(/\s+/).filter(Boolean).slice(0,2);return (a.map(x=>x[0]).join('')||'POI').toUpperCase();
+  }
+  function fallbackLogoHtml(place){
+    return '<div class="wl-poi-category-logo" aria-label="'+esc((place.name||place.label||'POI')+' icon')+'">'+esc(initialsFinal(place.name||place.label))+'</div>';
+  }
+  function detailLogoHtml(place){
+    const logo=logoFor(place);
+    return logo?'<div class="wl-poi-detail-logo"><img src="'+esc(logo)+'" alt="'+esc((place.name||place.label||'Business')+' logo')+'" referrerpolicy="no-referrer" onerror="this.parentElement.outerHTML=\''+fallbackLogoHtml(place).replace(/'/g,'&#39;')+'\'"></div>':fallbackLogoHtml(place);
+  }
+  function markerVisual(place,key,el){
+    const cfg=POI[key], color=cssVar(cfg.color,'#777');
+    let visual='';
+    try{ if(typeof visualHtml==='function') visual=visualHtml(el,cfg,color,46); }catch(e){}
+    if(!visual){
+      const logo=logoFor(place);
+      visual=logo?'<span class="wl-poi-brand has-logo"><img src="'+esc(logo)+'" alt="" referrerpolicy="no-referrer"><span class="wl-brand-fallback">'+esc(initialsFinal(place.name))+'</span></span>':'<span class="wl-poi-brand"><span class="wl-brand-fallback">'+esc(initialsFinal(place.name))+'</span></span>';
+    }
+    const dist=(el.routeMilesAhead!=null?el.routeMilesAhead:(el.metersFromMe!=null?toMiles(el.metersFromMe):null));
+    const distance=dist==null?'':(dist<0.1?'<0.1 mi':dist.toFixed(1)+' mi');
+    return '<div class="wl-nav-poi-marker">'+visual+'<span class="wl-nav-poi-caption"><b>'+esc(place.name||place.label)+'</b><span>'+distance+'</span></span></div>';
+  }
+
+  async function enrichGoogle(place){
+    const el=place&&place._brandEl; if(!el||!GOOGLE_PLACES_KEY||!String(el.id||'').startsWith('google:'))return place;
+    if(el.__detailLoaded)return place; el.__detailLoaded=true;
+    try{
+      const id=String(el.id).slice(7);
+      const res=await fetch(GOOGLE_PLACES_BASE+'/places/'+encodeURIComponent(id),{headers:{
+        'X-Goog-Api-Key':GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask':'id,displayName,formattedAddress,primaryTypeDisplayName,currentOpeningHours,regularOpeningHours,nationalPhoneNumber,websiteUri,rating,userRatingCount'
+      }});
+      if(!res.ok)return place; const d=await res.json();
+      place.address=d.formattedAddress||place.address||'';
+      place.phone=d.nationalPhoneNumber||place.phone||'';
+      place.website=safeSite(d.websiteUri)||place.website||'';
+      place.rating=d.rating||place.rating; place.ratingCount=d.userRatingCount||place.ratingCount;
+      place.category=d.primaryTypeDisplayName&&d.primaryTypeDisplayName.text||place.category;
+      const h=d.currentOpeningHours||d.regularOpeningHours;
+      if(h){place.openNow=h.openNow;place.hoursText=h.weekdayDescriptions||place.hoursText;}
+    }catch(e){}
+    return place;
+  }
+
+  function aboutText(place){
+    const t=place.tags||{};
+    return t.description || t['description:en'] || t.note || '';
+  }
+  async function finalShowPlaceCard(place){
+    cardPlace=place;
+    await enrichGoogle(place);
+    if(cardPlace!==place)return;
+    const t=place.tags||{};
+    const hoursRaw=place.hoursText&&place.hoursText.length?place.hoursText.join(' · '):(t.opening_hours||'');
+    const open=place.openNow!=null?place.openNow:parseOpenNow(t.opening_hours);
+    const phone=place.phone||t.phone||t['contact:phone']||'';
+    const site=siteFor(place);
+    const cat=titleCase(place.category||place.label||'Place');
+    const about=aboutText(place);
+    elCard.className='show wl-poi-detail-panel';
+    elCard.innerHTML=
+      '<button class="pc-close" id="pcClose" type="button" aria-label="Close">✕</button>'+
+      '<div class="pc-body">'+
+        '<div class="wl-poi-detail-name">'+esc(place.name||place.label)+'</div>'+
+        '<div class="wl-poi-detail-meta"><span class="pc-chip">'+esc(cat)+'</span>'+
+          (open===true?'<span class="pc-open is-open">Open now</span>':open===false?'<span class="pc-open is-closed">Closed now</span>':'')+'</div>'+
+        detailLogoHtml(place)+
+        '<div class="pc-rows">'+
+          (place.address?'<div class="pc-row"><span class="k">📍</span><span>'+esc(place.address)+'</span></div>':'')+
+          (hoursRaw?'<div class="pc-row"><span class="k">◷</span><span>'+esc(hoursRaw)+'</span></div>':'')+
+          (site?'<div class="pc-row"><span class="k">🔗</span><a href="'+esc(site)+'" target="_blank" rel="noopener">Website</a></div>':'')+
+        '</div>'+
+        '<div class="pc-actions">'+
+          '<button class="pc-btn primary" id="pcGo" type="button">➤ Directions</button>'+
+          (phone?'<a class="pc-btn" href="tel:'+esc(phone)+'">☎ Call</a>':'')+
+          '<button class="pc-btn" id="pcSave" type="button">♡ Save</button>'+
+        '</div>'+
+        '<div class="wl-poi-about"><b>About</b><p>'+esc(about||('Details for '+(place.name||place.label||'this place')+'.'))+'</p></div>'+
+      '</div>';
+    $('pcClose').addEventListener('click',hidePlaceCard);
+    $('pcGo').addEventListener('click',()=>{hidePlaceCard();routeTo(place)});
+    $('pcSave').addEventListener('click',()=>toggleFavorite(place.lat,place.lng,place.name||place.label));
+  }
+  showPlaceCard=finalShowPlaceCard;
+
+  drawPoi=function finalDrawPoi(key,rawItems){
+    clearPoi(key);
+    const items=routeRelevant(rawItems);
+    if(poiState[key])poiState[key].items=items;
+    const layer=L.layerGroup().addTo(map);poiLayers[key]=layer;poi3d[key]=[];
+    items.forEach(el=>{
+      const place=poiToPlace(key,el); place._brandEl=place._brandEl||el;place._brandKey=key;
+      const html=markerVisual(place,key,el);
+      const icon=L.divIcon({className:'',html:html,iconSize:[220,50],iconAnchor:[23,25]});
+      const lm=L.marker([el.lat,el.lng],{icon}).addTo(layer);
+      lm.on('click',ev=>{try{if(ev.originalEvent)L.DomEvent.stopPropagation(ev.originalEvent)}catch(e){};showPlaceCard(place)});
+      if(map3d&&map3dReady&&typeof maplibregl!=='undefined'){
+        const wrap=document.createElement('div');wrap.innerHTML=html;const node=wrap.firstElementChild;
+        const mm=new maplibregl.Marker({element:node,anchor:'left'}).setLngLat([el.lng,el.lat]).addTo(map3d);
+        node.addEventListener('click',ev=>{ev.stopPropagation();showPlaceCard(place)});
+        (poi3d[key]=poi3d[key]||[]).push(mm);
+      }
+    });
+  };
+
+  const baseRenderPoiPanelFinal=typeof renderPoiPanel==='function'?renderPoiPanel:null;
+  if(baseRenderPoiPanelFinal){
+    renderPoiPanel=function finalRenderPoiPanel(key,items){
+      const relevant=routeRelevant(items);
+      baseRenderPoiPanelFinal(key,relevant);
+      const panel=$('poiPanel');
+      if(panel)panel.querySelectorAll('[data-open]').forEach(node=>{
+        const clone=node.cloneNode(true);node.replaceWith(clone);
+        clone.addEventListener('click',()=>{const item=relevant[parseInt(clone.dataset.open,10)];if(item)showPlaceCard(poiToPlace(key,item));});
+      });
+    };
+  }
+
+  setTimeout(()=>{try{poiRadiusMi=1;refreshAllPoiLayers()}catch(e){}},900);
+})();
+</script>
+
+/body>
+
+<script id="wl-dynamic-trip-poi-corridor">
+/* WAYLYN — ADAPTIVE TRIP-LENGTH POI CORRIDOR
+   Keeps POIs moving with the vehicle. The search window scales with total trip
+   length, follows only the remaining route, and re-queries as route progress
+   advances instead of staying tied to the first nearby radius. */
+(() => {
+  'use strict';
+
+  const WL_DYN_MAX_OFF_M = 1609.344;       // 1.0 mile maximum off active route
+  const WL_DYN_BACK_M = 180;               // tiny tolerance for GPS/route projection jitter
+  const WL_DYN_MIN_REFRESH_MOVE_M = 1000;  // refresh after about 0.62 mi of forward progress
+  const WL_DYN_MAX_REFRESH_AGE_MS = 30000; // or at least every 30 s while moving
+  const WL_DYN_QUERY_TTL_MS = 25000;
+  const WL_DYN_CACHE = new Map();
+  let wlDynLastAlong = -Infinity;
+  let wlDynLastRefreshAt = 0;
+  let wlDynBusy = false;
+
+  const previousSearchPoi = (typeof searchPoi === 'function') ? searchPoi : null;
+
+  function wlDynRouteInfo() {
+    try {
+      const r = allRoutes && allRoutes[activeRouteIndex];
+      if (!r || !Array.isArray(r.coords) || r.coords.length < 2) return null;
+      const cum = cumulative(r.coords);
+      const total = +cum[cum.length - 1] || 0;
+      let along = 0;
+      try { if (Number.isFinite(navDistAlong)) along = Math.max(along, navDistAlong); } catch (e) {}
+      try {
+        if (window.WLNAV_FINAL && Number.isFinite(window.WLNAV_FINAL.along)) {
+          along = Math.max(along, window.WLNAV_FINAL.along);
+        }
+      } catch (e) {}
+      along = Math.max(0, Math.min(along, total));
+      return { route:r, cum, total, along, remaining:Math.max(0, total - along) };
+    } catch (e) { return null; }
+  }
+
+  function wlDynLookaheadM(info) {
+    if (!info) return 0;
+    const totalMi = info.total / 1609.344;
+    const remainingMi = info.remaining / 1609.344;
+    // Short trips can see essentially the rest of the trip. Longer trips use a
+    // larger rolling horizon so POIs keep appearing without loading the whole
+    // country at once. 20 mi trip ≈ 8.4 mi ahead, 100 mi ≈ 18 mi, 200+ ≈ 30 mi.
+    const adaptiveMi = Math.max(7, Math.min(30, 6 + totalMi * 0.12));
+    return Math.min(info.remaining, Math.min(remainingMi, adaptiveMi) * 1609.344);
+  }
+
+  function wlDynPointAt(info, target) {
+    target = Math.max(0, Math.min(target, info.total));
+    let lo = 0, hi = info.cum.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (info.cum[mid] < target) lo = mid + 1; else hi = mid;
+    }
+    const i = Math.max(0, Math.min(lo, info.route.coords.length - 1));
+    return { lat:+info.route.coords[i][0], lng:+info.route.coords[i][1] };
+  }
+
+  function wlDynCenters(info) {
+    const reach = wlDynLookaheadM(info);
+    if (!reach) return [];
+    // Sample the rolling corridor. Radius remains 1 mile; only the length of
+    // the corridor scales with the trip, so unrelated far-away POIs stay out.
+    const maxCenters = 12;
+    const desiredSpacing = 3200; // ~2 mi
+    const segments = Math.max(1, Math.min(maxCenters - 1, Math.ceil(reach / desiredSpacing)));
+    const spacing = reach / segments;
+    const out = [];
+    for (let i = 0; i <= segments; i++) {
+      const d = Math.min(info.total, info.along + i * spacing);
+      const p = wlDynPointAt(info, d);
+      const last = out[out.length - 1];
+      if (!last || Math.abs(last.lat - p.lat) > 1e-6 || Math.abs(last.lng - p.lng) > 1e-6) out.push(p);
+    }
+    return out;
+  }
+
+  function wlDynProject(info, el) {
+    try {
+      const p = projectOnRoute(info.route.coords, info.cum, {lat:+el.lat, lng:+el.lng});
+      return { off:+p.distToRoute, along:+p.distAlong };
+    } catch (e) { return null; }
+  }
+
+  function wlDynFilter(info, items) {
+    const seen = new Set();
+    return (Array.isArray(items) ? items : []).filter(el => {
+      if (!el || !Number.isFinite(+el.lat) || !Number.isFinite(+el.lng)) return false;
+      const p = wlDynProject(info, el);
+      if (!p || p.off > WL_DYN_MAX_OFF_M || p.along < info.along - WL_DYN_BACK_M || p.along > info.total + 20) return false;
+      const id = String(el.id || (Math.round(+el.lat * 1e5) + ':' + Math.round(+el.lng * 1e5)));
+      if (seen.has(id)) return false;
+      seen.add(id);
+      el.routeOffMeters = p.off;
+      el.routeAlongMeters = p.along;
+      el.routeMilesAhead = Math.max(0, (p.along - info.along) / 1609.344);
+      el.mileAlong = p.along / 1609.344;
+      try {
+        const a = livePosition || wlDynPointAt(info, info.along);
+        el.metersFromMe = haversine(a, el);
+      } catch (e) {}
+      return true;
+    }).sort((a,b) => (a.routeAlongMeters||0) - (b.routeAlongMeters||0) || (a.routeOffMeters||0) - (b.routeOffMeters||0));
+  }
+
+  async function wlDynCorridorSearch(key, info) {
+    const cfg = POI && POI[key];
+    if (!cfg || !cfg.filter || !info) return [];
+    const centers = wlDynCenters(info);
+    if (!centers.length) return [];
+    const progressBucket = Math.floor(info.along / 1000);
+    const lookBucket = Math.round(wlDynLookaheadM(info) / 1000);
+    const ck = key + ':' + progressBucket + ':' + lookBucket + ':' + centers.length;
+    const cached = WL_DYN_CACHE.get(ck);
+    if (cached && Date.now() - cached.at < WL_DYN_QUERY_TTL_MS) return cached.items;
+
+    const clauses = centers.map(c =>
+      'nwr' + cfg.filter + '(around:' + Math.round(WL_DYN_MAX_OFF_M) + ',' + c.lat.toFixed(5) + ',' + c.lng.toFixed(5) + ');'
+    ).join('');
+    const q = '[out:json][timeout:10];(' + clauses + ');out center 350;';
+    try {
+      const d = await overpassFast(q);
+      const raw = (d.elements || []).map(el => {
+        const lat = el.lat != null ? el.lat : el.center && el.center.lat;
+        const lng = el.lon != null ? el.lon : el.center && el.center.lon;
+        return (lat == null || lng == null) ? null : {
+          id: el.type + el.id, lat:+lat, lng:+lng, tags:el.tags || {}, source:'osm'
+        };
+      }).filter(Boolean);
+      const items = wlDynFilter(info, raw);
+      WL_DYN_CACHE.set(ck, {at:Date.now(), items});
+      return items;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function wlDynMerge(info, a, b) {
+    const mapById = new Map();
+    [a,b].forEach(list => (Array.isArray(list) ? list : []).forEach(el => {
+      if (!el) return;
+      const k = String(el.id || '') || (Math.round(+el.lat * 1e5) + ':' + Math.round(+el.lng * 1e5));
+      const old = mapById.get(k);
+      // Prefer provider-enriched rows (Google/business metadata) when duplicate.
+      if (!old || el.source === 'google') mapById.set(k, el);
+    }));
+    return wlDynFilter(info, Array.from(mapById.values())).slice(0, 90);
+  }
+
+  if (previousSearchPoi) {
+    searchPoi = async function wlAdaptiveRoutePoiSearch(key) {
+      const info = wlDynRouteInfo();
+      if (!info || !allRoutes || !allRoutes.length) return previousSearchPoi(key);
+      // Immediate/local provider results and the route-ahead corridor run in
+      // parallel. This preserves rich business metadata near the car while
+      // adding new POIs farther up a long trip.
+      const localJob = previousSearchPoi(key).catch(() => []);
+      const corridorJob = wlDynCorridorSearch(key, info);
+      const result = await Promise.all([localJob, corridorJob]);
+      return wlDynMerge(info, result[0], result[1]);
+    };
+  }
+
+  async function wlDynRefreshActive(force) {
+    if (wlDynBusy) return;
+    let active = false;
+    try { active = !!(navActive && navActive()); } catch (e) {}
+    if (!active) return;
+    const info = wlDynRouteInfo();
+    if (!info) return;
+    const moved = info.along - wlDynLastAlong;
+    const aged = Date.now() - wlDynLastRefreshAt;
+    if (!force && moved < WL_DYN_MIN_REFRESH_MOVE_M && aged < WL_DYN_MAX_REFRESH_AGE_MS) return;
+
+    const keys = Object.keys(poiState || {}).filter(k => poiState[k] && POI[k]);
+    if (!keys.length) { wlDynLastAlong = info.along; wlDynLastRefreshAt = Date.now(); return; }
+    wlDynBusy = true;
+    try {
+      await Promise.all(keys.map(async key => {
+        try {
+          const fresh = await searchPoi(key);
+          if (!fresh || !fresh.length || !poiState[key]) return;
+          poiState[key] = {items:fresh};
+          try { poiWarm[key] = {at:Date.now(), items:fresh}; } catch (e) {}
+          drawPoi(key, fresh);
+          try {
+            if (poiActiveKey === key && !$('poiPanel').classList.contains('hidden')) renderPoiPanel(key, fresh);
+          } catch (e) {}
+        } catch (e) {}
+      }));
+      wlDynLastAlong = info.along;
+      wlDynLastRefreshAt = Date.now();
+    } finally { wlDynBusy = false; }
+  }
+
+  // A lightweight watcher checks progress frequently, but network work only
+  // happens after meaningful forward movement or the freshness limit.
+  setInterval(() => wlDynRefreshActive(false), 6000);
+  setTimeout(() => wlDynRefreshActive(true), 1200);
+
+  // Expose non-sensitive diagnostics for the app's own UI/debugging.
+  window.WayLynPoiTripWindow = function () {
+    const info = wlDynRouteInfo();
+    if (!info) return null;
+    return {
+      totalTripMiles: +(info.total / 1609.344).toFixed(1),
+      remainingMiles: +(info.remaining / 1609.344).toFixed(1),
+      poiLookaheadMiles: +(wlDynLookaheadM(info) / 1609.344).toFixed(1),
+      maxOffRouteMiles: 1.0
+    };
+  };
+})();
+</script>
 </html>
