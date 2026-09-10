@@ -1,6 +1,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +9,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>WayLyn — AI Wayfinder</title>
+<!-- Performance-safe single-file build: style-event recursion fixed. -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
 <style id="waylynq-inline-css">
@@ -20555,9 +20557,14 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     applyProfileAvatar();
     const root = document.documentElement;
     if (window.MutationObserver) {
+      let avatarMutationTimer = 0;
       new MutationObserver(() => {
-        if (!document.getElementById('wlAvatarSetup')) mount();
-        applyProfileAvatar();
+        if (avatarMutationTimer) return;
+        avatarMutationTimer = setTimeout(() => {
+          avatarMutationTimer = 0;
+          if (!document.getElementById('wlAvatarSetup')) mount();
+          applyProfileAvatar();
+        }, 180);
       }).observe(root, { childList:true, subtree:true });
     }
     setInterval(applyProfileAvatar, 2500);
@@ -20684,7 +20691,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
   /* Cache-first means taps can render in a frame after the initial warmup.
      Refresh continues in the background as the car changes area. */
-  setTimeout(() => round16PrefetchAllPois(true), 250);
+  setTimeout(() => round16PrefetchAllPois(true), 4500);
   setInterval(() => round16PrefetchAllPois(false), 8000);
 
   /* -----------------------------------------------------------------------
@@ -21078,7 +21085,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   setTimeout(() => {
     try {
       if (typeof map3d !== 'undefined' && map3d) {
-        map3d.on('styledata', () => {
+        map3d.on('style.load', () => {
           try { style3dBuildings(); } catch (e) {}
         });
         if (map3d.loaded && map3d.loaded()) style3dBuildings();
@@ -21595,13 +21602,15 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         needle.style.transform = 'rotate(' + (-b) + 'deg)';
     } catch (e) {}
   }
-  setInterval(compassTick, 180);
+  setInterval(() => {
+    try { if (typeof navActive === 'function' && navActive()) compassTick(); } catch (e) {}
+  }, 500);
 
   /* Re-run geometry/palette after the MapLibre style finishes loading. */
   setTimeout(() => {
     try {
       if (typeof map3d !== 'undefined' && map3d) {
-        map3d.on('styledata', () => {
+        map3d.on('style.load', () => {
           try { style3dPalette(); style3dBuildings(); add3dLaneRoad(); } catch (e) {}
         });
         if (map3d.loaded && map3d.loaded()) {
@@ -22034,7 +22043,9 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       c.setAttribute('aria-label','Compass, map bearing '+Math.round((b+360)%360)+' degrees');
     }catch(e){}
   }
-  setInterval(compass20,120);
+  setInterval(() => {
+    try { if (typeof navActive === 'function' && navActive()) compass20(); } catch (e) {}
+  }, 500);
 
   /* ---------------- buildings: vector + OSM supplement ---------------- */
   const priorBuildings20=typeof style3dBuildings==='function'?style3dBuildings:null;
@@ -22133,12 +22144,19 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     if(map3d.__wlRound20Bound)return;
     map3d.__wlRound20Bound=true;
     map3d.on('load',()=>{setTimeout(()=>{install3dCar20();style3dPalette();refreshWorldLanes20(true)},250)});
-    map3d.on('styledata',()=>setTimeout(()=>{try{style3dBuildings();refreshWorldLanes20(true);if(!map3d.getLayer('wl-real-webgl-car'))install3dCar20()}catch(e){}},80));
+    map3d.on('style.load',()=>setTimeout(()=>{try{style3dBuildings();refreshWorldLanes20(true);if(!map3d.getLayer('wl-real-webgl-car'))install3dCar20()}catch(e){}},80));
     map3d.on('moveend',()=>{if(typeof navActive==='function'&&navActive())style3dBuildings()});
     if(map3d.loaded&&map3d.loaded()) setTimeout(()=>{install3dCar20();style3dPalette();refreshWorldLanes20(true)},80);
   }
   setTimeout(bindMap20,350);
-  setInterval(()=>{ if(typeof map3d!=='undefined'&&map3d){bindMap20();if(map3dReady&&!R20.ready)install3dCar20()} },1500);
+  setInterval(()=>{
+    try {
+      if (typeof navActive === 'function' && navActive() && typeof map3d !== 'undefined' && map3d) {
+        bindMap20();
+        if (map3dReady && !R20.ready) install3dCar20();
+      }
+    } catch (e) {}
+  },3000);
 })();
 
 
@@ -22869,7 +22887,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       },500);
     };
     map3d.on('moveend',refreshBuildings);
-    map3d.on('styledata',refreshBuildings);
+    map3d.on('style.load',refreshBuildings);
   }
 
   /* Heading-up is the default. Compass stays in the trip line and toggles mode. */
@@ -23222,7 +23240,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       map3d.on('load',()=>queueBuildings22(true));
       map3d.on('moveend',()=>queueBuildings22(false));
       map3d.on('zoomend',()=>queueBuildings22(false));
-      map3d.on('styledata',()=>queueBuildings22(false));
+      map3d.on('style.load',()=>queueBuildings22(false));
     }
   }catch(e){}
 
@@ -23314,7 +23332,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   };
 
   /* Begin warming immediately and whenever the user changes area. */
-  setTimeout(()=>warmAll23(true),40);
+  setTimeout(()=>warmAll23(true),5000);
   setInterval(()=>warmAll23(false),12000);
   try{map.on('moveend',()=>warmAll23(false));}catch(e){}
 
@@ -23812,27 +23830,5 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
 
 
-<
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<
-
-
-
-/body>
-
-
+</body>
 </html>
