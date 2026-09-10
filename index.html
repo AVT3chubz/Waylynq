@@ -6301,6 +6301,22 @@ body.navigating.light-mode #placeCard.wl-poi-detail-panel{background:rgba(242,24
 }
 
 
+
+/* WayLynQ MFA login fix */
+#aMfaWrap {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+#aMfaWrap .inp {
+  display: flex;
+}
+#aMfaCode {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0;
+}
+
 </style>
 
 
@@ -19230,23 +19246,48 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
         if (u && u.mfaRequired) {
           awaitingMfa = true;
+
           if (!document.getElementById('aMfaWrap')) {
             var wrap = document.createElement('div');
-            wrap.className = 'field wl-mfa-login';
             wrap.id = 'aMfaWrap';
+            wrap.className = 'wl-mfa-login';
             wrap.innerHTML =
               '<div class="lbl"><label for="aMfaCode">Authenticator code</label><span>6 digits</span></div>' +
-              '<input id="aMfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="123456" required />';
+              '<div class="inp">' +
+                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                  '<rect x="5" y="10" width="14" height="10" rx="2"/>' +
+                  '<path d="M8 10V7a4 4 0 0 1 8 0v3"/>' +
+                '</svg>' +
+                '<input id="aMfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" ' +
+                  'maxlength="6" pattern="[0-9]{6}" placeholder="Enter 6-digit code" ' +
+                  'aria-label="6-digit authenticator code" required />' +
+              '</div>';
+
+            /* The password field is an .inp element, not wrapped in .field.
+               Insert MFA directly after that actual password input row. */
             var p = document.getElementById('aPass');
-            var field = p.closest ? p.closest('.field') : null;
-            if (field && field.parentNode) field.parentNode.insertBefore(wrap, field.nextSibling);
+            var passRow = p && p.closest ? p.closest('.inp') : null;
+            var form = document.getElementById('aForm');
+
+            if (passRow && passRow.parentNode) {
+              passRow.parentNode.insertBefore(wrap, passRow.nextSibling);
+            } else if (form) {
+              form.insertBefore(wrap, btn);
+            }
           }
-          err.textContent = 'Enter the 6-digit code from your authenticator app.';
+
+          err.textContent = 'Enter the 6-digit code from your authenticator app below.';
           err.classList.add('show');
+
           btn.disabled = false;
           btn.textContent = 'Verify & Sign In →';
+
           var mc = document.getElementById('aMfaCode');
-          if (mc) mc.focus();
+          if (mc) {
+            mc.value = '';
+            mc.style.display = '';
+            mc.focus();
+          }
           return;
         }
 
