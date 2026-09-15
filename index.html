@@ -2,6 +2,7 @@
 
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23830,5 +23831,268 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
 
 
-</body>
+<
+<!-- ======================================================================
+     WAYLYN ROUND 22 — POI BRANDING / REVIEWS / RESPONSIVE 3D NAV
+     Non-destructive patch: appended after existing WayLyn code.
+     ====================================================================== -->
+<style id="wl-round22-css">
+/* Lighter, road-readable dark palette */
+body:not(.light-mode){
+  --bg:#10222d; --surface:rgba(27,48,61,.94); --surface-2:rgba(22,42,54,.97);
+  --surface-solid:#1a3443; --text:#e6f0f8; --text-dim:#b0c4d5; --line-soft:rgba(184,211,230,.20);
+}
+body:not(.light-mode) .leaflet-tile-pane{filter:brightness(.82) saturate(.88) contrast(1.05)}
+body:not(.light-mode).osm-base .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(1.08) contrast(.88) saturate(.78)}
+body:not(.light-mode).satellite-on .leaflet-tile-pane,
+body:not(.light-mode).osm-base.satellite-on .leaflet-tile-pane{filter:brightness(.9) saturate(.95)}
+
+/* Business marks: no generic category artwork. Initials are the neutral fallback. */
+.wl-poi-brand{position:relative;display:grid;place-items:center;border-radius:12px;overflow:visible;
+ background:var(--surface-solid);border:2px solid rgba(255,255,255,.9);box-shadow:0 3px 10px rgba(0,0,0,.42);flex:0 0 auto}
+.wl-poi-brand>img{width:100%;height:100%;object-fit:contain;border-radius:10px;background:#fff;display:none}
+.wl-poi-brand.has-logo>img{display:block}.wl-poi-brand.has-logo .wl-brand-fallback{display:none}
+.wl-brand-fallback{font-size:11px;font-weight:800;letter-spacing:-.02em;color:var(--text-bright)}
+.wl-review-dot{position:absolute;right:-7px;bottom:-7px;width:21px;height:21px;border-radius:50%;border:2px solid var(--surface-solid);
+ background:var(--signal);color:var(--signal-ink);display:grid;place-items:center;font-size:11px;cursor:pointer;z-index:4}
+.wl-review-dot:hover{transform:scale(1.08)}
+.wl-review-count{font-size:.76rem;color:var(--signal);font-weight:750;white-space:nowrap}
+
+/* POI panel collapse: keep only a restore arrow, not the whole side box. */
+#poiPanel{position:relative;transition:opacity .18s ease,transform .18s ease}
+#poiPanel.wl-poi-collapsed{display:none!important}
+#wlPoiRestore{position:fixed;right:max(8px,env(safe-area-inset-right));top:clamp(76px,12vh,132px);z-index:5200;
+ width:44px;height:44px;border-radius:50%;border:1px solid var(--line-soft);background:var(--surface-solid);
+ color:var(--signal);box-shadow:var(--shadow);cursor:pointer;font-size:1.25rem;display:none}
+#wlPoiRestore.show{display:grid;place-items:center}
+
+/* Rate & Review sheet */
+#wlReviewModal{position:fixed;inset:0;z-index:8200;background:rgba(0,0,0,.52);display:none;place-items:center;padding:clamp(10px,3vw,28px)}
+#wlReviewModal.show{display:grid}
+.wlr-card{width:min(96vw,620px);max-height:min(92dvh,760px);overflow:auto;background:var(--surface-solid);
+ border:1px solid var(--line-soft);border-radius:20px;box-shadow:var(--shadow);padding:clamp(16px,3vw,24px)}
+.wlr-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}.wlr-head h2{margin:0;flex:1;font-size:1.35rem;color:var(--text-bright)}
+.wlr-close{width:42px;height:42px;border-radius:50%;border:1px solid var(--line-soft);background:transparent;color:var(--text);cursor:pointer}
+.wlr-field{display:grid;gap:7px;margin:13px 0}.wlr-field label{font-size:.86rem;font-weight:750;color:var(--text-dim)}
+.wlr-field input,.wlr-field textarea{box-sizing:border-box;width:100%;border:1px solid var(--line-soft);background:var(--field-bg);
+ color:var(--text-bright);border-radius:12px;padding:13px 14px;font:inherit;outline:none}
+.wlr-field textarea{min-height:112px;resize:vertical}.wlr-field input:focus,.wlr-field textarea:focus{border-color:var(--signal)}
+#wlrResults{display:grid;gap:7px;margin-top:8px}.wlr-result{display:flex;gap:10px;align-items:center;text-align:left;width:100%;
+ padding:11px;border:1px solid var(--line-soft);border-radius:12px;background:transparent;color:var(--text);cursor:pointer}
+.wlr-result:hover{border-color:var(--signal);background:rgba(var(--signal-rgb),.09)}.wlr-result b{display:block;color:var(--text-bright)}
+.wlr-result small{display:block;color:var(--text-dim);margin-top:2px}.wlr-selected{padding:12px;border-radius:12px;background:rgba(var(--signal-rgb),.1);margin:10px 0}
+.wlr-stars{display:flex;gap:7px;flex-wrap:wrap}.wlr-star{width:46px;height:46px;border-radius:12px;border:1px solid var(--line-soft);
+ background:transparent;color:var(--amber);font-size:1.45rem;cursor:pointer}.wlr-star.on{background:rgba(var(--amber-rgb),.16);border-color:var(--amber)}
+.wlr-submit{width:100%;height:50px;border:0;border-radius:999px;background:var(--signal);color:var(--signal-ink);font-weight:800;cursor:pointer;margin-top:8px}
+.wlr-review{display:flex;gap:11px;padding:12px 0;border-top:1px solid var(--line-soft)}.wlr-avatar{width:40px;height:40px;border-radius:50%;
+ object-fit:cover;background:rgba(var(--signal-rgb),.18);display:grid;place-items:center;font-weight:800;flex:0 0 auto}.wlr-review-main{min-width:0;flex:1}
+.wlr-review-main b{color:var(--text-bright)}.wlr-review-main p{margin:4px 0 0;white-space:pre-wrap;color:var(--text-dim);line-height:1.45}
+#wlrStatus{min-height:20px;font-size:.84rem;color:var(--text-dim);margin-top:8px}
+
+/* Responsive 3D nav: viewport-safe instead of desktop-fixed coordinates. */
+#navMode{--nav-gap:clamp(8px,1.5vw,16px);--nav-bottom:calc(82px + env(safe-area-inset-bottom))}
+#navTop{top:var(--nav-gap);left:var(--nav-gap);width:min(378px,calc(100vw - 2*var(--nav-gap)))}
+#navTopRight{top:var(--nav-gap);right:var(--nav-gap);max-width:calc(100vw - 2*var(--nav-gap));flex-wrap:wrap;justify-content:flex-end}
+#fabStack{right:var(--nav-gap);bottom:clamp(150px,20vh,182px);max-width:calc(100vw - 2*var(--nav-gap));flex-wrap:wrap;justify-content:flex-end}
+#speedCluster{left:var(--nav-gap);bottom:clamp(150px,20vh,182px)}
+#turnPreview{right:var(--nav-gap);max-width:min(158px,32vw)}
+@media(max-width:900px){
+ #navTop{width:min(56vw,378px)}
+ #navTopRight .nav-btn-label{display:none}
+ #navTopRight .nav-btn{padding:0 12px}
+ #turnPreview{top:78px}
+}
+@media(max-width:620px){
+ #navTop{top:8px;left:8px;width:calc(100vw - 16px);padding-right:112px;box-sizing:border-box}
+ #navTopRight{top:14px;right:14px;gap:5px}.nav-card-main{padding:10px 12px;gap:9px}
+ #turnArrow{font-size:2.25rem;width:50px}#turnDistance{font-size:2rem}#turnStreet{font-size:1rem}
+ #roadRow,#trafficAhead,#tripLine{padding-left:12px;padding-right:12px}
+ #turnPreview{display:none!important}
+ #speedCluster{left:8px;bottom:154px;transform:scale(.84);transform-origin:left bottom}
+ #fabStack{right:8px;bottom:154px;gap:6px}.fab{height:46px;padding:0 13px}.fab span:not(.rc-fill){font-size:.8rem}
+ #dock.nav-shift{bottom:78px;max-width:calc(100vw - 12px)}
+ #navBar{padding:9px 8px calc(9px + env(safe-area-inset-bottom));gap:6px}.bar-btn{width:42px;height:42px}
+ .nb-stat{padding:2px 3px}.nb-stat b{font-size:1.08rem}.nb-stat.nb-eta b{font-size:1.18rem}.nb-stat span{font-size:.58rem}
+ body.navigating #rightPanels{top:auto;bottom:calc(150px + env(safe-area-inset-bottom));right:8px;width:min(92vw,330px)}
+ #wlPoiRestore{top:auto;bottom:calc(150px + env(safe-area-inset-bottom))}
+}
+@media(max-height:560px) and (orientation:landscape){
+ #navTop{width:min(46vw,350px)}.nav-card-main{padding:8px 10px}#roadRow,#trafficAhead,#tripLine{padding-top:6px;padding-bottom:6px}
+ #nextList{display:none}#speedCluster{bottom:92px;transform:scale(.72);transform-origin:left bottom}
+ #fabStack{bottom:94px}.fab{height:42px;padding:0 11px}#dock.nav-shift{display:none}
+ #navBar{padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+}
+</style>
+
+<div id="wlReviewModal" role="dialog" aria-modal="true" aria-labelledby="wlrTitle">
+ <div class="wlr-card">
+  <div class="wlr-head"><h2 id="wlrTitle">Rate &amp; Review</h2><button class="wlr-close" id="wlrClose" aria-label="Close">✕</button></div>
+  <div class="wlr-field" id="wlrSearchWrap"><label for="wlrSearch">Search a restaurant or other POI from OpenStreetMap</label>
+   <input id="wlrSearch" autocomplete="off" placeholder="Search for a place…" /><div id="wlrResults"></div></div>
+  <div id="wlrSelected"></div>
+  <div id="wlrForm" hidden>
+   <div class="wlr-field"><label>Rate Your Experience /5</label><div class="wlr-stars" id="wlrStars"></div></div>
+   <div class="wlr-field"><label for="wlrInfo">Additional info</label><textarea id="wlrInfo" maxlength="1500" placeholder="What should other people know?"></textarea></div>
+   <button class="wlr-submit" id="wlrSubmit">Publish review</button><div id="wlrStatus" aria-live="polite"></div>
+   <div id="wlrExisting"></div>
+  </div>
+ </div>
+</div>
+<button id="wlPoiRestore" title="Show POI panel" aria-label="Show POI panel">‹</button>
+
+<script id="wl-round22-js">
+(function(){
+ 'use strict';
+ const $r=id=>document.getElementById(id), escR=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+ let selected=null,rating=0,searchTimer=0;
+ const modal=$r('wlReviewModal'), restore=$r('wlPoiRestore');
+
+ function poiId(p){
+   if(!p)return '';
+   if(p.osm_type&&p.osm_id)return 'osm:'+p.osm_type+':'+p.osm_id;
+   if(p.id&&String(p.id).indexOf('google:')!==0)return 'osm:'+p.id;
+   const t=p.tags||{}, name=t.name||t.brand||p.googleName||p.name||'poi';
+   return 'geo:'+String(name).toLowerCase().replace(/\W+/g,'-')+':'+(+p.lat).toFixed(5)+':'+(+p.lng).toFixed(5);
+ }
+ function me(){
+   try{
+     const u=window.WLAuth&&WLAuth.current&&WLAuth.current();
+     if(u)return {id:String(u.id),name:u.name||'WayLyn user',avatar:u.avatar||u.photo||u.picture||''};
+     const c=JSON.parse(localStorage.getItem('waylynq:me')||'null');
+     if(c)return {id:String(c.id),name:c.name||'WayLyn user',avatar:c.avatar||c.photo||c.picture||''};
+   }catch(e){}
+   return null;
+ }
+ function localReviews(id){
+   try{return JSON.parse(localStorage.getItem('waylynq:public-reviews:'+id)||'[]')}catch(e){return[]}
+ }
+ function saveLocal(id,review){
+   let a=localReviews(id),i=a.findIndex(x=>x.userId===review.userId);
+   if(i>=0)a[i]=review;else a.unshift(review);
+   localStorage.setItem('waylynq:public-reviews:'+id,JSON.stringify(a)); return a;
+ }
+ async function api(action,payload){
+   const res=await fetch('/api.php?action='+encodeURIComponent(action),{
+     method:payload?'POST':'GET',headers:payload?{'Content-Type':'application/json'}:{},
+     body:payload?JSON.stringify(payload):undefined,credentials:'include',cache:'no-store'
+   });
+   if(!res.ok)throw new Error('review service unavailable');
+   const j=await res.json();if(!j||j.ok===false)throw new Error(j&&j.error||'review service unavailable');return j;
+ }
+ async function listReviews(p){
+   const id=poiId(p);
+   try{
+     const q='reviews_list&poi='+encodeURIComponent(id);
+     const res=await fetch('/api.php?action='+q,{credentials:'include',cache:'no-store'});
+     if(res.ok){const j=await res.json();if(j&&Array.isArray(j.reviews))return j.reviews}
+   }catch(e){}
+   return localReviews(id);
+ }
+ async function publish(p,stars,body){
+   const u=me();if(!u)throw new Error('Sign in before publishing a review.');
+   const review={poiId:poiId(p),poiName:p.name||p.display_name||'POI',lat:+p.lat,lng:+p.lng,
+     userId:u.id,userName:u.name,userAvatar:u.avatar||'',rating:stars,body:String(body||'').trim(),updatedAt:new Date().toISOString()};
+   try{
+     const j=await api('review_upsert',review);
+     if(j&&j.review)return j.review;
+   }catch(e){}
+   /* Same-browser fallback keeps the feature usable during API outages. The
+      shared /api.php review_upsert + reviews_list actions are authoritative in production. */
+   saveLocal(review.poiId,review);return review;
+ }
+ function initials(n){return String(n||'U').trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
+ function renderReviews(a){
+   const box=$r('wlrExisting');
+   box.innerHTML=a.length?'<div style="margin-top:18px;font-weight:800;color:var(--text-bright)">Review'+(a.length===1?'':'s')+': '+a.length+'</div>'+
+     a.map(x=>'<div class="wlr-review">'+(x.userAvatar?'<img class="wlr-avatar" src="'+escR(x.userAvatar)+'" alt="">':'<span class="wlr-avatar">'+escR(initials(x.userName))+'</span>')+
+     '<div class="wlr-review-main"><b>'+escR(x.userName||'WayLyn user')+' · '+escR(x.rating)+'/5</b>'+
+     (x.body?'<p>'+escR(x.body)+'</p>':'')+'</div></div>').join(''):'<div style="margin-top:16px;color:var(--text-dim)">No reviews yet.</div>';
+ }
+ function renderStars(){
+   $r('wlrStars').innerHTML=[1,2,3,4,5].map(n=>'<button type="button" class="wlr-star '+(n<=rating?'on':'')+'" data-rate="'+n+'" aria-label="'+n+' out of 5">★</button>').join('');
+   $r('wlrStars').querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>{rating=+b.dataset.rate;renderStars()});
+ }
+ async function choose(p){
+   selected=p;rating=0;$r('wlrSearchWrap').hidden=true;$r('wlrForm').hidden=false;
+   $r('wlrSelected').innerHTML='<div class="wlr-selected"><b>'+escR(p.name||p.display_name||'POI')+'</b><div style="color:var(--text-dim);font-size:.86rem;margin-top:3px">'+escR(p.display_name||p.label||'OpenStreetMap POI')+'</div></div>';
+   renderStars();$r('wlrInfo').value='';$r('wlrStatus').textContent='';
+   renderReviews(await listReviews(p));
+ }
+ async function search(q){
+   q=String(q||'').trim();if(q.length<2){$r('wlrResults').innerHTML='';return}
+   $r('wlrResults').innerHTML='<div style="color:var(--text-dim);padding:8px">Searching OpenStreetMap…</div>';
+   try{
+     const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&extratags=1&limit=8&q='+encodeURIComponent(q);
+     const res=await fetch(url,{headers:{'Accept':'application/json'}}),a=await res.json();
+     $r('wlrResults').innerHTML=a.map((x,i)=>'<button class="wlr-result" data-i="'+i+'"><span>📍</span><span><b>'+escR((x.namedetails&&x.namedetails.name)||x.name||x.display_name.split(',')[0])+'</b><small>'+escR(x.display_name)+'</small></span></button>').join('')||'<div style="color:var(--text-dim);padding:8px">No matching OSM POIs found.</div>';
+     $r('wlrResults').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const x=a[+b.dataset.i];choose({osm_type:x.osm_type,osm_id:x.osm_id,name:(x.namedetails&&x.namedetails.name)||x.name||x.display_name.split(',')[0],display_name:x.display_name,lat:+x.lat,lng:+x.lon})});
+   }catch(e){$r('wlrResults').innerHTML='<div style="color:var(--rose);padding:8px">OpenStreetMap search is temporarily unavailable.</div>'}
+ }
+ window.WayLynReviews={
+   open:function(p){modal.classList.add('show');selected=null;rating=0;$r('wlrSearchWrap').hidden=false;$r('wlrForm').hidden=true;$r('wlrSelected').innerHTML='';$r('wlrResults').innerHTML='';
+     if(p){choose({id:p.id,osm_type:p.osm_type,osm_id:p.osm_id,name:p.name||p.googleName||(p.tags&&p.tags.name)||'POI',display_name:p.label||p.googleAddress||'',lat:p.lat,lng:p.lng,tags:p.tags||{}})}
+     else setTimeout(()=>$r('wlrSearch').focus(),50);
+   },
+   count:async p=>(await listReviews(p)).length
+ };
+ $r('wlrClose').onclick=()=>modal.classList.remove('show');
+ modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('show')});
+ $r('wlrSearch').addEventListener('input',e=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>search(e.target.value),280)});
+ $r('wlrSubmit').onclick=async()=>{
+   if(!selected||!rating){$r('wlrStatus').textContent='Choose a rating from 1 to 5.';return}
+   const btn=$r('wlrSubmit');btn.disabled=true;$r('wlrStatus').textContent='Publishing…';
+   try{await publish(selected,rating,$r('wlrInfo').value);$r('wlrStatus').textContent='Review published.';renderReviews(await listReviews(selected));decorateVisibleReviews()}
+   catch(e){$r('wlrStatus').textContent=e.message||'Could not publish review.'}finally{btn.disabled=false}
+ };
+
+ /* Collapse arrow is different from closing the POI category: it preserves map markers/state. */
+ function collapsePoi(){
+   const p=$r('poiPanel');if(!p)return;p.classList.add('wl-poi-collapsed');restore.classList.add('show');
+ }
+ restore.onclick=()=>{const p=$r('poiPanel');if(p)p.classList.remove('wl-poi-collapsed');restore.classList.remove('show')};
+ function addCollapseButton(){
+   const p=$r('poiPanel');if(!p||p.classList.contains('hidden'))return;
+   const title=p.querySelector('.panel-title');if(!title||title.querySelector('.wl-poi-collapse'))return;
+   const b=document.createElement('button');b.className='icon-act wl-poi-collapse';b.title='Collapse POI panel';b.setAttribute('aria-label','Collapse POI panel');b.textContent='›';b.onclick=e=>{e.stopPropagation();collapsePoi()};
+   const close=title.querySelector('#poiHide');title.insertBefore(b,close||null);
+ }
+ const po=new MutationObserver(()=>{addCollapseButton();decorateVisibleReviews()});
+ if($r('poiPanel'))po.observe($r('poiPanel'),{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+
+ /* Integrate Review into every resolved POI logo and place card. */
+ function itemForBrand(box){
+   const id=box.getAttribute('data-wl-brand');if(!id)return null;
+   try{
+     for(const k of Object.keys(window.poiState||{})){const a=poiState[k]&&poiState[k].items||[];for(const el of a){
+       const t=el.tags||{},bid=[t['brand:wikidata']||'',t.wikidata||'',t.brand||'',t.name||el.googleName||'',(+el.lat||0).toFixed(5),(+el.lng||0).toFixed(5)].join('|');
+       if(bid===id)return Object.assign({name:t.name||t.brand||el.googleName||'POI'},el);
+     }}
+   }catch(e){}
+   return null;
+ }
+ function decorateVisibleReviews(){
+   document.querySelectorAll('.wl-poi-brand:not([data-review-wired])').forEach(box=>{
+     box.dataset.reviewWired='1';const p=itemForBrand(box);if(!p)return;
+     const b=document.createElement('button');b.type='button';b.className='wl-review-dot';b.title='Rate & Review';b.textContent='★';
+     b.onclick=e=>{e.preventDefault();e.stopPropagation();WayLynReviews.open(p)};box.appendChild(b);
+     WayLynReviews.count(p).then(n=>{if(n)b.title='Reviews: '+n+' · Rate & Review'}).catch(()=>{});
+   });
+   const pc=$r('placeCard');if(pc&&pc.classList.contains('show')&&!pc.querySelector('.wl-place-review-btn')){
+     const actions=pc.querySelector('.pc-actions');if(actions){
+       const b=document.createElement('button');b.className='pc-btn wl-place-review-btn';b.textContent='★ Rate & Review';
+       b.onclick=()=>WayLynReviews.open(window.__wlLastReviewPlace||null);actions.appendChild(b);
+     }
+   }
+ }
+ /* Capture place objects without replacing existing behavior. */
+ if(typeof window.showPlaceCard==='function'){
+   const old=window.showPlaceCard;window.showPlaceCard=async function(p){window.__wlLastReviewPlace=p;const r=await old.apply(this,arguments);setTimeout(decorateVisibleReviews,20);return r}
+ }
+ setInterval(decorateVisibleReviews,1800);
+ window.addEventListener('resize',()=>{try{window.map&&map.invalidateSize();window.map3d&&map3d.resize()}catch(e){}});
+ setTimeout(addCollapseButton,900);
+})();
+</script>
+
+/body>
 </html>
