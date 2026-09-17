@@ -1,8 +1,3 @@
-
-
-
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6389,6 +6384,902 @@ body.navigating.light-mode #placeCard.wl-poi-detail-panel{background:rgba(242,24
 
 
 
+
+
+
+<!-- =====================================================================
+     WAYLYNQ ROUND 27 - must stay the LAST stylesheet in <head>.
+     Earlier rounds set the same properties with !important, so at equal
+     specificity the later rule wins; this block being last is what makes
+     the Round 27 layout, night palette and logo rules hold.
+     ===================================================================== -->
+<style id="waylynq-round27-css">
+/* ======================================================================
+   WAYLYNQ — ROUND 27
+   Five requested corrections, in one authoritative stylesheet.
+
+     1. Real business logos on every POI (see the JS; this sizes them)
+     2. A collapse arrow on the POI rail in the 3D driving view
+     3. Night view lifted so streets, names and shields stay readable
+     4. One layout that holds its shape at every screen size
+     5. Rate & Review — search, stars, reviewer list
+
+   This block must be the LAST stylesheet in <head>. Every rule below is
+   written at a specificity that equals or beats the rounds before it, so
+   being last is what decides the cascade. Nothing above is deleted.
+   ====================================================================== */
+
+:root {
+  /* Measured at runtime by the layout engine in waylynq-round27.js.
+     Declared here so the first paint is already sane if JS is a frame
+     behind, and so nothing ever falls back to an invalid calc(). */
+  --wl27-vh: 100vh;
+  --wl27-safe-t: 10px;
+  --wl27-safe-r: 10px;
+  --wl27-safe-b: 10px;
+  --wl27-safe-l: 10px;
+
+  --wl27-ui: 1;                 /* one proportional scale for the whole HUD */
+  --wl27-card-w: 330px;         /* guidance card */
+  --wl27-card-h: 150px;         /* measured height of the guidance card */
+  --wl27-dock-w: 226px;         /* POI rail */
+  --wl27-dock-top: 220px;
+  --wl27-dock-bottom: 120px;
+  --wl27-bar-h: 72px;           /* the ETA capsule */
+  --wl27-bar-w: 380px;
+
+  --wl27-ink: #f4f8fc;
+  --wl27-ink-dim: #c4d1dc;
+  --wl27-glass: rgba(38, 46, 56, .74);
+  --wl27-glass-2: rgba(30, 37, 46, .82);
+  --wl27-edge: rgba(190, 206, 220, .22);
+  --wl27-accent: #4d9bff;
+  --wl27-star: #ffc245;
+}
+
+/* ======================================================================
+   3 — NIGHT VIEW, LIFTED
+
+   The raster basemap was being pushed to brightness .62 and the vector
+   palette to near-black, which is why streets disappeared. Both are
+   raised here. This is a lift, not a switch to day: the map still reads
+   as night, it is simply legible.
+   ====================================================================== */
+body:not(.light-mode) .leaflet-tile-pane {
+  filter: brightness(.88) saturate(.86) contrast(1.02) !important;
+}
+body:not(.light-mode).osm-base .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(1.04) contrast(.88) saturate(.7) !important;
+}
+body:not(.light-mode).satellite-on .leaflet-tile-pane,
+body:not(.light-mode).osm-base.satellite-on .leaflet-tile-pane {
+  filter: brightness(.94) saturate(.95) !important;
+}
+/* the vector canvas is never filtered — its colours come from the palette */
+body:not(.light-mode) #map3d,
+body:not(.light-mode) #map3d canvas,
+body:not(.light-mode) .maplibregl-canvas {
+  filter: none !important;
+}
+body:not(.light-mode) #map3d { background: #22303c !important; }
+
+/* Panels and the guidance card lift with it, and their copy goes back to
+   a readable white rather than mid-grey on near-black. */
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #trafficAhead,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background: var(--wl27-glass) !important;
+  border-color: var(--wl27-edge) !important;
+  backdrop-filter: blur(16px) saturate(1.06) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.06) !important;
+}
+body.navigating #navTop .nav-card-main,
+body.navigating #navTop #roadRow,
+body.navigating #navTop #tripLine,
+body.navigating #navTop #destRow,
+body.navigating #navTop #nextList,
+body.navigating #navTop .nl-row {
+  background: transparent !important;          /* one glass layer, not six */
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body.navigating #navTop,
+body.navigating #navTop *,
+body.navigating #turnDistance,
+body.navigating #turnStreet,
+body.navigating #roadName,
+body.navigating #tripLine,
+body.navigating #tripLine * {
+  color: var(--wl27-ink) !important;
+  -webkit-text-fill-color: var(--wl27-ink) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .35) !important;
+}
+body.navigating #tripLine .tl-left,
+body.navigating #turnSigns {
+  color: var(--wl27-ink-dim) !important;
+  -webkit-text-fill-color: var(--wl27-ink-dim) !important;
+}
+body:not(.light-mode) {
+  --surface: rgba(24, 31, 38, .90);
+  --surface-2: rgba(20, 26, 33, .94);
+  --surface-solid: #1b232b;
+  --line-soft: rgba(196, 212, 226, .18);
+  --text: #e4ecf3;
+  --text-dim: #a9b8c6;
+  --text-faint: rgba(176, 191, 205, .70);
+}
+/* night-plain desaturated the POI pins into grey blobs */
+body.night-plain .wl-poi-chip,
+body.night-plain .wl-poi-brand { filter: none !important; }
+
+/* ======================================================================
+   4 — ONE LAYOUT, EVERY SCREEN
+
+   Positions come from measured variables rather than from a stack of
+   breakpoints that each guessed a different number. The composition is
+   identical at every size; only the scale changes. Nothing is hidden
+   because a viewport is short — it scales, scrolls, or moves lane.
+   ====================================================================== */
+
+/* -- the driving surface itself ------------------------------------- */
+body.navigating #navMode { inset: 0 !important; }
+body.navigating #map3d { display: block !important; }
+
+/* Every box this file gives an explicit width or height to is measured
+   the way this file means it. Several of them are content-box in the
+   app's own stylesheet, so their padding was being added on top of the
+   width the engine had just reserved — the trip capsule came out 30px
+   wider than it was told to be and ran under the recentre button. */
+body.navigating #wlNavActions,
+body.navigating #navTop,
+body.navigating #navTop .nav-card,
+body.navigating #navTop .nav-card-main,
+body.navigating #navTopRight,
+body.navigating #speedCluster,
+body.navigating #navBar,
+body.navigating #fabStack,
+body.navigating #wlRightRail,
+body.navigating #dock,
+body.navigating #dock.nav-shift,
+body.navigating #quick-rail,
+body.navigating #quick-rail .qr-btn,
+#wl27DockToggle { box-sizing: border-box !important; }
+
+/* -- top-left: the utility row, then the guidance card --------------- */
+body.navigating #wlNavActions {
+  top: var(--wl27-safe-t) !important;
+  left: var(--wl27-safe-l) !important;
+  gap: calc(10px * var(--wl27-ui)) !important;
+  z-index: 16 !important;
+  /* this row and the control row are the one place two blocks really do
+     share a line, so it takes only the room the controls leave it */
+  max-width: var(--wl27-act-w, 60vw) !important;
+  overflow: hidden !important;
+  flex-wrap: nowrap !important;
+}
+body.navigating #wlNavActions .wl-ref-pill {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+body.navigating #wlNavActions .wl-ref-circle { flex: 0 0 auto !important; }
+body.navigating #wlNavActions .wl-ref-circle,
+body.navigating #wlNavActions .wl-ref-pill {
+  height: calc(52px * var(--wl27-ui)) !important;
+  font-size: calc(16px * var(--wl27-ui)) !important;
+}
+body.navigating #wlNavActions .wl-ref-circle {
+  width: calc(52px * var(--wl27-ui)) !important;
+  font-size: calc(23px * var(--wl27-ui)) !important;
+}
+
+body.navigating #navTop,
+body.navigating #navTop .nav-card {
+  width: var(--wl27-card-w) !important;
+  min-width: 0 !important;
+  max-width: var(--wl27-card-w) !important;
+}
+body.navigating #navTop {
+  top: calc(var(--wl27-safe-t) + 62px * var(--wl27-ui)) !important;
+  left: var(--wl27-safe-l) !important;
+  right: auto !important;
+  z-index: 15 !important;
+  max-height: none !important;
+}
+body.navigating #navTop .nav-card-main {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: calc(86px * var(--wl27-ui)) !important;
+  max-height: none !important;
+  padding: calc(11px * var(--wl27-ui)) calc(13px * var(--wl27-ui)) !important;
+  gap: calc(11px * var(--wl27-ui)) !important;
+}
+body.navigating #turnArrow {
+  width: calc(50px * var(--wl27-ui)) !important;
+  min-width: calc(50px * var(--wl27-ui)) !important;
+  max-width: calc(50px * var(--wl27-ui)) !important;
+  font-size: calc(2.4rem * var(--wl27-ui)) !important;
+}
+body.navigating #turnArrow .wl-arrow {
+  width: calc(44px * var(--wl27-ui)) !important;
+  height: calc(44px * var(--wl27-ui)) !important;
+}
+body.navigating #turnDistance { font-size: calc(2rem * var(--wl27-ui)) !important; }
+body.navigating #turnStreet   { font-size: calc(1.02rem * var(--wl27-ui)) !important; }
+body.navigating #roadName     { font-size: calc(1rem * var(--wl27-ui)) !important; }
+body.navigating #roadRow      { min-height: calc(42px * var(--wl27-ui)) !important; }
+body.navigating #tripLine     { min-height: calc(38px * var(--wl27-ui)) !important; }
+
+/* -- top-right: report / voice / settings / exit --------------------- */
+body.navigating #navTopRight {
+  top: var(--wl27-safe-t) !important;
+  right: var(--wl27-safe-r) !important;
+  left: auto !important;
+  gap: calc(8px * var(--wl27-ui)) !important;
+  z-index: 17 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  /* the row sits in its own band above the guidance card, so its only
+     real limit is the screen — capping it against the card's width was
+     what squeezed the buttons to nothing on a narrow phone */
+  max-width: calc(100vw - var(--wl27-safe-l) - var(--wl27-safe-r)) !important;
+}
+body.navigating #navTopRight .nav-btn,
+body.navigating #navMenuToggle,
+body.navigating #wlExitRef {
+  height: calc(46px * var(--wl27-ui)) !important;
+  min-height: calc(46px * var(--wl27-ui)) !important;
+  font-size: calc(.95rem * var(--wl27-ui)) !important;
+  flex: 0 0 auto !important;
+}
+body.navigating #navTopRight .nav-btn { padding: 0 calc(13px * var(--wl27-ui)) !important; }
+body.navigating #navMenuToggle {
+  width: calc(46px * var(--wl27-ui)) !important;
+  min-width: calc(46px * var(--wl27-ui)) !important;
+  padding: 0 !important;
+}
+/* the labels are the first thing to go when the row runs out of room,
+   never the buttons themselves */
+body.wl27-tight #navTopRight .nav-btn-label { display: none !important; }
+body.wl27-tight #navTopRight .nav-btn { padding: 0 !important; width: calc(46px * var(--wl27-ui)) !important; min-width: calc(46px * var(--wl27-ui)) !important; }
+body.wl27-tight #wlExitRef { min-width: calc(62px * var(--wl27-ui)) !important; padding: 0 calc(12px * var(--wl27-ui)) !important; }
+
+/* -- top-right, under the controls: speed and posted limit ----------- */
+body.navigating #speedCluster {
+  top: calc(var(--wl27-safe-t) + 56px * var(--wl27-ui)) !important;
+  right: var(--wl27-safe-r) !important;
+  left: auto !important;
+  bottom: auto !important;
+  z-index: 15 !important;
+  transform: none !important;
+  transform-origin: right top !important;
+  gap: calc(8px * var(--wl27-ui)) !important;
+}
+body.navigating .speed-dial {
+  height: calc(62px * var(--wl27-ui)) !important;
+  min-width: calc(56px * var(--wl27-ui)) !important;
+}
+body.navigating .speed-dial b { font-size: calc(1.34rem * var(--wl27-ui)) !important; }
+body.navigating #limitSign {
+  width: calc(56px * var(--wl27-ui)) !important;
+  height: calc(56px * var(--wl27-ui)) !important;
+}
+body.navigating #limitSign b { font-size: calc(1.36rem * var(--wl27-ui)) !important; }
+
+/* -- right edge: the utility rail ------------------------------------ */
+body.navigating #wlRightRail {
+  right: var(--wl27-safe-r) !important;
+  top: auto !important;
+  bottom: calc(var(--wl27-safe-b) + 74px * var(--wl27-ui)) !important;
+  gap: calc(9px * var(--wl27-ui)) !important;
+  z-index: 15 !important;
+}
+body.navigating #wlRightRail .wl-ref-circle {
+  width: calc(46px * var(--wl27-ui)) !important;
+  height: calc(46px * var(--wl27-ui)) !important;
+}
+
+/* -- bottom-right: recenter ------------------------------------------ */
+body.navigating #fabStack {
+  display: flex !important;
+  right: var(--wl27-safe-r) !important;
+  left: auto !important;
+  top: auto !important;
+  bottom: var(--wl27-safe-b) !important;
+  z-index: 19 !important;
+}
+body.navigating #recenterFab {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  height: calc(46px * var(--wl27-ui)) !important;
+  padding: 0 calc(15px * var(--wl27-ui)) !important;
+  font-size: calc(.92rem * var(--wl27-ui)) !important;
+}
+
+/* -- bottom-left: the ETA capsule ------------------------------------ */
+body.navigating #navBar {
+  left: var(--wl27-safe-l) !important;
+  right: auto !important;
+  bottom: var(--wl27-safe-b) !important;
+  width: var(--wl27-bar-w) !important;
+  max-width: calc(100vw - var(--wl27-safe-l) - var(--wl27-safe-r)) !important;
+  height: var(--wl27-bar-h) !important;
+  min-height: var(--wl27-bar-h) !important;
+  z-index: 14 !important;
+}
+body.navigating .nb-stat b { font-size: calc(1.34rem * var(--wl27-ui)) !important; }
+body.navigating .nb-stat span { font-size: calc(.70rem * var(--wl27-ui)) !important; }
+
+/* -- nothing disappears because of the screen's size ------------------
+   Earlier rounds switch whole panels off at certain widths and heights,
+   which is exactly the "some stuff of the 3D nav is hidden" complaint.
+   The layout engine puts this class on a panel that a stylesheet has
+   hidden — never on one the app itself hid inline or with [hidden] — so
+   the size-based rules lose while the app's own decisions still stand.
+   The extra class also lifts specificity above every media-query rule,
+   so this holds no matter where those rules sit in the document.
+--------------------------------------------------------------------- */
+body.navigating #wlNavActions.wl27-show,
+body.navigating #navTopRight.wl27-show,
+body.navigating #speedCluster.wl27-show,
+body.navigating #wlRightRail.wl27-show,
+body.navigating #fabStack.wl27-show,
+body.navigating #navBar.wl27-show { display: flex !important; }
+body.navigating #navTop.wl27-show { display: block !important; }
+body.navigating #dock.wl27-show,
+body.navigating #dock.nav-shift.wl27-show { display: block !important; }
+
+/* and the other way round: an id rule beats the browser's own [hidden],
+   so a panel the app marks hidden went on showing. It stays hidden. */
+body.navigating #wlNavActions[hidden],
+body.navigating #navTop[hidden],
+body.navigating #navTopRight[hidden],
+body.navigating #speedCluster[hidden],
+body.navigating #wlRightRail[hidden],
+body.navigating #fabStack[hidden],
+body.navigating #navBar[hidden],
+body.navigating #dock[hidden],
+body.navigating #dock.nav-shift[hidden] { display: none !important; }
+
+/* ======================================================================
+   2 — THE POI RAIL, WITH A COLLAPSE ARROW
+
+   The rail keeps its vertical shape and its place on the left, but it is
+   now sized from measured space rather than from a fixed clamp that ran
+   out of room on a short screen, and it folds away to a single tab.
+   ====================================================================== */
+body.navigating #dock,
+body.navigating #dock.nav-shift {
+  position: fixed !important;
+  display: block !important;
+  left: var(--wl27-safe-l) !important;
+  right: auto !important;
+  top: var(--wl27-dock-top) !important;
+  bottom: var(--wl27-dock-bottom) !important;
+  width: var(--wl27-dock-w) !important;
+  max-width: var(--wl27-dock-w) !important;
+  height: auto !important;
+  transform: none !important;
+  z-index: 4960 !important;
+  transition: opacity .18s ease, transform .22s cubic-bezier(.22, 1, .36, 1) !important;
+}
+body.navigating #quick-rail {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: calc(6px * var(--wl27-ui)) !important;
+  gap: calc(3px * var(--wl27-ui)) !important;
+  border-radius: 16px !important;
+  scrollbar-width: thin;
+  mask-image: linear-gradient(#000 0, #000 calc(100% - 16px), transparent 100%) !important;
+  -webkit-mask-image: linear-gradient(#000 0, #000 calc(100% - 16px), transparent 100%) !important;
+}
+body.navigating #quick-rail .qr-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  height: calc(46px * var(--wl27-ui)) !important;
+  min-height: calc(46px * var(--wl27-ui)) !important;
+  flex: 0 0 calc(46px * var(--wl27-ui)) !important;
+  padding: 0 calc(12px * var(--wl27-ui)) !important;
+  justify-content: flex-start !important;
+  border-radius: 12px !important;
+  font-size: calc(.86rem * var(--wl27-ui)) !important;
+}
+body.navigating #quick-rail .qr-btn .qr-ico {
+  width: calc(26px * var(--wl27-ui)) !important;
+  text-align: center !important;
+  font-size: calc(1.15rem * var(--wl27-ui)) !important;
+}
+body.navigating #quick-rail .qr-divider {
+  width: calc(100% - 18px) !important;
+  height: 1px !important;
+  margin: calc(3px * var(--wl27-ui)) 9px !important;
+  align-self: center !important;
+}
+body.navigating #dockLeft,
+body.navigating #dockRight,
+body.navigating #trafficKey { display: none !important; }
+
+/* a short screen turns the rail into a strip above the trip bar rather
+   than squeezing it into nothing */
+body.wl27-dock-row.navigating #dock,
+body.wl27-dock-row.navigating #dock.nav-shift {
+  left: var(--wl27-safe-l) !important;
+  right: calc(var(--wl27-safe-r) + 56px * var(--wl27-ui)) !important;
+  top: auto !important;
+  bottom: calc(var(--wl27-safe-b) + var(--wl27-bar-h) + 10px) !important;
+  width: auto !important;
+  max-width: none !important;
+}
+body.wl27-dock-row.navigating #quick-rail {
+  flex-direction: row !important;
+  height: auto !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%) !important;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%) !important;
+}
+body.wl27-dock-row.navigating #quick-rail .qr-btn {
+  width: auto !important;
+  min-width: max-content !important;
+  flex: 0 0 auto !important;
+}
+body.wl27-dock-row.navigating #quick-rail .qr-divider {
+  width: 1px !important;
+  height: calc(24px * var(--wl27-ui)) !important;
+  margin: 0 calc(5px * var(--wl27-ui)) !important;
+  align-self: center !important;
+}
+
+/* ---- the collapse arrow itself ---- */
+#wl27DockToggle {
+  position: fixed;
+  z-index: 4975;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(34px * var(--wl27-ui));
+  min-width: calc(34px * var(--wl27-ui));
+  padding: 0 calc(10px * var(--wl27-ui));
+  border: 1px solid var(--wl27-edge);
+  border-radius: 11px;
+  background: var(--wl27-glass-2);
+  color: var(--wl27-ink);
+  font: 700 calc(.78rem * var(--wl27-ui))/1 var(--font-ui, system-ui), sans-serif;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: left .22s cubic-bezier(.22, 1, .36, 1), bottom .22s ease, background .16s ease;
+}
+body.navigating #wl27DockToggle { display: inline-flex; }
+#wl27DockToggle:hover { background: rgba(var(--signal-rgb, 77, 155, 255), .28); }
+#wl27DockToggle:active { transform: translateY(1px); }
+#wl27DockToggle .wl27-chev {
+  display: inline-block;
+  font-size: calc(1rem * var(--wl27-ui));
+  line-height: 1;
+  transition: transform .22s cubic-bezier(.22, 1, .36, 1);
+}
+body.wl27-dock-collapsed #wl27DockToggle .wl27-chev { transform: rotate(180deg); }
+#wl27DockToggle .wl27-toggle-label { white-space: nowrap; }
+body.wl27-dock-collapsed #wl27DockToggle .wl27-toggle-label::after { content: 'Places'; }
+body:not(.wl27-dock-collapsed) #wl27DockToggle .wl27-toggle-label::after { content: 'Hide'; }
+
+/* collapsed: the rail is gone from the screen, not merely faded */
+body.wl27-dock-collapsed.navigating #dock,
+body.wl27-dock-collapsed.navigating #dock.nav-shift {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: translateX(calc(-1 * (var(--wl27-dock-w) + var(--wl27-safe-l) + 12px))) !important;
+}
+/* the strip sits above the trip capsule, so clearing the screen means
+   travelling its own height plus everything below it, not just its
+   height — short of that it stayed half in view */
+body.wl27-dock-collapsed.wl27-dock-row.navigating #dock,
+body.wl27-dock-collapsed.wl27-dock-row.navigating #dock.nav-shift {
+  transform: translateY(calc(100% + var(--wl27-safe-b) + var(--wl27-bar-h) + 28px)) !important;
+}
+
+/* ======================================================================
+   1 — REAL BUSINESS LOGOS
+
+   The JS resolves the picture. These rules make sure a logo is drawn as
+   a logo — contained, on white, never cropped into an unreadable square
+   — and that the category glyph only ever appears when there is genuinely
+   no brand mark to be had.
+   ====================================================================== */
+.wl-poi-brand,
+.wl27-logo {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid rgba(255, 255, 255, .94);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .34);
+}
+.wl-poi-brand img,
+.wl27-logo img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  display: block;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+}
+.wl-poi-brand.wl27-photo img,
+.wl27-logo.wl27-photo img { width: 100%; height: 100%; object-fit: cover; }
+.wl-poi-brand .wl-brand-fallback,
+.wl27-logo .wl27-fallback {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  font: 800 12px/1 var(--font-ui, system-ui), sans-serif;
+  letter-spacing: -.02em;
+  color: #f4f8fb;
+  background: linear-gradient(145deg, #2a333c, #121820);
+}
+.wl-poi-brand.has-logo .wl-brand-fallback,
+.wl27-logo.has-logo .wl27-fallback { display: none; }
+.wl27-logo.wl27-lg { width: 132px; height: 132px; border-width: 3px; }
+.wl27-logo.wl27-lg .wl27-fallback { font-size: 34px; }
+
+/* the review badge that rides on the logo */
+.wl27-logo-wrap { position: relative; display: inline-block; line-height: 0; }
+.wl27-rev-badge {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 11px;
+  border: 2px solid #fff;
+  background: var(--wl27-accent);
+  color: #06121e;
+  font: 800 11px/1 var(--font-ui, system-ui), sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
+}
+.wl27-rev-badge.wl27-none { background: rgba(20, 28, 36, .9); color: #cdd9e4; border-color: rgba(255, 255, 255, .55); }
+.wl27-logo-wrap.wl27-big .wl27-rev-badge { right: 2px; bottom: 2px; height: 28px; padding: 0 11px; font-size: 13px; }
+
+/* markers keep a readable size at every zoom */
+.wl-nav-poi-marker .wl-poi-brand,
+.wl-nav-poi-marker .wl27-logo { width: 46px !important; height: 46px !important; }
+.wl-poi-chip { width: 42px; height: 42px; font-size: 21px; }
+
+/* ======================================================================
+   5 — RATE & REVIEW
+   ====================================================================== */
+#wl27Review {
+  position: fixed;
+  inset: 0;
+  z-index: 9700;
+  display: none;
+  background: rgba(4, 10, 16, .62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+#wl27Review.show { display: block; }
+body.wl27-review-open { overflow: hidden; }
+
+/* Centred by grid, not by transform, so a tall form still scrolls and a
+   software keyboard cannot push the buttons off the bottom. The sheet is
+   pinned to the visual viewport height the JS measures. */
+.wl27-rv-scroll {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  /* --wl27-vh is the *visual* viewport, which a raised keyboard has
+     already shortened, so the keyboard must not be subtracted a second
+     time; doing that once cost the sheet its footer. */
+  height: var(--wl27-vh, 100%);
+  display: grid;
+  place-items: center;
+  padding: clamp(10px, 3vh, 34px) clamp(10px, 3vw, 28px);
+  padding-top: calc(clamp(10px, 3vh, 34px) + var(--wl27-safe-t));
+  padding-bottom: calc(clamp(10px, 3vh, 34px) + var(--wl27-safe-b));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.wl27-rv-sheet {
+  width: min(560px, 100%);
+  /* measured against this box's own content height, so the padding above
+     and below is honoured without restating it */
+  max-height: min(860px, 100%);
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid var(--wl27-edge);
+  background: var(--surface-solid, #14202a);
+  color: var(--text, #e4ecf3);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, .55);
+  animation: wl27Rise .22s cubic-bezier(.22, 1, .36, 1);
+}
+@keyframes wl27Rise { from { transform: translateY(14px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.wl27-rv-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+}
+.wl27-rv-head b {
+  flex: 1;
+  min-width: 0;
+  font: 700 1.24rem/1.2 var(--font-display, system-ui), sans-serif;
+  color: var(--text-bright, #fff);
+}
+.wl27-rv-head small { display: block; margin-top: 3px; font-size: .86rem; font-weight: 400; color: var(--text-dim, #a9b8c6); }
+.wl27-rv-x {
+  flex: 0 0 auto;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .14));
+  background: transparent;
+  color: var(--text-dim, #a9b8c6);
+  font-size: 1rem;
+  cursor: pointer;
+}
+.wl27-rv-x:hover { color: var(--text-bright, #fff); }
+
+.wl27-rv-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.wl27-rv-pad { padding: 16px 18px; }
+
+/* --- search --- */
+.wl27-rv-field { position: relative; margin: 14px 18px 4px; }
+.wl27-rv-field svg {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: 19px; height: 19px; color: var(--text-faint, #9fb0bd); pointer-events: none;
+}
+.wl27-rv-field input {
+  width: 100%; box-sizing: border-box;
+  height: 52px; padding: 0 44px 0 44px;
+  border-radius: 13px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .14));
+  background: rgba(255, 255, 255, .06);
+  color: var(--text-bright, #fff);
+  font-size: 16px;                     /* 16px stops iOS zooming the page */
+  outline: none;
+}
+body.light-mode .wl27-rv-field input { background: rgba(0, 0, 0, .04); }
+.wl27-rv-field input:focus { border-color: var(--wl27-accent); background: transparent; }
+.wl27-rv-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 32px; height: 32px; border: none; border-radius: 50%;
+  background: transparent; color: var(--text-faint, #9fb0bd); cursor: pointer; display: none;
+}
+.wl27-rv-clear.show { display: block; }
+
+.wl27-rv-hint { padding: 10px 18px 2px; font-size: .86rem; color: var(--text-faint, #9fb0bd); line-height: 1.5; }
+
+.wl27-rv-results { padding: 6px 10px 14px; }
+.wl27-rv-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; box-sizing: border-box;
+  padding: 11px 10px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.wl27-rv-item:hover, .wl27-rv-item:focus-visible {
+  background: rgba(var(--signal-rgb, 77, 155, 255), .13);
+  border-color: rgba(var(--signal-rgb, 77, 155, 255), .32);
+}
+.wl27-rv-item .wl27-logo { width: 42px; height: 42px; }
+.wl27-rv-item .wl27-it { flex: 1; min-width: 0; }
+.wl27-rv-item .wl27-it b {
+  display: block; font-size: 1rem; font-weight: 650;
+  color: var(--text-bright, #fff);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wl27-rv-item .wl27-it span {
+  display: block; margin-top: 2px; font-size: .86rem; color: var(--text-dim, #a9b8c6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wl27-rv-item .wl27-far { flex: 0 0 auto; font-size: .86rem; font-weight: 700; color: var(--wl27-accent); }
+.wl27-rv-item .wl27-cnt {
+  flex: 0 0 auto; font-size: .78rem; font-weight: 700;
+  padding: 3px 8px; border-radius: 9px;
+  background: rgba(var(--signal-rgb, 77, 155, 255), .16); color: var(--wl27-accent);
+}
+.wl27-rv-msg { padding: 18px; font-size: .95rem; color: var(--text-dim, #a9b8c6); line-height: 1.55; }
+.wl27-rv-msg .wl27-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--wl27-accent); margin-right: 5px; animation: wl27Blink 1s ease-in-out infinite; }
+.wl27-rv-msg .wl27-dot:nth-child(2) { animation-delay: .15s }
+.wl27-rv-msg .wl27-dot:nth-child(3) { animation-delay: .3s }
+@keyframes wl27Blink { 0%, 80%, 100% { opacity: .22 } 40% { opacity: 1 } }
+
+/* --- the chosen place, then the form --- */
+.wl27-rv-place {
+  display: flex; align-items: center; gap: 13px;
+  margin: 16px 18px 0; padding: 14px;
+  border-radius: 15px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+  background: rgba(var(--signal-rgb, 77, 155, 255), .07);
+}
+.wl27-rv-place .wl27-logo { width: 56px; height: 56px; }
+.wl27-rv-place .wl27-pt { flex: 1; min-width: 0; }
+.wl27-rv-place .wl27-pt b { display: block; font-size: 1.08rem; font-weight: 700; color: var(--text-bright, #fff); }
+.wl27-rv-place .wl27-pt span { display: block; margin-top: 3px; font-size: .88rem; color: var(--text-dim, #a9b8c6); }
+.wl27-rv-back {
+  flex: 0 0 auto; height: 34px; padding: 0 12px;
+  border-radius: 10px; border: 1px solid var(--line-soft, rgba(255, 255, 255, .16));
+  background: transparent; color: var(--text-dim, #a9b8c6);
+  font: 600 .84rem/1 var(--font-ui, system-ui), sans-serif; cursor: pointer;
+}
+.wl27-rv-back:hover { color: var(--text-bright, #fff); }
+
+.wl27-lbl {
+  display: block; margin: 20px 18px 8px;
+  font: 700 .96rem/1.3 var(--font-ui, system-ui), sans-serif;
+  color: var(--text-bright, #fff);
+}
+.wl27-lbl small { display: block; margin-top: 3px; font-weight: 400; font-size: .84rem; color: var(--text-faint, #9fb0bd); }
+
+.wl27-stars {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 18px; padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .14));
+  background: rgba(255, 255, 255, .05);
+}
+body.light-mode .wl27-stars { background: rgba(0, 0, 0, .035); }
+.wl27-stars .wl27-star {
+  width: 44px; height: 44px;
+  border: none; background: transparent; cursor: pointer;
+  font-size: 30px; line-height: 1; padding: 0;
+  color: rgba(160, 175, 190, .42);
+  transition: transform .12s ease, color .12s ease;
+}
+.wl27-stars .wl27-star.on { color: var(--wl27-star); }
+.wl27-stars .wl27-star:hover { transform: scale(1.12); }
+.wl27-stars .wl27-score {
+  margin-left: auto; flex: 0 0 auto;
+  font: 700 1.16rem/1 var(--font-display, system-ui), sans-serif;
+  color: var(--text-bright, #fff);
+  font-variant-numeric: tabular-nums;
+}
+.wl27-stars .wl27-score i { font-style: normal; color: var(--text-faint, #9fb0bd); font-weight: 500; font-size: .92rem; }
+
+.wl27-note {
+  display: block; box-sizing: border-box;
+  width: calc(100% - 36px); margin: 0 18px;
+  min-height: 108px; resize: vertical;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .14));
+  background: rgba(255, 255, 255, .05);
+  color: var(--text-bright, #fff);
+  font: 400 16px/1.5 var(--font-ui, system-ui), sans-serif;
+  outline: none;
+}
+body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
+.wl27-note:focus { border-color: var(--wl27-accent); background: transparent; }
+.wl27-note::placeholder { color: var(--text-faint, #9fb0bd); }
+.wl27-count { margin: 6px 18px 0; text-align: right; font-size: .78rem; color: var(--text-faint, #9fb0bd); }
+
+.wl27-flash { margin: 14px 18px 0; padding: 12px 14px; border-radius: 12px; font-size: .92rem; line-height: 1.5; display: none; }
+.wl27-flash.show { display: block; }
+.wl27-flash.bad { background: rgba(var(--rose-rgb, 255, 93, 108), .14); color: var(--rose, #ff8d98); font-weight: 600; }
+.wl27-flash.good { background: rgba(74, 222, 128, .14); color: #6ee7a0; font-weight: 600; }
+.wl27-flash.info { background: rgba(var(--signal-rgb, 77, 155, 255), .12); color: var(--text-dim, #a9b8c6); }
+
+.wl27-rv-foot {
+  flex: 0 0 auto;
+  display: flex; gap: 10px;
+  padding: 14px 18px calc(16px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+  background: var(--surface-solid, #14202a);
+}
+.wl27-btn {
+  flex: 1; min-width: 0; height: 52px;
+  border-radius: 13px; border: 1px solid var(--line-soft, rgba(255, 255, 255, .16));
+  background: transparent; color: var(--text, #e4ecf3);
+  font: 700 1rem/1 var(--font-ui, system-ui), sans-serif; cursor: pointer;
+}
+.wl27-btn:hover { background: rgba(var(--signal-rgb, 77, 155, 255), .12); }
+.wl27-btn.primary { flex: 1.6; background: var(--wl27-accent); border-color: var(--wl27-accent); color: #04121f; }
+.wl27-btn.primary:hover { filter: brightness(1.08); background: var(--wl27-accent); }
+.wl27-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* --- the reviews that exist --- */
+.wl27-rev-list { padding: 4px 18px 18px; }
+.wl27-rev-sum {
+  display: flex; align-items: center; gap: 14px;
+  margin: 16px 18px 6px; padding: 14px;
+  border-radius: 15px;
+  border: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+}
+.wl27-rev-sum b { font: 700 2.1rem/1 var(--font-display, system-ui), sans-serif; color: var(--text-bright, #fff); }
+.wl27-rev-sum .wl27-sum-t { flex: 1; min-width: 0; }
+.wl27-rev-sum .wl27-sum-t span { display: block; font-size: .88rem; color: var(--text-dim, #a9b8c6); margin-top: 4px; }
+.wl27-rev-sum .wl27-sum-stars { color: var(--wl27-star); letter-spacing: 1px; font-size: 1rem; }
+
+.wl27-rev-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line-soft, rgba(255, 255, 255, .1));
+}
+.wl27-rev-row:last-child { border-bottom: none; }
+.wl27-ava {
+  flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden;
+  background: linear-gradient(135deg, var(--wl27-accent), #6f7dff);
+  color: #04121f; font: 800 1rem/1 var(--font-ui, system-ui), sans-serif;
+  background-size: cover; background-position: center;
+}
+.wl27-ava img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wl27-rev-b { flex: 1; min-width: 0; }
+.wl27-rev-b b { display: block; font-size: .98rem; font-weight: 700; color: var(--text-bright, #fff); }
+.wl27-rev-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+.wl27-rev-meta .wl27-s { color: var(--wl27-star); font-size: .92rem; letter-spacing: .5px; }
+.wl27-rev-meta .wl27-when { font-size: .8rem; color: var(--text-faint, #9fb0bd); }
+.wl27-rev-b p { margin: 7px 0 0; font-size: .95rem; line-height: 1.55; color: var(--text, #e4ecf3); overflow-wrap: anywhere; }
+.wl27-rev-mine { font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--wl27-accent); }
+
+.wl27-src { padding: 4px 18px 18px; font-size: .78rem; line-height: 1.6; color: var(--text-faint, #9fb0bd); }
+.wl27-src a { color: var(--wl27-accent); text-decoration: none; }
+
+/* the place card gains a review action and a rating line */
+.wl27-card-rating { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: .95rem; }
+.wl27-card-rating .wl27-s { color: var(--wl27-star); letter-spacing: .6px; }
+.wl27-card-rating b { font-weight: 700; color: var(--text-bright, #fff); font-variant-numeric: tabular-nums; }
+.wl27-card-rating button {
+  margin-left: auto; border: none; background: none; padding: 0;
+  color: var(--wl27-accent); font: 700 .9rem/1 var(--font-ui, system-ui), sans-serif; cursor: pointer;
+}
+.pc-btn.wl27-review-btn { gap: 6px; }
+
+/* narrow phones */
+@media (max-width: 460px) {
+  .wl27-rv-sheet { border-radius: 18px; }
+  .wl27-rv-scroll { padding-left: 10px; padding-right: 10px; }
+  .wl27-rv-head { padding: 15px 14px 12px; }
+  .wl27-rv-field, .wl27-rv-place, .wl27-stars, .wl27-note, .wl27-lbl, .wl27-flash, .wl27-count { margin-left: 14px; margin-right: 14px; }
+  .wl27-note { width: calc(100% - 28px); }
+  .wl27-rv-foot { padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); }
+  .wl27-stars .wl27-star { width: 38px; height: 38px; font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl27-rv-sheet, #wl27DockToggle, body.navigating #dock { animation: none !important; transition: none !important; }
+}
+</style>
 
 </head>
 <body>
@@ -18729,6 +19620,1501 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   })();
 
   console.log('WayLyn ready \u2014 build ' + WL_BUILD);
+
+  /* ==================================================================
+     WAYLYNQ ROUND 27 - pasted INSIDE the main application closure.
+     It has to live here: it reassigns drawPoi, renderPoiPanel,
+     showPlaceCard and style3dPalette, which are function declarations
+     private to this scope. From outside it, under 'use strict', those
+     assignments throw a ReferenceError instead of taking effect - which
+     is exactly what happens to the rounds 19-26 copies further down.
+     ================================================================== */
+/* ======================================================================
+   WAYLYNQ — ROUND 27
+   Paste this INSIDE the main application closure, at the very end, just
+   before the final `})();` that follows
+
+       console.log('WayLyn ready — build ' + WL_BUILD);
+
+   It has to live in that scope because it replaces functions the app
+   declared there (drawPoi, renderPoiPanel, showPlaceCard, style3dPalette).
+   Every replacement calls through to nothing it does not understand and
+   every access to an app internal is guarded, so a symbol that is not
+   where this expects it degrades one feature rather than the drive.
+
+     1. Real business logos on every POI
+     2. A collapse arrow on the POI rail in the 3D driving view
+     3. Night view lifted so streets stay readable
+     4. One layout that holds its shape at every screen size
+     5. Rate & Review, shared between accounts, sourced from OpenStreetMap
+   ====================================================================== */
+(() => {
+  'use strict';
+
+  const W27 = window.WayLynRound27 = { version: '27.0.0' };
+  const d = document;
+  const id = (x) => d.getElementById(x);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const esc27 = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  /* An app internal, read safely. If a round before this one moved or
+     renamed something, the feature that needs it stands down instead of
+     throwing on the next GPS fix. */
+  function app(fn, fallback) {
+    try { const v = fn(); return v === undefined ? fallback : v; }
+    catch (e) { return fallback; }
+  }
+  const lsGet = (k, fb) => { try { const v = localStorage.getItem(k); return v == null ? fb : JSON.parse(v); } catch (e) { return fb; } };
+  const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+
+  /* ====================================================================
+     4 — THE LAYOUT ENGINE
+
+     Every position in the driving view now comes from one measurement
+     pass rather than from a dozen breakpoints that each guessed a
+     different number. The composition is identical at every size: the
+     guidance card top-left, controls and speed top-right, the places
+     rail down the left, the trip capsule bottom-left, recenter
+     bottom-right. Only the scale changes — and when a screen is too
+     short for a vertical rail, the rail becomes a strip rather than
+     being squeezed to nothing or hidden.
+  ==================================================================== */
+  const Layout = (() => {
+    let probe = null, raf = 0, last = '';
+
+    function insets() {
+      if (!probe) {
+        probe = d.createElement('div');
+        probe.setAttribute('aria-hidden', 'true');
+        probe.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;pointer-events:none;visibility:hidden;' +
+          'padding-top:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-right,0px);' +
+          'padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);';
+        d.body.appendChild(probe);
+      }
+      const c = getComputedStyle(probe);
+      return {
+        t: parseFloat(c.paddingTop) || 0,
+        r: parseFloat(c.paddingRight) || 0,
+        b: parseFloat(c.paddingBottom) || 0,
+        l: parseFloat(c.paddingLeft) || 0
+      };
+    }
+
+    function measure() {
+      const vv = window.visualViewport;
+      const vw = Math.round((vv && vv.width) || window.innerWidth || 1280);
+      const vh = Math.round((vv && vv.height) || window.innerHeight || 800);
+      const layoutH = window.innerHeight || vh;
+      const kb = Math.max(0, layoutH - vh - ((vv && vv.offsetTop) || 0));
+      const ins = insets();
+
+      /* One proportional scale. A 1180x780 window is "1"; everything
+         smaller shrinks on the square root so a phone is compact but
+         never illegible, and a large screen gains a little rather than
+         sprawling. */
+      const s = Math.min(vw / 1180, vh / 780);
+      const ui = clamp(Math.sqrt(Math.max(s, 0.18)), 0.78, 1.12);
+
+      const safeT = Math.max(10, ins.t);
+      const safeR = Math.max(10, ins.r);
+      const safeB = Math.max(10, ins.b);
+      const safeL = Math.max(10, ins.l);
+
+      const wide = (el, fb) => {
+        const w = el ? Math.ceil(el.getBoundingClientRect().width) : 0;
+        return w > 4 ? w : fb;
+      };
+
+      /* Only the buttons the row actually carries decide whether the
+         labels have to go, and that is settled from the width alone —
+         measuring the row to decide whether to shrink the row would
+         make the two answers chase each other frame after frame. */
+      const tight = vw < 900;
+
+      /* The guidance card's neighbour is the speed cluster, not the
+         control row: the row sits in its own band above the card and
+         never shares a line with it, while the speed dial and the
+         posted limit sit directly beside the card. Sizing the card
+         against the row was what pushed it under the speed dial on a
+         narrow screen. The lower bound gives way when the screen
+         genuinely cannot hold it, rather than forcing an overlap. */
+      /* The control row and the top-left utility row do share a band, so
+         the utility row is capped at whatever the controls leave it and
+         its labels ellipsize rather than sliding underneath them. */
+      const trW = wide(id('navTopRight'), Math.round(300 * ui));
+
+      const speedW = wide(id('speedCluster'), Math.round(120 * ui));
+      const roomForCard = vw - safeL - safeR - speedW - 16;
+      const cardFloor = clamp(roomForCard, 168, 244);
+      const cardW = Math.round(clamp(Math.min(360 * ui + 26, roomForCard), cardFloor, 380));
+
+      const dockW = Math.round(clamp(vw * 0.18, 168, 234) * Math.max(ui, 0.86));
+
+      /* Same reasoning along the bottom edge: the trip capsule keeps
+         clear of the recentre button instead of running underneath it. */
+      const fabW = wide(id('fabStack'), Math.round(112 * ui));
+      const roomForBar = vw - safeL - safeR - fabW - 12;
+      const barW = Math.round(clamp(vw * 0.31, clamp(roomForBar, 150, 264), 400));
+      const barH = Math.round(clamp(70 * ui, 56, 76));
+
+      /* The rail starts below whatever the guidance card actually is
+         this frame — it grows and shrinks with lanes and road rows — and
+         stops above the trip capsule. */
+      const cardEl = id('navTop');
+      const cardBottom = cardEl && cardEl.getBoundingClientRect().height
+        ? Math.ceil(cardEl.getBoundingClientRect().bottom)
+        : Math.round(safeT + 62 * ui + 150 * ui);
+      const dockTop = Math.round(cardBottom + 12);
+      const dockBottom = Math.round(safeB + barH + 12);
+      const dockSpace = vh - dockTop - dockBottom;
+      const row = dockSpace < 148;
+
+      return {
+        vw, vh, kb, ui, safeT, safeR, safeB, safeL,
+        cardW, dockW, dockTop, dockBottom, barW, barH, row, tight,
+        actW: Math.max(76, vw - safeL - safeR - trW - 10),
+        cardH: Math.max(0, cardBottom - (safeT + 62 * ui))
+      };
+    }
+
+    function paint(m) {
+      const r = d.documentElement.style;
+      r.setProperty('--wl27-vh', m.vh + 'px');
+      r.setProperty('--wl27-kb', m.kb + 'px');
+      r.setProperty('--wl27-ui', String(Math.round(m.ui * 1000) / 1000));
+      r.setProperty('--wl27-safe-t', m.safeT + 'px');
+      r.setProperty('--wl27-safe-r', m.safeR + 'px');
+      r.setProperty('--wl27-safe-b', m.safeB + 'px');
+      r.setProperty('--wl27-safe-l', m.safeL + 'px');
+      r.setProperty('--wl27-act-w', m.actW + 'px');
+      r.setProperty('--wl27-card-w', m.cardW + 'px');
+      r.setProperty('--wl27-card-h', Math.round(m.cardH) + 'px');
+      r.setProperty('--wl27-dock-w', m.dockW + 'px');
+      r.setProperty('--wl27-dock-top', m.dockTop + 'px');
+      r.setProperty('--wl27-dock-bottom', m.dockBottom + 'px');
+      r.setProperty('--wl27-bar-w', m.barW + 'px');
+      r.setProperty('--wl27-bar-h', m.barH + 'px');
+      d.body.classList.toggle('wl27-tight', m.tight);
+      d.body.classList.toggle('wl27-dock-row', m.row);
+      d.body.classList.toggle('wl27-kb-open', m.kb > 90);
+      enforceVisible();
+      placeToggle(m);
+    }
+
+    /* The strip's height is whatever its one row of buttons comes to, so
+       it is measured rather than derived from the vertical rail's space —
+       deriving it put the arrow up inside the guidance card on a short
+       screen. The last good height is kept for the collapsed frame, when
+       the strip has already been translated off the screen. */
+    let rowH = 0;
+
+    function placeToggle(m) {
+      const t = id('wl27DockToggle');
+      if (!t) return;
+      const collapsed = d.body.classList.contains('wl27-dock-collapsed');
+      if (m.row) {
+        const dk = id('dock');
+        if (dk && !collapsed) {
+          const h = Math.ceil(dk.getBoundingClientRect().height);
+          if (h > 8) rowH = h;
+        }
+        const strip = rowH || Math.round(58 * m.ui);
+        t.style.left = m.safeL + 'px';
+        t.style.right = 'auto';
+        t.style.top = 'auto';
+        t.style.bottom = collapsed
+          ? (m.safeB + m.barH + 10) + 'px'
+          : (m.safeB + m.barH + 10 + strip + 6) + 'px';
+      } else {
+        t.style.bottom = 'auto';
+        t.style.right = 'auto';
+        t.style.top = Math.round(m.dockTop) + 'px';
+        t.style.left = collapsed ? m.safeL + 'px' : Math.round(m.safeL + m.dockW + 8) + 'px';
+      }
+    }
+
+    /* ------------------------------------------------------------------
+       Earlier rounds hide whole pieces of the driving view at certain
+       sizes — the speed cluster and right rail under 700px tall, the trip
+       capsule under 820px wide. That is the "stuff is hidden on different
+       screens" complaint, and the fix is not to out-shout every one of
+       those rules blindly: an element the app itself has chosen to hide
+       for a good reason (no posted limit, no GPS yet) has to stay hidden.
+       So only an element that is hidden by a stylesheet, and not by the
+       app's own inline style or hidden attribute, is brought back.
+    ------------------------------------------------------------------ */
+    const KEEP = ['wlNavActions', 'navTop', 'navTopRight', 'speedCluster', 'wlRightRail', 'fabStack', 'navBar', 'dock'];
+
+    function enforceVisible() {
+      if (!d.body.classList.contains('navigating')) {
+        KEEP.forEach((k) => { const el = id(k); if (el) el.classList.remove('wl27-show'); });
+        return;
+      }
+      for (const k of KEEP) {
+        const el = id(k);
+        if (!el) continue;
+        const byApp = el.hasAttribute('hidden') || (el.style && el.style.display === 'none');
+        if (byApp) { el.classList.remove('wl27-show'); continue; }
+        if (el.classList.contains('wl27-show')) continue;
+        if (getComputedStyle(el).display === 'none') el.classList.add('wl27-show');
+      }
+    }
+
+    function run() {
+      raf = 0;
+      let m;
+      try { m = measure(); } catch (e) { return; }
+      const sig = [m.vw, m.vh, m.kb, m.ui, m.cardW, m.dockW, m.dockTop, m.dockBottom, m.row, m.tight].join('|');
+      /* The toggle still needs repositioning when only the collapsed
+         state changed, and a panel the app has just re-shown still needs
+         checking, so both are done unconditionally. */
+      if (sig === last) { enforceVisible(); placeToggle(m); return; }
+      last = sig;
+      paint(m);
+    }
+
+    function schedule() { if (!raf) raf = requestAnimationFrame(run); }
+
+    function start() {
+      schedule();
+      addEventListener('resize', schedule, { passive: true });
+      addEventListener('orientationchange', () => setTimeout(schedule, 220), { passive: true });
+      if (window.visualViewport) {
+        visualViewport.addEventListener('resize', schedule, { passive: true });
+        visualViewport.addEventListener('scroll', schedule, { passive: true });
+      }
+      /* The guidance card changes height as lanes and road rows come and
+         go, and the top-right row changes width when labels drop, so the
+         two boxes everything else is measured against are observed. */
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(schedule);
+        ['navTop', 'navTopRight', 'navBar'].forEach((x) => { const el = id(x); if (el) ro.observe(el); });
+      }
+      if (window.MutationObserver) {
+        new MutationObserver(schedule).observe(d.body, { attributes: true, attributeFilter: ['class'] });
+      }
+      setInterval(schedule, 1500);
+    }
+
+    return { start, schedule, measure };
+  })();
+
+  /* ====================================================================
+     2 — THE COLLAPSE ARROW
+  ==================================================================== */
+  function buildDockToggle() {
+    if (id('wl27DockToggle')) return;
+    const b = d.createElement('button');
+    b.id = 'wl27DockToggle';
+    b.type = 'button';
+    b.setAttribute('aria-controls', 'dock');
+    b.innerHTML = '<span class="wl27-chev" aria-hidden="true">‹</span><span class="wl27-toggle-label"></span>';
+    d.body.appendChild(b);
+
+    const apply = (collapsed, remember) => {
+      d.body.classList.toggle('wl27-dock-collapsed', collapsed);
+      b.setAttribute('aria-expanded', String(!collapsed));
+      b.title = collapsed ? 'Show the places rail' : 'Hide the places rail';
+      if (remember) lsSet('wl27:dockCollapsed', collapsed);
+      Layout.schedule();
+      /* Leaflet and MapLibre both size themselves to their container, so
+         they are told the moment the rail stops covering the map. */
+      setTimeout(() => {
+        app(() => map && map.invalidateSize && map.invalidateSize());
+        app(() => map3d && map3d.resize && map3d.resize());
+      }, 260);
+    };
+
+    b.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      apply(!d.body.classList.contains('wl27-dock-collapsed'), true);
+    });
+    apply(!!lsGet('wl27:dockCollapsed', false), false);
+  }
+
+  /* ====================================================================
+     3 — NIGHT VIEW, LIFTED
+
+     The vector palette is rewritten rather than filtered. A CSS filter
+     over the whole canvas dims labels and route colour along with the
+     asphalt, which is why the map went unreadable; setting the paint
+     properties leaves the route, the shields and the names alone.
+  ==================================================================== */
+  const NIGHT = {
+    bg: '#22303c', water: '#1b4a6e', green: '#2a4c3a', land: '#2b3742',
+    roadMajor: '#9aa8b4', roadMinor: '#79868f', text: '#f0f6fa', halo: 'rgba(18,26,33,.86)',
+    building: '#5d6d79'
+  };
+  const DAY = {
+    bg: '#eef2f4', water: '#8fc6e8', green: '#c6e0c2', land: '#e4e9ec',
+    roadMajor: '#ffffff', roadMinor: '#f2f5f7', text: '#27343c', halo: 'rgba(255,255,255,.9)',
+    building: '#c7ced3'
+  };
+
+  function paintVectorPalette() {
+    const m = app(() => map3d, null);
+    if (!m || !app(() => map3dReady, false)) return;
+    if (!app(() => m.isStyleLoaded && m.isStyleLoaded(), false)) return;
+    const night = !app(() => lightMode, false);
+    const p = night ? NIGHT : DAY;
+    try {
+      const cv = m.getCanvas && m.getCanvas();
+      if (cv) { cv.style.filter = 'none'; cv.style.background = p.bg; }
+      const layers = (m.getStyle() && m.getStyle().layers) || [];
+      layers.forEach((l) => {
+        const lid = String(l.id || '');
+        const low = lid.toLowerCase();
+        if (/^wl-|^r1\d-|^r2\d-/.test(low)) return;          /* our own overlays keep their colours */
+        try {
+          if (l.type === 'background') m.setPaintProperty(lid, 'background-color', p.bg);
+          else if (l.type === 'fill') {
+            if (/water|ocean|river|lake|waterway/.test(low)) m.setPaintProperty(lid, 'fill-color', p.water);
+            else if (/park|grass|wood|forest|garden|pitch|golf|green|cemetery/.test(low)) m.setPaintProperty(lid, 'fill-color', p.green);
+            else if (/landuse|landcover|residential|commercial|industrial|suburb|aeroway|pier/.test(low)) m.setPaintProperty(lid, 'fill-color', p.land);
+          } else if (l.type === 'line' && /transportation|road|street|highway|motorway|trunk|primary|secondary|tertiary|bridge|tunnel/.test(low)) {
+            const major = /motorway|trunk|primary|highway|freeway/.test(low);
+            m.setPaintProperty(lid, 'line-color', major ? p.roadMajor : p.roadMinor);
+            m.setPaintProperty(lid, 'line-opacity', major ? 1 : 0.94);
+          } else if (l.type === 'symbol') {
+            if (l.paint && l.paint['text-color'] !== undefined) m.setPaintProperty(lid, 'text-color', p.text);
+            if (l.paint && l.paint['text-halo-color'] !== undefined) {
+              m.setPaintProperty(lid, 'text-halo-color', p.halo);
+              m.setPaintProperty(lid, 'text-halo-width', 1.35);
+            }
+          } else if (l.type === 'fill-extrusion') {
+            m.setPaintProperty(lid, 'fill-extrusion-color', p.building);
+            m.setPaintProperty(lid, 'fill-extrusion-opacity', night ? 0.9 : 0.82);
+          }
+        } catch (e) { /* a layer that does not take this property */ }
+      });
+      ['wl-buildings', 'wl-building-supplement-3d', 'r20-all-buildings', 'wl-final-buildings-0', 'wl-final-buildings-1']
+        .forEach((x) => { try { if (m.getLayer(x)) m.setPaintProperty(x, 'fill-extrusion-color', p.building); } catch (e) {} });
+    } catch (e) { /* the style is reloading */ }
+  }
+
+  /* Replace the app's palette function so every later caller — theme
+     changes, style reloads, the day/night timer — lands here. */
+  try { style3dPalette = paintVectorPalette; } catch (e) {}
+  try {
+    const priorApplyTheme = applyTheme;
+    applyTheme = function wl27ApplyTheme() {
+      const out = priorApplyTheme.apply(this, arguments);
+      setTimeout(paintVectorPalette, 30);
+      return out;
+    };
+  } catch (e) {}
+
+  /* ====================================================================
+     1 — REAL BUSINESS LOGOS
+
+     Order of sources, strongest first. Everything is probed before it is
+     shown, so a 404 or a generic grey globe never lands on the map:
+
+       1. a logo or image URL recorded on the place itself
+       2. the brand's Wikidata entry  (P154 logo, then P18)
+       3. the official website, as the brand's own mark
+       4. the brand's name looked up in Wikidata
+       5. a Google Places photo, when a key is configured
+
+     Only when all five come back empty does the category glyph appear,
+     and then as the business's initials rather than a burger.
+  ==================================================================== */
+  const Brand = (() => {
+    const MEM = new Map();
+    const PENDING = new Map();
+    const PREFIX = 'wl27:brand:';
+    const TTL = 30 * 864e5;
+
+    const CHAINS = [
+      [/\bdunkin/i, 'dunkindonuts.com'], [/starbucks/i, 'starbucks.com'], [/mcdonald/i, 'mcdonalds.com'],
+      [/burger king/i, 'bk.com'], [/wendy/i, 'wendys.com'], [/chipotle/i, 'chipotle.com'],
+      [/taco bell/i, 'tacobell.com'], [/chick[- ]?fil[- ]?a/i, 'chick-fil-a.com'], [/\bsubway\b/i, 'subway.com'],
+      [/domino/i, 'dominos.com'], [/pizza hut/i, 'pizzahut.com'], [/panera/i, 'panerabread.com'],
+      [/popeyes/i, 'popeyes.com'], [/kfc|kentucky fried/i, 'kfc.com'], [/arby/i, 'arbys.com'],
+      [/five guys/i, 'fiveguys.com'], [/shake shack/i, 'shakeshack.com'], [/in-?n-?out/i, 'in-n-out.com'],
+      [/jersey mike/i, 'jerseymikes.com'], [/panda express/i, 'pandaexpress.com'], [/sonic drive/i, 'sonicdrivein.com'],
+      [/dairy queen/i, 'dairyqueen.com'], [/jack in the box/i, 'jackinthebox.com'], [/whataburger/i, 'whataburger.com'],
+      [/culver/i, 'culvers.com'], [/raising cane/i, 'raisingcanes.com'], [/wingstop/i, 'wingstop.com'],
+      [/applebee/i, 'applebees.com'], [/olive garden/i, 'olivegarden.com'], [/chili'?s/i, 'chilis.com'],
+      [/outback/i, 'outback.com'], [/denny'?s/i, 'dennys.com'], [/ihop/i, 'ihop.com'],
+      [/cracker barrel/i, 'crackerbarrel.com'], [/texas roadhouse/i, 'texasroadhouse.com'],
+      [/wawa/i, 'wawa.com'], [/quickchek/i, 'quickchek.com'], [/sheetz/i, 'sheetz.com'], [/racetrac/i, 'racetrac.com'],
+      [/7[- ]?eleven/i, '7-eleven.com'], [/circle k/i, 'circlek.com'], [/\bshell\b/i, 'shell.com'],
+      [/exxon|mobil/i, 'exxon.com'], [/\bbp\b/i, 'bp.com'], [/chevron/i, 'chevron.com'], [/sunoco/i, 'sunoco.com'],
+      [/speedway/i, 'speedway.com'], [/marathon/i, 'marathonbrand.com'], [/citgo/i, 'citgo.com'],
+      [/valero/i, 'valero.com'], [/gulf\b/i, 'gulfoil.com'], [/pilot|flying j/i, 'pilotflyingj.com'],
+      [/\bqt\b|quiktrip/i, 'quiktrip.com'], [/buc-?ee/i, 'buc-ees.com'],
+      [/tesla supercharger|supercharger/i, 'tesla.com'], [/electrify america/i, 'electrifyamerica.com'],
+      [/chargepoint/i, 'chargepoint.com'], [/evgo/i, 'evgo.com'], [/blink charging|^blink$/i, 'blinkcharging.com'],
+      [/ionity/i, 'ionity.eu'], [/\btesla\b/i, 'tesla.com'],
+      [/costco/i, 'costco.com'], [/walmart/i, 'walmart.com'], [/target/i, 'target.com'],
+      [/whole foods/i, 'wholefoodsmarket.com'], [/trader joe/i, 'traderjoes.com'], [/wegmans/i, 'wegmans.com'],
+      [/shoprite/i, 'shoprite.com'], [/stop ?& ?shop/i, 'stopandshop.com'], [/safeway/i, 'safeway.com'],
+      [/kroger/i, 'kroger.com'], [/publix/i, 'publix.com'], [/aldi/i, 'aldi.us'], [/lidl/i, 'lidl.com'],
+      [/walgreens/i, 'walgreens.com'], [/\bcvs\b/i, 'cvs.com'], [/rite aid/i, 'riteaid.com'],
+      [/home depot/i, 'homedepot.com'], [/lowe'?s/i, 'lowes.com'], [/best buy/i, 'bestbuy.com'],
+      [/ikea/i, 'ikea.com'], [/marriott/i, 'marriott.com'], [/hilton/i, 'hilton.com'],
+      [/holiday inn/i, 'ihg.com'], [/hampton inn/i, 'hilton.com'], [/best western/i, 'bestwestern.com'],
+      [/motel 6/i, 'motel6.com'], [/super 8/i, 'wyndhamhotels.com'], [/hyatt/i, 'hyatt.com'],
+      [/bank of america/i, 'bankofamerica.com'], [/chase\b/i, 'chase.com'], [/wells fargo/i, 'wellsfargo.com'],
+      [/pnc\b/i, 'pnc.com'], [/td bank/i, 'td.com'], [/citibank|citi\b/i, 'citi.com'],
+      [/planet fitness/i, 'planetfitness.com'], [/\bamc\b/i, 'amctheatres.com'], [/regal cinema|regal\b/i, 'regmovies.com'],
+      [/dollar general/i, 'dollargeneral.com'], [/dollar tree/i, 'dollartree.com'], [/autozone/i, 'autozone.com'],
+      [/advance auto/i, 'advanceautoparts.com'], [/o'?reilly/i, 'oreillyauto.com'], [/enterprise rent/i, 'enterprise.com'],
+      [/hertz/i, 'hertz.com'], [/u-?haul/i, 'uhaul.com'], [/fedex/i, 'fedex.com'], [/\bups\b/i, 'ups.com'],
+      [/hospital|medical cent/i, '']
+    ];
+
+    const GENERIC = /^(restaurant|cafe|café|bar|pub|hotel|motel|pharmacy|hospital|clinic|parking|car ?park|toilets?|restrooms?|rest area|services|fuel|gas station|petrol|charging station|supermarket|shop|store|atm|bank|school|park)$/i;
+
+    function url(u) {
+      if (!u) return '';
+      try {
+        let s = String(u).trim();
+        if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+        const x = new URL(s);
+        return /^https?:$/.test(x.protocol) ? x.href : '';
+      } catch (e) { return ''; }
+    }
+    function host(u) {
+      const h = url(u);
+      if (!h) return '';
+      try { return new URL(h).hostname.replace(/^www\./i, ''); } catch (e) { return ''; }
+    }
+    function tagsOf(place) {
+      return (place && (place.tags || (place._brandEl && place._brandEl.tags))) || {};
+    }
+    function nameOf(place) {
+      const t = tagsOf(place);
+      return String(t.brand || t.operator || t.name || place.name || place.label || '').trim();
+    }
+    function domainOf(place) {
+      const t = tagsOf(place);
+      const site = url(place.website || place.googleWebsite || t.website || t['contact:website'] || t.url || '');
+      if (site) return host(site);
+      const n = nameOf(place);
+      if (!n) return '';
+      const hit = CHAINS.find((c) => c[0].test(n));
+      return hit && hit[1] ? hit[1] : '';
+    }
+    function keyOf(place) {
+      const t = tagsOf(place);
+      const brandKey = t['brand:wikidata'] || t.wikidata || domainOf(place) || nameOf(place).toLowerCase();
+      if (brandKey) return 'b:' + brandKey;
+      return 'p:' + (+place.lat || 0).toFixed(5) + ',' + (+place.lng || 0).toFixed(5);
+    }
+    function initials(n) {
+      const parts = String(n || '').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+      const s = parts.map((x) => x[0]).join('');
+      return (s || '•').toUpperCase().slice(0, 2);
+    }
+
+    function read(k) {
+      if (MEM.has(k)) return MEM.get(k);
+      const row = lsGet(PREFIX + k, null);
+      if (row && Date.now() - row.at < TTL) { MEM.set(k, row.v); return row.v; }
+      return null;
+    }
+    function write(k, v) { MEM.set(k, v); lsSet(PREFIX + k, { at: Date.now(), v: v }); }
+
+    /* An image is only accepted once it has actually decoded. The size
+       floor is what keeps a service's default grey globe off the map. */
+    function probe(src, minPx) {
+      return new Promise((resolve) => {
+        if (!src) { resolve(null); return; }
+        const img = new Image();
+        let done = false;
+        const finish = (ok) => { if (done) return; done = true; clearTimeout(timer); resolve(ok ? src : null); };
+        const timer = setTimeout(() => finish(false), 5200);
+        img.onload = () => finish((img.naturalWidth || 0) >= (minPx || 24) && (img.naturalHeight || 0) >= 12);
+        img.onerror = () => finish(false);
+        try { img.referrerPolicy = 'no-referrer'; } catch (e) {}
+        img.decoding = 'async';
+        img.src = src;
+      });
+    }
+    async function firstThatLoads(list, minPx) {
+      for (const u of list) { const ok = await probe(u, minPx); if (ok) return ok; }
+      return null;
+    }
+
+    async function json(u, ms) {
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const t = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms || 6000) : null;
+      try {
+        const r = await fetch(u, ctl ? { signal: ctl.signal } : undefined);
+        if (t) clearTimeout(t);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch (e) { if (t) clearTimeout(t); return null; }
+    }
+
+    const commons = (file, w) => file
+      ? 'https://commons.wikimedia.org/wiki/Special:FilePath/' +
+        encodeURIComponent(String(file).replace(/^File:/i, '')) + '?width=' + (w || 256)
+      : '';
+
+    async function fromWikidata(qid) {
+      if (!/^Q\d+$/i.test(String(qid || ''))) return null;
+      const dta = await json('https://www.wikidata.org/wiki/Special:EntityData/' + encodeURIComponent(qid) + '.json', 7000);
+      const ent = dta && dta.entities && dta.entities[qid];
+      if (!ent) return null;
+      const pick = (p) => {
+        const c = ent.claims && ent.claims[p] && ent.claims[p][0];
+        const v = c && c.mainsnak && c.mainsnak.datavalue && c.mainsnak.datavalue.value;
+        return typeof v === 'string' ? v : '';
+      };
+      const site = url(pick('P856'));
+      const file = pick('P154') || pick('P8972') || pick('P18');
+      return { file: file, site: site };
+    }
+
+    async function searchWikidata(name) {
+      const n = String(name || '').trim();
+      if (n.length < 3 || GENERIC.test(n)) return null;
+      const r = await json('https://www.wikidata.org/w/api.php?action=wbsearchentities&format=json&origin=*' +
+        '&language=en&uselang=en&limit=3&type=item&search=' + encodeURIComponent(n), 6000);
+      const hit = r && r.search && r.search[0];
+      if (!hit || !hit.id) return null;
+      const a = String(hit.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const b = n.toLowerCase().replace(/[^a-z0-9]+/g, '');
+      /* a loose match would put some unrelated company's logo on a diner */
+      if (!a || (a !== b && a.indexOf(b) < 0 && b.indexOf(a) < 0)) return null;
+      return fromWikidata(hit.id);
+    }
+
+    async function resolve(place) {
+      const k = keyOf(place);
+      const cached = read(k);
+      if (cached) return cached;
+      if (PENDING.has(k)) return PENDING.get(k);
+
+      const job = (async () => {
+        const t = tagsOf(place);
+        const name = nameOf(place) || String(place.label || 'Place');
+        let site = url(place.website || place.googleWebsite || t.website || t['contact:website'] || '');
+        let logo = '', kind = 'logo';
+
+        /* 1 — recorded straight on the place */
+        const direct = url(t.logo || t.image || place.brandLogo || '');
+        if (direct) logo = await probe(direct, 24);
+
+        /* 2 — the brand's own Wikidata entry */
+        if (!logo) {
+          const wd = await fromWikidata(t['brand:wikidata'] || t.wikidata || '');
+          if (wd) {
+            if (!site && wd.site) site = wd.site;
+            if (wd.file) logo = await probe(commons(wd.file, 256), 24);
+          }
+        }
+
+        /* 3 — the official site's own mark */
+        const dom = domainOf(place) || host(site);
+        if (!logo && dom) {
+          logo = await firstThatLoads([
+            'https://logo.clearbit.com/' + dom,
+            'https://icons.duckduckgo.com/ip3/' + dom + '.ico',
+            'https://www.google.com/s2/favicons?sz=256&domain=' + encodeURIComponent(dom)
+          ], 48);
+        }
+
+        /* 4 — the brand by name */
+        if (!logo) {
+          const wd2 = await searchWikidata(name);
+          if (wd2) {
+            if (!site && wd2.site) site = wd2.site;
+            if (wd2.file) logo = await probe(commons(wd2.file, 256), 24);
+          }
+        }
+
+        /* 5 — a photograph of the business, clearly a photo not a mark */
+        if (!logo) {
+          const photo = place.googlePhoto || (place.photos && place.photos[0]) || '';
+          if (photo) { const ok = await probe(photo, 40); if (ok) { logo = ok; kind = 'photo'; } }
+        }
+
+        const out = { logo: logo || '', kind: kind, site: site || (dom ? 'https://' + dom : ''), name: name };
+        write(k, out);
+        return out;
+      })().finally(() => PENDING.delete(k));
+
+      PENDING.set(k, job);
+      return job;
+    }
+
+    /* Markup is returned at once with whatever is already known, and the
+       DOM is patched in place when the lookup lands — so a marker never
+       waits on the network to appear. */
+    function html(place, size, opts) {
+      opts = opts || {};
+      const k = keyOf(place);
+      const cached = read(k);
+      const px = size || 40;
+      const name = nameOf(place) || String(place.name || place.label || 'Place');
+      const src = cached && cached.logo ? cached.logo : '';
+      const photo = cached && cached.kind === 'photo';
+      return '<span class="wl27-logo' + (src ? ' has-logo' : '') + (photo ? ' wl27-photo' : '') +
+        (opts.cls ? ' ' + opts.cls : '') + '" data-wl27-logo="' + esc27(k) + '"' +
+        ' style="width:' + px + 'px;height:' + px + 'px">' +
+        '<img alt="' + esc27(name) + '" loading="lazy" decoding="async" referrerpolicy="no-referrer"' +
+        (src ? ' src="' + esc27(src) + '"' : '') + '>' +
+        '<span class="wl27-fallback">' + esc27(initials(name)) + '</span></span>';
+    }
+
+    function patch(k, data) {
+      d.querySelectorAll('[data-wl27-logo="' + (window.CSS && CSS.escape ? CSS.escape(k) : k) + '"]').forEach((box) => {
+        const img = box.querySelector('img');
+        if (!img) return;
+        if (data.logo) {
+          if (img.getAttribute('src') !== data.logo) img.src = data.logo;
+          box.classList.add('has-logo');
+          box.classList.toggle('wl27-photo', data.kind === 'photo');
+          img.onerror = () => { box.classList.remove('has-logo'); img.removeAttribute('src'); };
+        } else {
+          box.classList.remove('has-logo');
+        }
+      });
+    }
+
+    function warm(place) {
+      resolve(place).then((data) => {
+        try {
+          place.brandLogo = data.logo;
+          if (!place.website && data.site) place.website = data.site;
+          if (place._brandEl) { place._brandEl.businessLogo = data.logo; place._brandEl.businessWebsite = data.site; }
+        } catch (e) {}
+        patch(keyOf(place), data);
+      }).catch(() => {});
+    }
+
+    return { html, warm, resolve, key: keyOf, initials, name: nameOf, domain: domainOf };
+  })();
+  W27.Brand = Brand;
+
+  /* ====================================================================
+     5 — RATE & REVIEW
+
+     Reviews are held on the server so they are the same for everybody.
+     The account is whoever is signed in; the picture is the one chosen
+     at sign-up. Nothing is written without a signed-in account, because
+     a review nobody can be held to is not a review.
+  ==================================================================== */
+  const Reviews = (() => {
+    let base = null, probed = false;
+    const SUM = new Map();          /* key -> {count, avg, at} */
+    const LIST = new Map();         /* key -> {rows, at} */
+    const TTL = 60 * 1000;
+
+    async function endpoint() {
+      if (probed) return base;
+      probed = true;
+      for (const u of ['/reviews.php', 'reviews.php', '/api/reviews.php']) {
+        try {
+          const r = await fetch(u + '?action=ping&_=' + Date.now(), { credentials: 'include', cache: 'no-store' });
+          if (!r.ok) continue;
+          const j = await r.json();
+          if (j && j.ok && j.service === 'waylynq-reviews') { base = u; return base; }
+        } catch (e) { /* try the next */ }
+      }
+      base = null;
+      return null;
+    }
+
+    async function call(action, payload) {
+      const u = await endpoint();
+      if (!u) { const e = new Error('offline'); e.offline = true; throw e; }
+      const res = await fetch(u + '?action=' + encodeURIComponent(action), {
+        method: payload ? 'POST' : 'GET',
+        headers: payload ? { 'Content-Type': 'application/json' } : undefined,
+        body: payload ? JSON.stringify(payload) : undefined,
+        credentials: 'include',
+        cache: 'no-store'
+      });
+      let body = null;
+      try { body = await res.json(); } catch (e) {}
+      if (!res.ok || !body || body.ok === false) {
+        const err = new Error((body && body.error) || ('Request failed (' + res.status + ')'));
+        err.status = res.status;
+        throw err;
+      }
+      return body;
+    }
+
+    /* A stable identity for a place. OpenStreetMap's own element id when
+       there is one, so two drivers looking at the same restaurant land on
+       the same record; otherwise the rounded position, which is stable to
+       about eleven metres. */
+    function keyFor(place) {
+      const el = place && place._brandEl;
+      const raw = String((el && el.id) || place.osmId || place.id || '');
+      if (/^(node|way|relation)\d+$/i.test(raw)) return 'osm:' + raw.toLowerCase();
+      if (/^google:/i.test(raw)) return 'g:' + raw.slice(7);
+      const lat = (+place.lat || 0).toFixed(5), lng = (+place.lng || 0).toFixed(5);
+      return 'geo:' + lat + ',' + lng;
+    }
+
+    function cachedSummary(k) {
+      const row = SUM.get(k);
+      return row && Date.now() - row.at < TTL ? row : null;
+    }
+
+    async function summary(keys) {
+      const want = [...new Set(keys.filter(Boolean))];
+      const missing = want.filter((k) => !cachedSummary(k));
+      if (missing.length) {
+        try {
+          const r = await call('summary', { places: missing.slice(0, 120) });
+          const got = (r && r.summary) || {};
+          missing.forEach((k) => {
+            const s = got[k] || { count: 0, avg: 0 };
+            SUM.set(k, { count: +s.count || 0, avg: +s.avg || 0, at: Date.now() });
+          });
+        } catch (e) {
+          missing.forEach((k) => { if (!SUM.has(k)) SUM.set(k, { count: 0, avg: 0, at: Date.now(), cold: true }); });
+        }
+      }
+      const out = {};
+      want.forEach((k) => { out[k] = SUM.get(k) || { count: 0, avg: 0 }; });
+      return out;
+    }
+
+    async function listFor(k, force) {
+      const row = LIST.get(k);
+      if (!force && row && Date.now() - row.at < TTL) return row.rows;
+      const u = await endpoint();
+      if (!u) { const e = new Error('offline'); e.offline = true; throw e; }
+      const res = await fetch(u + '?action=list&place=' + encodeURIComponent(k), { credentials: 'include', cache: 'no-store' });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body || body.ok === false) throw new Error((body && body.error) || 'Could not load reviews.');
+      const rows = body.reviews || [];
+      LIST.set(k, { rows: rows, at: Date.now() });
+      SUM.set(k, {
+        count: rows.length,
+        avg: rows.length ? rows.reduce((s, x) => s + (+x.rating || 0), 0) / rows.length : 0,
+        at: Date.now()
+      });
+      return rows;
+    }
+
+    function me() {
+      const u = app(() => window.WLAuth && WLAuth.current && WLAuth.current(), null);
+      if (!u) return null;
+      let avatar = null;
+      try {
+        const row = JSON.parse(localStorage.getItem('wl-avatar:' + String(u.email || '').toLowerCase()) || 'null');
+        if (row) avatar = row.image ? { image: row.image } : { emoji: row.emoji || '' };
+      } catch (e) {}
+      return { id: u.id, name: u.name, email: u.email, avatar: avatar };
+    }
+
+    async function add(place, rating, text) {
+      const who = me();
+      if (!who) { const e = new Error('Sign in to leave a review, so other drivers know who wrote it.'); e.needsAuth = true; throw e; }
+      const k = keyFor(place);
+      const payload = {
+        place: k,
+        rating: clamp(Math.round(+rating || 0), 1, 5),
+        text: String(text || '').slice(0, 1200),
+        name: Brand.name(place) || place.name || place.label || 'Place',
+        lat: +place.lat || 0,
+        lng: +place.lng || 0,
+        category: String(place.category || place.label || ''),
+        avatar: who.avatar
+      };
+      const r = await call('add', payload);
+      LIST.delete(k);
+      SUM.delete(k);
+      return r;
+    }
+
+    return { keyFor, summary, listFor, add, me, endpoint, cachedSummary };
+  })();
+  W27.Reviews = Reviews;
+
+  /* ---- star helpers ---- */
+  const stars = (n) => {
+    const r = Math.round(+n || 0);
+    return '★'.repeat(clamp(r, 0, 5)) + '☆'.repeat(clamp(5 - r, 0, 5));
+  };
+  const ago = (ms) => {
+    const s = Math.max(0, (Date.now() - ms) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 5400) return Math.round(s / 60) + ' min ago';
+    if (s < 172800) return Math.round(s / 3600) + ' hr ago';
+    const dd = Math.round(s / 86400);
+    if (dd < 30) return dd + ' days ago';
+    return new Date(ms).toLocaleDateString([], { month: 'short', year: 'numeric' });
+  };
+  function avatarHTML(rev) {
+    const a = rev && rev.avatar;
+    const nm = String((rev && rev.name) || '?').trim();
+    if (a && a.image) return '<span class="wl27-ava"><img src="' + esc27(a.image) + '" alt="' + esc27(nm) + '"></span>';
+    if (a && a.emoji) return '<span class="wl27-ava" style="background:#eef3f8;font-size:22px">' + esc27(a.emoji) + '</span>';
+    return '<span class="wl27-ava">' + esc27(Brand.initials(nm)) + '</span>';
+  }
+
+  /* ====================================================================
+     THE RATE & REVIEW SCREEN
+  ==================================================================== */
+  const Screen = (() => {
+    let root = null, seq = 0, chosen = null, rating = 0, busy = false;
+
+    function build() {
+      if (root) return root;
+      root = d.createElement('div');
+      root.id = 'wl27Review';
+      root.setAttribute('role', 'dialog');
+      root.setAttribute('aria-modal', 'true');
+      root.setAttribute('aria-label', 'Rate and review a place');
+      root.innerHTML =
+        '<div class="wl27-rv-scroll" id="wl27RvScroll">' +
+          '<div class="wl27-rv-sheet" id="wl27RvSheet">' +
+            '<div class="wl27-rv-head">' +
+              '<b id="wl27RvTitle">Rate &amp; Review<small id="wl27RvSub">Search for the place you visited</small></b>' +
+              '<button class="wl27-rv-x" id="wl27RvClose" type="button" aria-label="Close">✕</button>' +
+            '</div>' +
+            '<div class="wl27-rv-body" id="wl27RvBody"></div>' +
+            '<div class="wl27-rv-foot" id="wl27RvFoot"></div>' +
+          '</div>' +
+        '</div>';
+      d.body.appendChild(root);
+
+      id('wl27RvClose').addEventListener('click', close);
+      root.addEventListener('mousedown', (e) => { if (e.target === root || e.target.id === 'wl27RvScroll') close(); });
+      d.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && root.classList.contains('show')) close();
+      });
+      return root;
+    }
+
+    function open(place) {
+      build();
+      root.classList.add('show');
+      d.body.classList.add('wl27-review-open');
+      Layout.schedule();
+      if (place && place.lat != null) showPlace(place);
+      else showSearch('');
+    }
+    function close() {
+      if (!root) return;
+      root.classList.remove('show');
+      d.body.classList.remove('wl27-review-open');
+      chosen = null; rating = 0;
+    }
+
+    /* ---------------- step one: find the place ---------------- */
+    function showSearch(prefill) {
+      chosen = null; rating = 0;
+      id('wl27RvTitle').firstChild.nodeValue = 'Rate & Review';
+      id('wl27RvSub').textContent = 'Search for the place you visited';
+      id('wl27RvBody').innerHTML =
+        '<div class="wl27-rv-field">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+            '<circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.6-3.6"></path></svg>' +
+          '<input id="wl27RvQ" type="search" autocomplete="off" placeholder="Restaurant, charger, hotel, anywhere…" aria-label="Search places">' +
+          '<button class="wl27-rv-clear" id="wl27RvClear" type="button" aria-label="Clear">✕</button>' +
+        '</div>' +
+        '<div class="wl27-rv-hint">Places come straight from OpenStreetMap, so the one you pick is the same record every other driver reviews.</div>' +
+        '<div class="wl27-rv-results" id="wl27RvOut"></div>';
+      id('wl27RvFoot').innerHTML = '<button class="wl27-btn" id="wl27RvCancel" type="button">Close</button>';
+      id('wl27RvCancel').addEventListener('click', close);
+
+      const q = id('wl27RvQ');
+      const clr = id('wl27RvClear');
+      let timer = null;
+      const run = () => {
+        const v = q.value.trim();
+        clr.classList.toggle('show', !!v);
+        clearTimeout(timer);
+        if (v.length < 2) { nearbySuggestions(); return; }
+        timer = setTimeout(() => search(v), 280);
+      };
+      q.addEventListener('input', run);
+      q.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const first = id('wl27RvOut').querySelector('.wl27-rv-item');
+        if (first) first.click();
+      });
+      clr.addEventListener('click', () => { q.value = ''; clr.classList.remove('show'); nearbySuggestions(); q.focus(); });
+
+      if (prefill) { q.value = prefill; run(); } else nearbySuggestions();
+      if (window.innerWidth > 760) setTimeout(() => q.focus(), 80);
+    }
+
+    function msg(html) { id('wl27RvOut').innerHTML = '<div class="wl27-rv-msg">' + html + '</div>'; }
+    const working = (what) =>
+      '<span class="wl27-dot"></span><span class="wl27-dot"></span><span class="wl27-dot"></span> ' + esc27(what);
+
+    function anchor() {
+      const p = app(() => livePosition, null);
+      if (p && p.lat != null) return { lat: p.lat, lng: p.lng };
+      const c = app(() => map && map.getCenter && map.getCenter(), null);
+      return c ? { lat: c.lat, lng: c.lng } : null;
+    }
+
+    /* Everything within reach, so the place you just left is usually the
+       first thing on screen before a single key is pressed. */
+    async function nearbySuggestions() {
+      const a = anchor();
+      if (!a) { msg('Allow location, or type the name of the place.'); return; }
+      const mine = ++seq;
+      msg(working('Looking at what is around you'));
+      try {
+        const q = '[out:json][timeout:12];nwr[name][~"^(amenity|shop|tourism|leisure)$"~"."]' +
+          '(around:900,' + a.lat.toFixed(5) + ',' + a.lng.toFixed(5) + ');out center 40;';
+        const dta = await app(() => overpassFast(q), Promise.resolve(null));
+        if (mine !== seq) return;
+        const rows = shapeOverpass(dta, a).slice(0, 12);
+        if (!rows.length) { msg('Nothing is mapped right here. Type a name to search anywhere.'); return; }
+        render(rows, 'Near you');
+      } catch (e) {
+        if (mine === seq) msg('Type the name of the place you want to review.');
+      }
+    }
+
+    function shapeOverpass(dta, a) {
+      const seen = {};
+      return ((dta && dta.elements) || []).map((el) => {
+        const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
+        const lng = el.lon != null ? el.lon : (el.center && el.center.lon);
+        const t = el.tags || {};
+        if (lat == null || lng == null || !t.name) return null;
+        const k = t.name + '@' + Math.round(lat * 4000) + ':' + Math.round(lng * 4000);
+        if (seen[k]) return null;
+        seen[k] = 1;
+        return {
+          lat: lat, lng: lng, name: t.name, tags: t,
+          label: kindOf(t),
+          address: [t['addr:housenumber'], t['addr:street'], t['addr:city']].filter(Boolean).join(' '),
+          category: t.amenity || t.shop || t.tourism || t.leisure || 'place',
+          website: t.website || t['contact:website'] || '',
+          _brandEl: { id: el.type + el.id, lat: lat, lng: lng, tags: t },
+          _m: a ? app(() => haversine(a, { lat: lat, lng: lng }), 0) : 0
+        };
+      }).filter(Boolean).sort((x, y) => x._m - y._m);
+    }
+
+    function kindOf(t) {
+      const v = t.amenity || t.shop || t.tourism || t.leisure || t.office || t.healthcare || 'place';
+      const nice = String(v).replace(/_/g, ' ');
+      return nice.charAt(0).toUpperCase() + nice.slice(1);
+    }
+
+    /* Typing searches OpenStreetMap two ways at once — by name near you,
+       and by free text worldwide — so a chain with forty branches offers
+       the branch you are standing in, and a one-off place still appears. */
+    async function search(q) {
+      const mine = ++seq;
+      msg(working('Searching OpenStreetMap'));
+      const a = anchor();
+      const jobs = [];
+
+      if (a) {
+        const safe = q.replace(/[\\"]/g, ' ');
+        const oq = '[out:json][timeout:14];nwr["name"~"' + safe + '",i]' +
+          '(around:30000,' + a.lat.toFixed(5) + ',' + a.lng.toFixed(5) + ');out center 40;';
+        jobs.push(app(() => overpassFast(oq), Promise.resolve(null))
+          .then((dta) => shapeOverpass(dta, a)).catch(() => []));
+      }
+
+      let url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&namedetails=1' +
+        '&extratags=1&limit=10&q=' + encodeURIComponent(q);
+      if (a) {
+        const dd = 1.2;
+        url += '&viewbox=' + (a.lng - dd) + ',' + (a.lat + dd) + ',' + (a.lng + dd) + ',' + (a.lat - dd);
+      }
+      jobs.push(fetch(url).then((r) => r.json()).then((rows) => (rows || []).map((x) => {
+        const t = x.extratags || {};
+        const nm = (x.namedetails && x.namedetails.name) || String(x.display_name).split(',')[0];
+        const parts = String(x.display_name).split(',').map((s) => s.trim());
+        const lat = +x.lat, lng = +x.lon;
+        return {
+          lat: lat, lng: lng, name: nm, tags: t,
+          label: kindOf({ amenity: x.type }),
+          address: parts.slice(1, 4).join(', '),
+          category: x.type || x.class || 'place',
+          website: t.website || '',
+          _brandEl: { id: (x.osm_type ? x.osm_type + x.osm_id : ''), lat: lat, lng: lng, tags: t },
+          _m: a ? app(() => haversine(a, { lat: lat, lng: lng }), 0) : 0
+        };
+      })).catch(() => []));
+
+      let rows = [];
+      try { rows = (await Promise.all(jobs)).flat(); } catch (e) { rows = []; }
+      if (mine !== seq) return;
+
+      const seen = {};
+      rows = rows.filter((r) => {
+        const k = (r.name || '').toLowerCase() + '@' + Math.round(r.lat * 2500) + ':' + Math.round(r.lng * 2500);
+        if (seen[k]) return false;
+        seen[k] = 1;
+        return true;
+      }).sort((x, y) => (x._m || 0) - (y._m || 0)).slice(0, 14);
+
+      if (!rows.length) {
+        msg('Nothing matched “' + esc27(q) + '”. Try the business name on its own, or add the town.');
+        return;
+      }
+      render(rows, 'Results');
+    }
+
+    function render(rows, heading) {
+      const out = id('wl27RvOut');
+      out.innerHTML = '<div class="wl27-rv-hint" style="padding-left:8px">' + esc27(heading) + '</div>' +
+        rows.map((r, i) => {
+          const far = r._m ? app(() => fmtDistance(r._m), '') : '';
+          return '<button class="wl27-rv-item" data-i="' + i + '" type="button">' +
+            Brand.html(r, 42) +
+            '<span class="wl27-it"><b>' + esc27(r.name) + '</b><span>' +
+              esc27([r.label, r.address].filter(Boolean).join(' · ')) + '</span></span>' +
+            '<span class="wl27-cnt" data-k="' + esc27(Reviews.keyFor(r)) + '" hidden></span>' +
+            (far ? '<span class="wl27-far">' + esc27(far) + '</span>' : '') +
+            '</button>';
+        }).join('');
+      out.querySelectorAll('[data-i]').forEach((b) => {
+        b.addEventListener('click', () => showPlace(rows[+b.dataset.i]));
+      });
+      rows.forEach(Brand.warm);
+
+      /* the review count beside each result, once the server answers */
+      Reviews.summary(rows.map(Reviews.keyFor)).then((sum) => {
+        out.querySelectorAll('[data-k]').forEach((el) => {
+          const s = sum[el.dataset.k];
+          if (s && s.count) {
+            el.textContent = 'review: ' + s.count;
+            el.hidden = false;
+          }
+        });
+      }).catch(() => {});
+    }
+
+    /* ---------------- step two: rate it ---------------- */
+    function showPlace(place) {
+      chosen = place;
+      rating = 0;
+      const k = Reviews.keyFor(place);
+      id('wl27RvTitle').firstChild.nodeValue = 'Rate & Review';
+      id('wl27RvSub').textContent = Brand.name(place) || place.name || place.label || '';
+
+      id('wl27RvBody').innerHTML =
+        '<div class="wl27-rv-place">' +
+          Brand.html(place, 56) +
+          '<span class="wl27-pt"><b>' + esc27(Brand.name(place) || place.name || 'This place') + '</b>' +
+          '<span>' + esc27([place.label, place.address].filter(Boolean).join(' · ') || 'OpenStreetMap') + '</span></span>' +
+          '<button class="wl27-rv-back" id="wl27RvBack" type="button">Change</button>' +
+        '</div>' +
+
+        '<label class="wl27-lbl" for="wl27Star3">Rate Your Experience /5' +
+          '<small>Tap a star. Five is the best it gets.</small></label>' +
+        '<div class="wl27-stars" id="wl27Stars" role="radiogroup" aria-label="Rate your experience out of five">' +
+          [1, 2, 3, 4, 5].map((n) =>
+            '<button class="wl27-star" id="wl27Star' + n + '" data-n="' + n + '" type="button" role="radio"' +
+            ' aria-checked="false" aria-label="' + n + ' out of 5">★</button>').join('') +
+          '<span class="wl27-score" id="wl27Score">—<i>/5</i></span>' +
+        '</div>' +
+
+        '<label class="wl27-lbl" for="wl27Note">Additional info' +
+          '<small>What should another driver know before they stop here?</small></label>' +
+        '<textarea class="wl27-note" id="wl27Note" maxlength="1200" placeholder="Parking was easy, the chargers on the left were all working…"></textarea>' +
+        '<div class="wl27-count" id="wl27Count">0 / 1200</div>' +
+
+        '<div class="wl27-flash" id="wl27Flash"></div>' +
+        '<div id="wl27Existing"></div>';
+
+      id('wl27RvFoot').innerHTML =
+        '<button class="wl27-btn" id="wl27RvBack2" type="button">Back</button>' +
+        '<button class="wl27-btn primary" id="wl27RvPost" type="button" disabled>Post review</button>';
+
+      Brand.warm(place);
+
+      id('wl27RvBack').addEventListener('click', () => showSearch(Brand.name(place) || ''));
+      id('wl27RvBack2').addEventListener('click', () => showSearch(Brand.name(place) || ''));
+
+      const scoreEl = id('wl27Score');
+      const post = id('wl27RvPost');
+      const setRating = (n) => {
+        rating = clamp(n, 0, 5);
+        for (let i = 1; i <= 5; i++) {
+          const b = id('wl27Star' + i);
+          b.classList.toggle('on', i <= rating);
+          b.setAttribute('aria-checked', String(i === rating));
+        }
+        scoreEl.innerHTML = (rating ? rating : '—') + '<i>/5</i>';
+        post.disabled = !rating || busy;
+      };
+      id('wl27Stars').querySelectorAll('[data-n]').forEach((b) => {
+        b.addEventListener('click', () => setRating(+b.dataset.n));
+        b.addEventListener('keydown', (e) => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') { e.preventDefault(); setRating(rating + 1); }
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') { e.preventDefault(); setRating(rating - 1); }
+        });
+      });
+
+      const note = id('wl27Note'), count = id('wl27Count');
+      note.addEventListener('input', () => { count.textContent = note.value.length + ' / 1200'; });
+
+      const who = Reviews.me();
+      if (!who) flash('info', 'Sign in and your name and picture go with the review, so other drivers know who wrote it.');
+
+      post.addEventListener('click', submit);
+      loadExisting(k, true);
+    }
+
+    function flash(kind, text) {
+      const f = id('wl27Flash');
+      if (!f) return;
+      f.className = 'wl27-flash show ' + kind;
+      f.textContent = text;
+    }
+
+    async function submit() {
+      if (busy || !chosen || !rating) return;
+      const post = id('wl27RvPost');
+      busy = true; post.disabled = true; post.textContent = 'Posting…';
+      try {
+        await Reviews.add(chosen, rating, id('wl27Note').value);
+        flash('good', 'Posted. Every signed-in driver sees it on this place from now on.');
+        id('wl27Note').value = '';
+        id('wl27Count').textContent = '0 / 1200';
+        await loadExisting(Reviews.keyFor(chosen), true);
+        refreshBadges();
+      } catch (e) {
+        flash('bad', e && e.offline
+          ? 'The review service is not reachable, so nothing was posted. Check that reviews.php is on the server.'
+          : (e && e.message) || 'That did not post. Try again.');
+      } finally {
+        busy = false;
+        post.textContent = 'Post review';
+        post.disabled = !rating;
+      }
+    }
+
+    async function loadExisting(k, force) {
+      const box = id('wl27Existing');
+      if (!box) return;
+      box.innerHTML = '<div class="wl27-rv-msg">' + working('Loading reviews') + '</div>';
+      try {
+        const rows = await Reviews.listFor(k, force);
+        if (!rows.length) {
+          box.innerHTML = '<div class="wl27-rv-msg">No reviews here yet. Yours would be the first.</div>' + srcNote();
+          return;
+        }
+        const avg = rows.reduce((s, r) => s + (+r.rating || 0), 0) / rows.length;
+        box.innerHTML =
+          '<div class="wl27-rev-sum">' +
+            '<b>' + avg.toFixed(1) + '</b>' +
+            '<span class="wl27-sum-t"><span class="wl27-sum-stars">' + stars(avg) + '</span>' +
+            '<span>review: ' + rows.length + '</span></span>' +
+          '</div>' +
+          '<div class="wl27-rev-list">' + rows.map(rowHTML).join('') + '</div>' + srcNote();
+      } catch (e) {
+        box.innerHTML = '<div class="wl27-rv-msg">' +
+          (e && e.offline
+            ? 'Reviews are held on the server and it is not answering, so none can be shown.'
+            : esc27((e && e.message) || 'Reviews could not be loaded.')) + '</div>';
+      }
+    }
+
+    function rowHTML(r) {
+      return '<div class="wl27-rev-row">' + avatarHTML(r) +
+        '<div class="wl27-rev-b"><b>' + esc27(r.name || 'Driver') +
+        (r.mine ? ' <span class="wl27-rev-mine">you</span>' : '') + '</b>' +
+        '<div class="wl27-rev-meta"><span class="wl27-s">' + stars(r.rating) + '</span>' +
+        '<span class="wl27-when">' + esc27(ago(+r.at || Date.now())) + '</span></div>' +
+        (r.text ? '<p>' + esc27(r.text) + '</p>' : '') + '</div></div>';
+    }
+    const srcNote = () => '<div class="wl27-src">Places from <a href="https://www.openstreetmap.org/copyright" ' +
+      'target="_blank" rel="noopener">OpenStreetMap</a>. Reviews are written by WayLynq drivers and are shared ' +
+      'between every signed-in account.</div>';
+
+    /* Opened straight onto the list, from a badge tap */
+    function openList(place) {
+      open(place);
+      setTimeout(() => {
+        const box = id('wl27Existing');
+        if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 420);
+    }
+
+    return { open, openList, close };
+  })();
+  W27.openReview = (p) => Screen.open(p);
+
+  /* ====================================================================
+     PUTTING THE LOGO AND THE REVIEWS ON EVERY POI
+  ==================================================================== */
+  function badgeHTML(k, count) {
+    const n = +count || 0;
+    return '<span class="wl27-rev-badge' + (n ? '' : ' wl27-none') + '" data-wl27-badge="' + esc27(k) + '"' +
+      ' title="' + (n ? 'review: ' + n : 'No reviews yet — add the first') + '" role="button" tabindex="0">' +
+      '★ ' + (n || 'Rate') + '</span>';
+  }
+  function refreshBadges() {
+    const keys = [...d.querySelectorAll('[data-wl27-badge]')].map((el) => el.dataset.wl27Badge);
+    if (!keys.length) return;
+    Reviews.summary(keys).then((sum) => {
+      d.querySelectorAll('[data-wl27-badge]').forEach((el) => {
+        const s = sum[el.dataset.wl27Badge];
+        const n = (s && s.count) || 0;
+        el.textContent = '★ ' + (n || 'Rate');
+        el.classList.toggle('wl27-none', !n);
+        el.title = n ? 'review: ' + n : 'No reviews yet — add the first';
+      });
+    }).catch(() => {});
+  }
+  W27.refreshBadges = refreshBadges;
+
+  /* One delegated listener covers every badge and logo the app draws,
+     including the ones inside Leaflet and MapLibre popups. */
+  d.addEventListener('click', (e) => {
+    const badge = e.target.closest && e.target.closest('[data-wl27-badge]');
+    if (badge) {
+      e.preventDefault();
+      e.stopPropagation();
+      const p = W27._placeByKey && W27._placeByKey[badge.dataset.wl27Badge];
+      Screen.openList(p || null);
+      return;
+    }
+    const open = e.target.closest && e.target.closest('[data-wl27-open-review]');
+    if (open) {
+      e.preventDefault();
+      e.stopPropagation();
+      const p = W27._placeByKey && W27._placeByKey[open.dataset.wl27OpenReview];
+      Screen.open(p || null);
+    }
+  }, true);
+
+  W27._placeByKey = Object.create(null);
+  function remember(place) {
+    try { W27._placeByKey[Reviews.keyFor(place)] = place; } catch (e) {}
+    return place;
+  }
+
+  /* ---- map markers ---- */
+  const priorDrawPoi = app(() => drawPoi, null);
+  if (priorDrawPoi) {
+    try {
+      drawPoi = function wl27DrawPoi(key, items) {
+        app(() => clearPoi(key));
+        const cfg = app(() => POI[key], null) || { label: key, emoji: '•', color: '--signal' };
+        const layer = app(() => L.layerGroup().addTo(map), null);
+        if (!layer) { return priorDrawPoi(key, items); }
+        app(() => { poiLayers[key] = layer; poi3d[key] = []; });
+
+        const list = (items || []).slice(0, 60);
+        const keys = [];
+
+        list.forEach((el) => {
+          const place = remember(app(() => poiToPlace(key, el), el));
+          place._brandEl = place._brandEl || el;
+          place._brandKey = key;
+          const rk = Reviews.keyFor(place);
+          keys.push(rk);
+
+          const dist = el.routeMilesAhead != null ? el.routeMilesAhead
+            : (el.metersFromMe != null ? app(() => toMiles(el.metersFromMe), null) : null);
+          const far = dist == null ? '' : (dist < 0.1 ? '<0.1 mi' : dist.toFixed(1) + ' mi');
+
+          const marker =
+            '<div class="wl-nav-poi-marker" data-wl27-open-review="' + esc27(rk) + '">' +
+              '<span class="wl27-logo-wrap">' + Brand.html(place, 46) + badgeHTML(rk, 0) + '</span>' +
+              '<span class="wl-nav-poi-caption"><b>' + esc27(place.name || cfg.label) + '</b>' +
+              '<span>' + esc27(far) + '</span></span>' +
+            '</div>';
+
+          const icon = app(() => L.divIcon({ className: '', html: marker, iconSize: [230, 52], iconAnchor: [25, 26] }), null);
+          if (icon) {
+            const lm = L.marker([el.lat, el.lng], { icon: icon }).addTo(layer);
+            lm.on('click', (ev) => {
+              try { if (ev.originalEvent) L.DomEvent.stopPropagation(ev.originalEvent); } catch (x) {}
+              app(() => showPlaceCard(place));
+            });
+          }
+
+          if (app(() => map3d && map3dReady && typeof maplibregl !== 'undefined', false)) {
+            const wrap = d.createElement('div');
+            wrap.innerHTML = marker;
+            const node = wrap.firstElementChild;
+            node.addEventListener('click', (ev) => { ev.stopPropagation(); app(() => showPlaceCard(place)); });
+            app(() => {
+              const mm = new maplibregl.Marker({ element: node, anchor: 'left' })
+                .setLngLat([el.lng, el.lat]).addTo(map3d);
+              (poi3d[key] = poi3d[key] || []).push(mm);
+            });
+          }
+
+          Brand.warm(place);
+        });
+
+        Reviews.summary(keys).then(refreshBadges).catch(() => {});
+      };
+    } catch (e) {}
+  }
+
+  /* ---- the side list ---- */
+  const priorRenderPoiPanel = app(() => renderPoiPanel, null);
+  if (priorRenderPoiPanel) {
+    try {
+      renderPoiPanel = function wl27RenderPoiPanel(key, items) {
+        const panel = id('poiPanel');
+        const cfg = app(() => POI[key], null) || { label: key };
+        app(() => closeOtherRightPanels('poi'));
+        if (!panel) return priorRenderPoiPanel(key, items);
+
+        const list = (items || []).slice(0, 40);
+        const keys = [];
+        panel.innerHTML = '<div class="panel-title">' + esc27(cfg.label) +
+          ' <span style="font-weight:500;letter-spacing:0;text-transform:none;color:var(--text-faint)">' +
+          (items || []).length + ' found</span>' +
+          '<button class="icon-act" id="poiHide" title="Hide">✕</button></div>' +
+          (list.length ? list.map((el, i) => {
+            const place = remember(app(() => poiToPlace(key, el), el));
+            place._brandEl = place._brandEl || el;
+            const rk = Reviews.keyFor(place);
+            keys.push(rk);
+            const near = el.metersFromMe != null ? app(() => fmtDistance(el.metersFromMe), '') : '';
+            const along = (el.mileAlong != null && app(() => allRoutes.length, 0))
+              ? ' · ' + el.mileAlong.toFixed(1) + ' mi into the trip' : '';
+            return '<div class="panel-item">' +
+              '<span class="wl27-logo-wrap">' + Brand.html(place, 38) + badgeHTML(rk, 0) + '</span>' +
+              '<span class="panel-item-text" data-open="' + i + '" style="cursor:pointer">' + esc27(place.name) +
+              '<span class="sub num">' + esc27([place.label, near].filter(Boolean).join(' · ')) + esc27(along) +
+              '</span></span>' +
+              '<button class="icon-act" data-stop="' + i + '" title="Add as a stop">➕</button></div>';
+          }).join('') : '<div class="panel-empty">Nothing of that kind is mapped along this route.</div>');
+        panel.classList.remove('hidden');
+
+        const hide = id('poiHide');
+        if (hide) hide.addEventListener('click', () => app(() => closePoi(key)));
+        panel.querySelectorAll('[data-open]').forEach((el) => el.addEventListener('click', () => {
+          const item = list[+el.dataset.open];
+          app(() => { map.setView([item.lat, item.lng], 17, { animate: true }); });
+          app(() => { if (map3d && map3dReady) map3d.easeTo({ center: [item.lng, item.lat], zoom: 17 }); });
+          app(() => showPlaceCard(poiToPlace(key, item)));
+        }));
+        panel.querySelectorAll('[data-stop]').forEach((el) => el.addEventListener('click', async (ev) => {
+          ev.stopPropagation();
+          const item = list[+el.dataset.stop];
+          app(() => addStopSmart(poiToPlace(key, item), (POI[key] || {}).dwell || 0));
+        }));
+
+        list.forEach((el) => Brand.warm(remember(app(() => poiToPlace(key, el), el))));
+        Reviews.summary(keys).then(refreshBadges).catch(() => {});
+      };
+    } catch (e) {}
+  }
+
+  /* ---- the detail card ---- */
+  const priorShowPlaceCard = app(() => showPlaceCard, null);
+  if (priorShowPlaceCard) {
+    try {
+      showPlaceCard = async function wl27ShowPlaceCard(place) {
+        const out = await priorShowPlaceCard(place);
+        try { decorateCard(place); } catch (e) {}
+        return out;
+      };
+    } catch (e) {}
+  }
+
+  function decorateCard(place) {
+    const card = id('placeCard');
+    if (!card || !card.classList.contains('show') || !place) return;
+    remember(place);
+    const rk = Reviews.keyFor(place);
+
+    /* the hero becomes the business's own mark, never a satellite tile */
+    const photos = card.querySelector('.pc-photos');
+    if (photos) {
+      photos.innerHTML = '<span class="wl27-logo-wrap wl27-big" data-wl27-open-review="' + esc27(rk) + '">' +
+        Brand.html(place, 132, { cls: 'wl27-lg' }) + badgeHTML(rk, 0) + '</span>';
+      photos.style.display = 'grid';
+      photos.style.placeItems = 'center';
+      photos.style.height = '190px';
+    }
+    Brand.warm(place);
+
+    /* a rating line under the name */
+    const body = card.querySelector('.pc-body');
+    const meta = card.querySelector('.pc-meta');
+    if (body && !card.querySelector('.wl27-card-rating')) {
+      const line = d.createElement('div');
+      line.className = 'wl27-card-rating';
+      line.innerHTML = '<span class="wl27-s" data-wl27-rstars="' + esc27(rk) + '">' + stars(0) + '</span>' +
+        '<b data-wl27-ravg="' + esc27(rk) + '">—</b>' +
+        '<span data-wl27-rcount="' + esc27(rk) + '" style="color:var(--text-dim)">no reviews yet</span>' +
+        '<button type="button" data-wl27-open-review="' + esc27(rk) + '">Rate &amp; Review</button>';
+      (meta || body.firstChild).after(line);
+    }
+
+    /* and a first-class action beside Directions */
+    const actions = card.querySelector('.pc-actions');
+    if (actions && !actions.querySelector('.wl27-review-btn')) {
+      const b = d.createElement('button');
+      b.type = 'button';
+      b.className = 'pc-btn wl27-review-btn';
+      b.dataset.wl27OpenReview = rk;
+      b.innerHTML = '★ Rate &amp; Review';
+      actions.appendChild(b);
+    }
+
+    Reviews.summary([rk]).then((sum) => {
+      const s = sum[rk] || { count: 0, avg: 0 };
+      const st = card.querySelector('[data-wl27-rstars]');
+      const av = card.querySelector('[data-wl27-ravg]');
+      const ct = card.querySelector('[data-wl27-rcount]');
+      if (st) st.textContent = stars(s.avg);
+      if (av) av.textContent = s.count ? s.avg.toFixed(1) : '—';
+      if (ct) ct.textContent = s.count ? 'review: ' + s.count : 'no reviews yet';
+      refreshBadges();
+    }).catch(() => {});
+  }
+
+  /* ---- a way in that does not need a POI on screen ---- */
+  function addRailButton() {
+    const rail = id('quick-rail');
+    if (!rail || id('qrReview27')) return;
+    const b = d.createElement('button');
+    b.className = 'qr-btn';
+    b.id = 'qrReview27';
+    b.type = 'button';
+    b.innerHTML = '<span class="qr-ico">★</span><span class="qr-label">Rate &amp; review</span>';
+    b.addEventListener('click', () => Screen.open(null));
+    const first = rail.querySelector('.qr-divider');
+    if (first) rail.insertBefore(b, first); else rail.appendChild(b);
+  }
+
+  /* ====================================================================
+     BOOT
+  ==================================================================== */
+  function boot() {
+    buildDockToggle();
+    addRailButton();
+    Layout.start();
+    paintVectorPalette();
+    Reviews.endpoint().then((u) => {
+      if (!u) console.warn('WayLynq reviews: reviews.php was not found, so reviews cannot be shared between accounts yet.');
+    });
+    app(() => {
+      if (map3d && map3d.on) {
+        map3d.on('style.load', () => setTimeout(paintVectorPalette, 60));
+        map3d.on('load', () => setTimeout(paintVectorPalette, 60));
+      }
+    });
+    setInterval(paintVectorPalette, 30000);
+    setInterval(refreshBadges, 60000);
+    app(() => refreshAllPoiLayers());
+    console.log('WayLynq Round 27 ready — logos, collapsible rail, lifted night view, fixed layout, Rate & Review');
+  }
+
+  if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+  /* ===== end Round 27 ===== */
+
 })();
 
 
@@ -23831,268 +26217,5 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
 
 
-<
-<!-- ======================================================================
-     WAYLYN ROUND 22 — POI BRANDING / REVIEWS / RESPONSIVE 3D NAV
-     Non-destructive patch: appended after existing WayLyn code.
-     ====================================================================== -->
-<style id="wl-round22-css">
-/* Lighter, road-readable dark palette */
-body:not(.light-mode){
-  --bg:#10222d; --surface:rgba(27,48,61,.94); --surface-2:rgba(22,42,54,.97);
-  --surface-solid:#1a3443; --text:#e6f0f8; --text-dim:#b0c4d5; --line-soft:rgba(184,211,230,.20);
-}
-body:not(.light-mode) .leaflet-tile-pane{filter:brightness(.82) saturate(.88) contrast(1.05)}
-body:not(.light-mode).osm-base .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(1.08) contrast(.88) saturate(.78)}
-body:not(.light-mode).satellite-on .leaflet-tile-pane,
-body:not(.light-mode).osm-base.satellite-on .leaflet-tile-pane{filter:brightness(.9) saturate(.95)}
-
-/* Business marks: no generic category artwork. Initials are the neutral fallback. */
-.wl-poi-brand{position:relative;display:grid;place-items:center;border-radius:12px;overflow:visible;
- background:var(--surface-solid);border:2px solid rgba(255,255,255,.9);box-shadow:0 3px 10px rgba(0,0,0,.42);flex:0 0 auto}
-.wl-poi-brand>img{width:100%;height:100%;object-fit:contain;border-radius:10px;background:#fff;display:none}
-.wl-poi-brand.has-logo>img{display:block}.wl-poi-brand.has-logo .wl-brand-fallback{display:none}
-.wl-brand-fallback{font-size:11px;font-weight:800;letter-spacing:-.02em;color:var(--text-bright)}
-.wl-review-dot{position:absolute;right:-7px;bottom:-7px;width:21px;height:21px;border-radius:50%;border:2px solid var(--surface-solid);
- background:var(--signal);color:var(--signal-ink);display:grid;place-items:center;font-size:11px;cursor:pointer;z-index:4}
-.wl-review-dot:hover{transform:scale(1.08)}
-.wl-review-count{font-size:.76rem;color:var(--signal);font-weight:750;white-space:nowrap}
-
-/* POI panel collapse: keep only a restore arrow, not the whole side box. */
-#poiPanel{position:relative;transition:opacity .18s ease,transform .18s ease}
-#poiPanel.wl-poi-collapsed{display:none!important}
-#wlPoiRestore{position:fixed;right:max(8px,env(safe-area-inset-right));top:clamp(76px,12vh,132px);z-index:5200;
- width:44px;height:44px;border-radius:50%;border:1px solid var(--line-soft);background:var(--surface-solid);
- color:var(--signal);box-shadow:var(--shadow);cursor:pointer;font-size:1.25rem;display:none}
-#wlPoiRestore.show{display:grid;place-items:center}
-
-/* Rate & Review sheet */
-#wlReviewModal{position:fixed;inset:0;z-index:8200;background:rgba(0,0,0,.52);display:none;place-items:center;padding:clamp(10px,3vw,28px)}
-#wlReviewModal.show{display:grid}
-.wlr-card{width:min(96vw,620px);max-height:min(92dvh,760px);overflow:auto;background:var(--surface-solid);
- border:1px solid var(--line-soft);border-radius:20px;box-shadow:var(--shadow);padding:clamp(16px,3vw,24px)}
-.wlr-head{display:flex;align-items:center;gap:12px;margin-bottom:16px}.wlr-head h2{margin:0;flex:1;font-size:1.35rem;color:var(--text-bright)}
-.wlr-close{width:42px;height:42px;border-radius:50%;border:1px solid var(--line-soft);background:transparent;color:var(--text);cursor:pointer}
-.wlr-field{display:grid;gap:7px;margin:13px 0}.wlr-field label{font-size:.86rem;font-weight:750;color:var(--text-dim)}
-.wlr-field input,.wlr-field textarea{box-sizing:border-box;width:100%;border:1px solid var(--line-soft);background:var(--field-bg);
- color:var(--text-bright);border-radius:12px;padding:13px 14px;font:inherit;outline:none}
-.wlr-field textarea{min-height:112px;resize:vertical}.wlr-field input:focus,.wlr-field textarea:focus{border-color:var(--signal)}
-#wlrResults{display:grid;gap:7px;margin-top:8px}.wlr-result{display:flex;gap:10px;align-items:center;text-align:left;width:100%;
- padding:11px;border:1px solid var(--line-soft);border-radius:12px;background:transparent;color:var(--text);cursor:pointer}
-.wlr-result:hover{border-color:var(--signal);background:rgba(var(--signal-rgb),.09)}.wlr-result b{display:block;color:var(--text-bright)}
-.wlr-result small{display:block;color:var(--text-dim);margin-top:2px}.wlr-selected{padding:12px;border-radius:12px;background:rgba(var(--signal-rgb),.1);margin:10px 0}
-.wlr-stars{display:flex;gap:7px;flex-wrap:wrap}.wlr-star{width:46px;height:46px;border-radius:12px;border:1px solid var(--line-soft);
- background:transparent;color:var(--amber);font-size:1.45rem;cursor:pointer}.wlr-star.on{background:rgba(var(--amber-rgb),.16);border-color:var(--amber)}
-.wlr-submit{width:100%;height:50px;border:0;border-radius:999px;background:var(--signal);color:var(--signal-ink);font-weight:800;cursor:pointer;margin-top:8px}
-.wlr-review{display:flex;gap:11px;padding:12px 0;border-top:1px solid var(--line-soft)}.wlr-avatar{width:40px;height:40px;border-radius:50%;
- object-fit:cover;background:rgba(var(--signal-rgb),.18);display:grid;place-items:center;font-weight:800;flex:0 0 auto}.wlr-review-main{min-width:0;flex:1}
-.wlr-review-main b{color:var(--text-bright)}.wlr-review-main p{margin:4px 0 0;white-space:pre-wrap;color:var(--text-dim);line-height:1.45}
-#wlrStatus{min-height:20px;font-size:.84rem;color:var(--text-dim);margin-top:8px}
-
-/* Responsive 3D nav: viewport-safe instead of desktop-fixed coordinates. */
-#navMode{--nav-gap:clamp(8px,1.5vw,16px);--nav-bottom:calc(82px + env(safe-area-inset-bottom))}
-#navTop{top:var(--nav-gap);left:var(--nav-gap);width:min(378px,calc(100vw - 2*var(--nav-gap)))}
-#navTopRight{top:var(--nav-gap);right:var(--nav-gap);max-width:calc(100vw - 2*var(--nav-gap));flex-wrap:wrap;justify-content:flex-end}
-#fabStack{right:var(--nav-gap);bottom:clamp(150px,20vh,182px);max-width:calc(100vw - 2*var(--nav-gap));flex-wrap:wrap;justify-content:flex-end}
-#speedCluster{left:var(--nav-gap);bottom:clamp(150px,20vh,182px)}
-#turnPreview{right:var(--nav-gap);max-width:min(158px,32vw)}
-@media(max-width:900px){
- #navTop{width:min(56vw,378px)}
- #navTopRight .nav-btn-label{display:none}
- #navTopRight .nav-btn{padding:0 12px}
- #turnPreview{top:78px}
-}
-@media(max-width:620px){
- #navTop{top:8px;left:8px;width:calc(100vw - 16px);padding-right:112px;box-sizing:border-box}
- #navTopRight{top:14px;right:14px;gap:5px}.nav-card-main{padding:10px 12px;gap:9px}
- #turnArrow{font-size:2.25rem;width:50px}#turnDistance{font-size:2rem}#turnStreet{font-size:1rem}
- #roadRow,#trafficAhead,#tripLine{padding-left:12px;padding-right:12px}
- #turnPreview{display:none!important}
- #speedCluster{left:8px;bottom:154px;transform:scale(.84);transform-origin:left bottom}
- #fabStack{right:8px;bottom:154px;gap:6px}.fab{height:46px;padding:0 13px}.fab span:not(.rc-fill){font-size:.8rem}
- #dock.nav-shift{bottom:78px;max-width:calc(100vw - 12px)}
- #navBar{padding:9px 8px calc(9px + env(safe-area-inset-bottom));gap:6px}.bar-btn{width:42px;height:42px}
- .nb-stat{padding:2px 3px}.nb-stat b{font-size:1.08rem}.nb-stat.nb-eta b{font-size:1.18rem}.nb-stat span{font-size:.58rem}
- body.navigating #rightPanels{top:auto;bottom:calc(150px + env(safe-area-inset-bottom));right:8px;width:min(92vw,330px)}
- #wlPoiRestore{top:auto;bottom:calc(150px + env(safe-area-inset-bottom))}
-}
-@media(max-height:560px) and (orientation:landscape){
- #navTop{width:min(46vw,350px)}.nav-card-main{padding:8px 10px}#roadRow,#trafficAhead,#tripLine{padding-top:6px;padding-bottom:6px}
- #nextList{display:none}#speedCluster{bottom:92px;transform:scale(.72);transform-origin:left bottom}
- #fabStack{bottom:94px}.fab{height:42px;padding:0 11px}#dock.nav-shift{display:none}
- #navBar{padding-top:6px;padding-bottom:calc(6px + env(safe-area-inset-bottom))}
-}
-</style>
-
-<div id="wlReviewModal" role="dialog" aria-modal="true" aria-labelledby="wlrTitle">
- <div class="wlr-card">
-  <div class="wlr-head"><h2 id="wlrTitle">Rate &amp; Review</h2><button class="wlr-close" id="wlrClose" aria-label="Close">✕</button></div>
-  <div class="wlr-field" id="wlrSearchWrap"><label for="wlrSearch">Search a restaurant or other POI from OpenStreetMap</label>
-   <input id="wlrSearch" autocomplete="off" placeholder="Search for a place…" /><div id="wlrResults"></div></div>
-  <div id="wlrSelected"></div>
-  <div id="wlrForm" hidden>
-   <div class="wlr-field"><label>Rate Your Experience /5</label><div class="wlr-stars" id="wlrStars"></div></div>
-   <div class="wlr-field"><label for="wlrInfo">Additional info</label><textarea id="wlrInfo" maxlength="1500" placeholder="What should other people know?"></textarea></div>
-   <button class="wlr-submit" id="wlrSubmit">Publish review</button><div id="wlrStatus" aria-live="polite"></div>
-   <div id="wlrExisting"></div>
-  </div>
- </div>
-</div>
-<button id="wlPoiRestore" title="Show POI panel" aria-label="Show POI panel">‹</button>
-
-<script id="wl-round22-js">
-(function(){
- 'use strict';
- const $r=id=>document.getElementById(id), escR=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
- let selected=null,rating=0,searchTimer=0;
- const modal=$r('wlReviewModal'), restore=$r('wlPoiRestore');
-
- function poiId(p){
-   if(!p)return '';
-   if(p.osm_type&&p.osm_id)return 'osm:'+p.osm_type+':'+p.osm_id;
-   if(p.id&&String(p.id).indexOf('google:')!==0)return 'osm:'+p.id;
-   const t=p.tags||{}, name=t.name||t.brand||p.googleName||p.name||'poi';
-   return 'geo:'+String(name).toLowerCase().replace(/\W+/g,'-')+':'+(+p.lat).toFixed(5)+':'+(+p.lng).toFixed(5);
- }
- function me(){
-   try{
-     const u=window.WLAuth&&WLAuth.current&&WLAuth.current();
-     if(u)return {id:String(u.id),name:u.name||'WayLyn user',avatar:u.avatar||u.photo||u.picture||''};
-     const c=JSON.parse(localStorage.getItem('waylynq:me')||'null');
-     if(c)return {id:String(c.id),name:c.name||'WayLyn user',avatar:c.avatar||c.photo||c.picture||''};
-   }catch(e){}
-   return null;
- }
- function localReviews(id){
-   try{return JSON.parse(localStorage.getItem('waylynq:public-reviews:'+id)||'[]')}catch(e){return[]}
- }
- function saveLocal(id,review){
-   let a=localReviews(id),i=a.findIndex(x=>x.userId===review.userId);
-   if(i>=0)a[i]=review;else a.unshift(review);
-   localStorage.setItem('waylynq:public-reviews:'+id,JSON.stringify(a)); return a;
- }
- async function api(action,payload){
-   const res=await fetch('/api.php?action='+encodeURIComponent(action),{
-     method:payload?'POST':'GET',headers:payload?{'Content-Type':'application/json'}:{},
-     body:payload?JSON.stringify(payload):undefined,credentials:'include',cache:'no-store'
-   });
-   if(!res.ok)throw new Error('review service unavailable');
-   const j=await res.json();if(!j||j.ok===false)throw new Error(j&&j.error||'review service unavailable');return j;
- }
- async function listReviews(p){
-   const id=poiId(p);
-   try{
-     const q='reviews_list&poi='+encodeURIComponent(id);
-     const res=await fetch('/api.php?action='+q,{credentials:'include',cache:'no-store'});
-     if(res.ok){const j=await res.json();if(j&&Array.isArray(j.reviews))return j.reviews}
-   }catch(e){}
-   return localReviews(id);
- }
- async function publish(p,stars,body){
-   const u=me();if(!u)throw new Error('Sign in before publishing a review.');
-   const review={poiId:poiId(p),poiName:p.name||p.display_name||'POI',lat:+p.lat,lng:+p.lng,
-     userId:u.id,userName:u.name,userAvatar:u.avatar||'',rating:stars,body:String(body||'').trim(),updatedAt:new Date().toISOString()};
-   try{
-     const j=await api('review_upsert',review);
-     if(j&&j.review)return j.review;
-   }catch(e){}
-   /* Same-browser fallback keeps the feature usable during API outages. The
-      shared /api.php review_upsert + reviews_list actions are authoritative in production. */
-   saveLocal(review.poiId,review);return review;
- }
- function initials(n){return String(n||'U').trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()}
- function renderReviews(a){
-   const box=$r('wlrExisting');
-   box.innerHTML=a.length?'<div style="margin-top:18px;font-weight:800;color:var(--text-bright)">Review'+(a.length===1?'':'s')+': '+a.length+'</div>'+
-     a.map(x=>'<div class="wlr-review">'+(x.userAvatar?'<img class="wlr-avatar" src="'+escR(x.userAvatar)+'" alt="">':'<span class="wlr-avatar">'+escR(initials(x.userName))+'</span>')+
-     '<div class="wlr-review-main"><b>'+escR(x.userName||'WayLyn user')+' · '+escR(x.rating)+'/5</b>'+
-     (x.body?'<p>'+escR(x.body)+'</p>':'')+'</div></div>').join(''):'<div style="margin-top:16px;color:var(--text-dim)">No reviews yet.</div>';
- }
- function renderStars(){
-   $r('wlrStars').innerHTML=[1,2,3,4,5].map(n=>'<button type="button" class="wlr-star '+(n<=rating?'on':'')+'" data-rate="'+n+'" aria-label="'+n+' out of 5">★</button>').join('');
-   $r('wlrStars').querySelectorAll('[data-rate]').forEach(b=>b.onclick=()=>{rating=+b.dataset.rate;renderStars()});
- }
- async function choose(p){
-   selected=p;rating=0;$r('wlrSearchWrap').hidden=true;$r('wlrForm').hidden=false;
-   $r('wlrSelected').innerHTML='<div class="wlr-selected"><b>'+escR(p.name||p.display_name||'POI')+'</b><div style="color:var(--text-dim);font-size:.86rem;margin-top:3px">'+escR(p.display_name||p.label||'OpenStreetMap POI')+'</div></div>';
-   renderStars();$r('wlrInfo').value='';$r('wlrStatus').textContent='';
-   renderReviews(await listReviews(p));
- }
- async function search(q){
-   q=String(q||'').trim();if(q.length<2){$r('wlrResults').innerHTML='';return}
-   $r('wlrResults').innerHTML='<div style="color:var(--text-dim);padding:8px">Searching OpenStreetMap…</div>';
-   try{
-     const url='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&extratags=1&limit=8&q='+encodeURIComponent(q);
-     const res=await fetch(url,{headers:{'Accept':'application/json'}}),a=await res.json();
-     $r('wlrResults').innerHTML=a.map((x,i)=>'<button class="wlr-result" data-i="'+i+'"><span>📍</span><span><b>'+escR((x.namedetails&&x.namedetails.name)||x.name||x.display_name.split(',')[0])+'</b><small>'+escR(x.display_name)+'</small></span></button>').join('')||'<div style="color:var(--text-dim);padding:8px">No matching OSM POIs found.</div>';
-     $r('wlrResults').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const x=a[+b.dataset.i];choose({osm_type:x.osm_type,osm_id:x.osm_id,name:(x.namedetails&&x.namedetails.name)||x.name||x.display_name.split(',')[0],display_name:x.display_name,lat:+x.lat,lng:+x.lon})});
-   }catch(e){$r('wlrResults').innerHTML='<div style="color:var(--rose);padding:8px">OpenStreetMap search is temporarily unavailable.</div>'}
- }
- window.WayLynReviews={
-   open:function(p){modal.classList.add('show');selected=null;rating=0;$r('wlrSearchWrap').hidden=false;$r('wlrForm').hidden=true;$r('wlrSelected').innerHTML='';$r('wlrResults').innerHTML='';
-     if(p){choose({id:p.id,osm_type:p.osm_type,osm_id:p.osm_id,name:p.name||p.googleName||(p.tags&&p.tags.name)||'POI',display_name:p.label||p.googleAddress||'',lat:p.lat,lng:p.lng,tags:p.tags||{}})}
-     else setTimeout(()=>$r('wlrSearch').focus(),50);
-   },
-   count:async p=>(await listReviews(p)).length
- };
- $r('wlrClose').onclick=()=>modal.classList.remove('show');
- modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('show')});
- $r('wlrSearch').addEventListener('input',e=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>search(e.target.value),280)});
- $r('wlrSubmit').onclick=async()=>{
-   if(!selected||!rating){$r('wlrStatus').textContent='Choose a rating from 1 to 5.';return}
-   const btn=$r('wlrSubmit');btn.disabled=true;$r('wlrStatus').textContent='Publishing…';
-   try{await publish(selected,rating,$r('wlrInfo').value);$r('wlrStatus').textContent='Review published.';renderReviews(await listReviews(selected));decorateVisibleReviews()}
-   catch(e){$r('wlrStatus').textContent=e.message||'Could not publish review.'}finally{btn.disabled=false}
- };
-
- /* Collapse arrow is different from closing the POI category: it preserves map markers/state. */
- function collapsePoi(){
-   const p=$r('poiPanel');if(!p)return;p.classList.add('wl-poi-collapsed');restore.classList.add('show');
- }
- restore.onclick=()=>{const p=$r('poiPanel');if(p)p.classList.remove('wl-poi-collapsed');restore.classList.remove('show')};
- function addCollapseButton(){
-   const p=$r('poiPanel');if(!p||p.classList.contains('hidden'))return;
-   const title=p.querySelector('.panel-title');if(!title||title.querySelector('.wl-poi-collapse'))return;
-   const b=document.createElement('button');b.className='icon-act wl-poi-collapse';b.title='Collapse POI panel';b.setAttribute('aria-label','Collapse POI panel');b.textContent='›';b.onclick=e=>{e.stopPropagation();collapsePoi()};
-   const close=title.querySelector('#poiHide');title.insertBefore(b,close||null);
- }
- const po=new MutationObserver(()=>{addCollapseButton();decorateVisibleReviews()});
- if($r('poiPanel'))po.observe($r('poiPanel'),{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
-
- /* Integrate Review into every resolved POI logo and place card. */
- function itemForBrand(box){
-   const id=box.getAttribute('data-wl-brand');if(!id)return null;
-   try{
-     for(const k of Object.keys(window.poiState||{})){const a=poiState[k]&&poiState[k].items||[];for(const el of a){
-       const t=el.tags||{},bid=[t['brand:wikidata']||'',t.wikidata||'',t.brand||'',t.name||el.googleName||'',(+el.lat||0).toFixed(5),(+el.lng||0).toFixed(5)].join('|');
-       if(bid===id)return Object.assign({name:t.name||t.brand||el.googleName||'POI'},el);
-     }}
-   }catch(e){}
-   return null;
- }
- function decorateVisibleReviews(){
-   document.querySelectorAll('.wl-poi-brand:not([data-review-wired])').forEach(box=>{
-     box.dataset.reviewWired='1';const p=itemForBrand(box);if(!p)return;
-     const b=document.createElement('button');b.type='button';b.className='wl-review-dot';b.title='Rate & Review';b.textContent='★';
-     b.onclick=e=>{e.preventDefault();e.stopPropagation();WayLynReviews.open(p)};box.appendChild(b);
-     WayLynReviews.count(p).then(n=>{if(n)b.title='Reviews: '+n+' · Rate & Review'}).catch(()=>{});
-   });
-   const pc=$r('placeCard');if(pc&&pc.classList.contains('show')&&!pc.querySelector('.wl-place-review-btn')){
-     const actions=pc.querySelector('.pc-actions');if(actions){
-       const b=document.createElement('button');b.className='pc-btn wl-place-review-btn';b.textContent='★ Rate & Review';
-       b.onclick=()=>WayLynReviews.open(window.__wlLastReviewPlace||null);actions.appendChild(b);
-     }
-   }
- }
- /* Capture place objects without replacing existing behavior. */
- if(typeof window.showPlaceCard==='function'){
-   const old=window.showPlaceCard;window.showPlaceCard=async function(p){window.__wlLastReviewPlace=p;const r=await old.apply(this,arguments);setTimeout(decorateVisibleReviews,20);return r}
- }
- setInterval(decorateVisibleReviews,1800);
- window.addEventListener('resize',()=>{try{window.map&&map.invalidateSize();window.map3d&&map3d.resize()}catch(e){}});
- setTimeout(addCollapseButton,900);
-})();
-</script>
-
-/body>
+</body>
 </html>
