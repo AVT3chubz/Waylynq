@@ -1,6 +1,20 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- WAYLYN GOOGLE PHOTOREALISTIC 3D
+     Paste a Google Maps Platform API key with Map Tiles API enabled below. -->
+<script>
+window.WAYLYN_GOOGLE_MAPS_KEY =
+  window.WAYLYN_GOOGLE_MAPS_KEY || 'AIzaSyA4MujaeCFFzFazExui3czqpVoCqSjj6g8';
+</script>
+<!-- WAYLYN MAPBOX 3D BUILDINGS
+     Create a public Mapbox access token and paste it below.
+     This token is used only for Mapbox vector tiles in the 3D navigation map. -->
+<script>
+  window.WAYLYN_MAPBOX_TOKEN = window.WAYLYN_MAPBOX_TOKEN || 'PASTE_YOUR_MAPBOX_PUBLIC_TOKEN_HERE';
+</script>
+
 <!-- WayLynQ split build: HTML structure here; CSS in waylynq.css; JavaScript in waylynq.js. -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -7280,6 +7294,9 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
   .wl27-rv-sheet, #wl27DockToggle, body.navigating #dock { animation: none !important; transition: none !important; }
 }
 </style>
+
+<link href="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.124/Build/Cesium/Cesium.js"></script>
 
 </head>
 <body>
@@ -19177,96 +19194,395 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
        - POI photos/icons can be enriched from Google Places when configured.
   ================================================================== */
 
-  function wlParseHeight(tags) {
-    const raw = tags && tags.height;
-    if (raw != null) {
-      const n = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
-      if (isFinite(n) && n > 1) return Math.min(n, 350);
-    }
-    const levels = parseFloat(tags && (tags['building:levels'] || tags.levels));
-    if (isFinite(levels) && levels > 0) return Math.min(levels * 3.05, 350);
-    const kind = String(tags && tags.building || '').toLowerCase();
-    if (/apartments|hotel|office|commercial|retail/.test(kind)) return 12;
-    if (/garage|shed|carport/.test(kind)) return 3.3;
-    return 6.6;
+  /* ==================================================================
+     MAPBOX VECTOR-TILE 3D BUILDINGS — PRIMARY SOURCE
+     Mapbox's composite vector tiles are loaded continuously by MapLibre.
+     OSM/Overpass remains only as a fallback when no Mapbox token is set.
+     ================================================================== */
+  function wlMapboxToken() {
+    const t = String(window.WAYLYN_MAPBOX_TOKEN || '').trim();
+    return t && t !== 'PASTE_YOUR_MAPBOX_PUBLIC_TOKEN_HERE' ? t : '';
   }
 
-  let wlBuildingFetchAt = null;
+  function wlInstallMapboxBuildings() {
+    if (!map3d || !map3d.getStyle || !map3d.getStyle()) return false;
+    const token = wlMapboxToken();
+    if (!token) return false;
+
+    try {
+      if (!map3d.getSource('wl-mapbox-buildings')) {
+        map3d.addSource('wl-mapbox-buildings', {
+          type: 'vector',
+          tiles: [
+            'https://api.mapbox.com/v4/mapbox.mapbox-streets-v8/{z}/{x}/{y}.vector.pbf?access_token=' + encodeURIComponent(token)
+          ],
+          minzoom: 0,
+          maxzoom: 16,
+          attribution: '© Mapbox © OpenStreetMap'
+        });
+      }
+
+      if (!map3d.getLayer('wl-mapbox-buildings-3d')) {
+        const layers = map3d.getStyle().layers || [];
+        const label = (layers.find(l => l.type === 'symbol' && l.layout && l.layout['text-field']) || {}).id;
+
+        map3d.addLayer({
+          id: 'wl-mapbox-buildings-3d',
+          type: 'fill-extrusion',
+          source: 'wl-mapbox-buildings',
+          'source-layer': 'building',
+          minzoom: 12,
+          paint: {
+            'fill-extrusion-color': lightMode ? '#c2c8cc' : '#65737d',
+            'fill-extrusion-height': [
+              'case',
+              ['>', ['coalesce', ['to-number', ['get', 'height']], 0], 0],
+              ['to-number', ['get', 'height']],
+              ['>', ['coalesce', ['to-number', ['get', 'render_height']], 0], 0],
+              ['to-number', ['get', 'render_height']],
+              9
+            ],
+            'fill-extrusion-base': [
+              'coalesce',
+              ['to-number', ['get', 'min_height']],
+              ['to-number', ['get', 'render_min_height']],
+              0
+            ],
+            'fill-extrusion-opacity': 1
+          }
+        }, label);
+      } else {
+        try { map3d.setLayerZoomRange('wl-mapbox-buildings-3d', 12, 24); } catch(e) {}
+      }
+
+      /* Avoid drawing WayLyn's generic vector extrusion over the Mapbox
+         footprint layer. The raster/vector road map remains untouched. */
+      ['r20-all-buildings','wl-building-supplement-3d'].forEach(id => {
+        try { if (map3d.getLayer(id)) map3d.setLayoutProperty(id, 'visibility', 'none'); } catch(e) {}
+      });
+
+      const dbg = document.getElementById('wlBuildingDebug');
+      if (dbg) dbg.textContent = '3D buildings — Mapbox vector tiles active';
+      return true;
+    } catch (e) {
+      console.warn('Mapbox building tiles unavailable; using WayLyn fallback', e);
+      return false;
+    }
+  }
+
+  /* ==================================================================
+     COMPLETE 3D BUILDING COVERAGE
+     - visible MapLibre viewport + ~1 km buffer
+     - keeps previously fetched footprints in a bounded cache
+     - includes building ways and multipolygon building relations
+     - real height/levels first, sensible type/footprint fallback second
+     ================================================================== */
+
+  function wlRingAreaM2(ring) {
+    if (!ring || ring.length < 4) return 0;
+    let lat = 0;
+    ring.forEach((p) => { lat += p[1]; });
+    lat /= ring.length;
+    const mx = 111320 * Math.max(.15, Math.cos(lat * Math.PI / 180));
+    const my = 111320;
+    let a = 0;
+    for (let i = 0; i < ring.length - 1; i++) {
+      a += (ring[i][0] * mx) * (ring[i + 1][1] * my) -
+           (ring[i + 1][0] * mx) * (ring[i][1] * my);
+    }
+    return Math.abs(a) / 2;
+  }
+
+  function wlParseHeight(tags, area) {
+    tags = tags || {};
+
+    const raw = tags.height;
+    if (raw != null) {
+      let n = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+      if (/ft|feet|foot|'/i.test(String(raw))) n *= .3048;
+      if (isFinite(n) && n > 1) return Math.min(n, 350);
+    }
+
+    const levels = parseFloat(tags['building:levels'] || tags.levels);
+    if (isFinite(levels) && levels > 0) return Math.min(levels * 3.05, 350);
+
+    const kind = String(tags.building || '').toLowerCase();
+
+    if (/bungalow/.test(kind)) return 4.5;
+    if (/garage|garages|shed|carport|hut/.test(kind)) return 3.3;
+    if (/house|detached|semidetached_house|terrace|residential/.test(kind))
+      return area > 300 ? 10.5 : 9;
+    if (/apartments|hotel|office|commercial|retail|hospital|school|university/.test(kind)) {
+      if (area > 5000) return 22;
+      if (area > 2000) return 17;
+      if (area > 800) return 13;
+      return 11;
+    }
+
+    if (area > 5000) return 18;
+    if (area > 2000) return 14;
+    if (area > 800) return 11;
+    if (area > 300) return 9;
+    return 7;
+  }
+
+  function wlBuildingBase(tags) {
+    tags = tags || {};
+    const raw = tags.min_height != null ? tags.min_height : tags.render_min_height;
+    if (raw != null) {
+      let n = parseFloat(String(raw).replace(/[^0-9.]/g, ''));
+      if (/ft|feet|foot|'/i.test(String(raw))) n *= .3048;
+      if (isFinite(n)) return Math.max(0, Math.min(n, 300));
+    }
+    const levels = parseFloat(tags['building:min_level']);
+    return isFinite(levels) && levels > 0 ? Math.min(levels * 3.05, 300) : 0;
+  }
+
+  function wlBuildingBBox() {
+    if (!map3d || !map3d.getBounds) return null;
+    const b = map3d.getBounds();
+    const sw = b.getSouthWest(), ne = b.getNorthEast();
+    const midLat = (sw.lat + ne.lat) / 2;
+    const latPad = 1000 / 111320;
+    const lngPad = 1000 / (111320 * Math.max(.15, Math.cos(midLat * Math.PI / 180)));
+    return {
+      south: Math.max(-85, sw.lat - latPad),
+      west: sw.lng - lngPad,
+      north: Math.min(85, ne.lat + latPad),
+      east: ne.lng + lngPad
+    };
+  }
+
+  function wlBuildingBBoxKey(b) {
+    /* About 100 m cells: small camera animation does not hammer Overpass. */
+    return [b.south, b.west, b.north, b.east].map((v) => v.toFixed(3)).join(',');
+  }
+
+  function wlClosedRing(geometry) {
+    if (!geometry || geometry.length < 3) return null;
+    const ring = geometry
+      .filter((p) => p && isFinite(p.lat) && isFinite(p.lon))
+      .map((p) => [p.lon, p.lat]);
+    if (ring.length < 3) return null;
+    const f = ring[0], l = ring[ring.length - 1];
+    if (f[0] !== l[0] || f[1] !== l[1]) ring.push(f.slice());
+    return ring.length >= 4 ? ring : null;
+  }
+
+  function wlBuildingDebugHud() {
+    let el = document.getElementById('wlBuildingDebug');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'wlBuildingDebug';
+      el.style.cssText =
+        'position:fixed;right:12px;top:76px;z-index:99999;background:rgba(5,15,22,.9);' +
+        'color:#eaf6ff;border:1px solid rgba(100,180,255,.5);border-radius:10px;' +
+        'padding:8px 10px;font:600 12px/1.35 system-ui,sans-serif;pointer-events:none;' +
+        'box-shadow:0 4px 16px rgba(0,0,0,.35);white-space:nowrap';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function wlSetBuildingDebug(fetched, rendered, status) {
+    const el = wlBuildingDebugHud();
+    el.textContent = '3D buildings — fetched: ' + fetched +
+      ' • rendered: ' + rendered + (status ? ' • ' + status : '');
+  }
+
+  const wlBuildingFeatureCache = new Map();
+  const wlBuildingRequestKeys = new Map();
   let wlBuildingFetchBusy = false;
+  let wlBuildingFetchQueued = false;
   let wlBuildingFetchTime = 0;
 
+  function wlCacheBuildingFeature(id, tags, ring) {
+    if (!ring) return;
+    const area = wlRingAreaM2(ring);
+    wlBuildingFeatureCache.set(id, {
+      type: 'Feature',
+      id: id,
+      properties: {
+        osm_id: id,
+        h: Math.min(350, Math.max(2.8, wlParseHeight(tags, area))),
+        base: wlBuildingBase(tags),
+        kind: (tags && tags.building) || 'yes'
+      },
+      geometry: { type: 'Polygon', coordinates: [ring] }
+    });
+  }
+
+  function wlConsumeBuildingElement(el) {
+    if (!el) return;
+    const tags = el.tags || {};
+
+    if (el.type === 'way') {
+      wlCacheBuildingFeature('way/' + el.id, tags, wlClosedRing(el.geometry));
+      return;
+    }
+
+    if (el.type === 'relation' && el.members) {
+      /* OSM building multipolygons normally expose their outer rings here
+         when Overpass is requested with "out geom". */
+      let part = 0;
+      el.members.forEach((m) => {
+        if (!m || m.type !== 'way' || (m.role && m.role !== 'outer')) return;
+        const ring = wlClosedRing(m.geometry);
+        if (ring) wlCacheBuildingFeature('relation/' + el.id + '/outer/' + (part++), tags, ring);
+      });
+    }
+  }
+
+  function wlTrimBuildingCache(center) {
+    /* Keep continuity while driving, but do not let a long trip retain an
+       unlimited amount of GeoJSON in memory. */
+    if (wlBuildingFeatureCache.size <= 12000 || !center) return;
+    const keep = [];
+    wlBuildingFeatureCache.forEach((feature, key) => {
+      try {
+        const p = feature.geometry.coordinates[0][0];
+        const d = haversine(center, { lat:p[1], lng:p[0] });
+        if (d < 6500) keep.push([key, feature]);
+      } catch (e) {}
+    });
+    wlBuildingFeatureCache.clear();
+    keep.slice(-10000).forEach(([k, v]) => wlBuildingFeatureCache.set(k, v));
+  }
+
+  function wlRenderBuildingCache() {
+    if (!map3d || !map3d.getStyle || !map3d.getStyle()) return;
+
+    const gj = {
+      type: 'FeatureCollection',
+      features: Array.from(wlBuildingFeatureCache.values())
+    };
+
+    if (map3d.getSource('wl-building-supplement')) {
+      map3d.getSource('wl-building-supplement').setData(gj);
+    } else {
+      map3d.addSource('wl-building-supplement', { type:'geojson', data:gj });
+    }
+
+    if (!map3d.getLayer('wl-building-supplement-3d')) {
+      const layers = map3d.getStyle().layers || [];
+      const label = (layers.find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']) || {}).id;
+      map3d.addLayer({
+        id:'wl-building-supplement-3d',
+        type:'fill-extrusion',
+        source:'wl-building-supplement',
+        minzoom:11,
+        paint:{
+          'fill-extrusion-color': lightMode ? '#b9c3ca' : '#71828d',
+          'fill-extrusion-height':['coalesce',['get','h'],8],
+          'fill-extrusion-base':['coalesce',['get','base'],0],
+          'fill-extrusion-opacity':1
+        }
+      }, label);
+    } else {
+      try {
+        map3d.setLayerZoomRange('wl-building-supplement-3d', 12, 24);
+        map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-color',
+          lightMode ? '#c7cdd1' : '#53626c');
+        map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-opacity',.92);
+      } catch (e) {}
+    }
+  }
+
   async function refreshSupplementalBuildings(force) {
-    if (!map3d || !map3dReady || wlBuildingFetchBusy) return;
-    if (map3d.getZoom && map3d.getZoom() < 14.2) return;
-    const c = map3d.getCenter();
-    const here = { lat:c.lat, lng:c.lng };
-    if (!force && wlBuildingFetchAt && haversine(wlBuildingFetchAt, here) < 520 &&
-        Date.now() - wlBuildingFetchTime < 4 * 60 * 1000) return;
+    if (!map3d || !map3dReady) return;
+
+    /* Mapbox vector tiles are the primary building pipeline. When they are
+       configured, MapLibre loads the required building tiles automatically. */
+    if (wlMapboxToken()) {
+      wlInstallMapboxBuildings();
+      return;
+    }
+
+    if (map3d.getZoom && map3d.getZoom() < 12) return;
+
+    if (wlBuildingFetchBusy) {
+      wlBuildingFetchQueued = true;
+      return;
+    }
+
+    const bbox = wlBuildingBBox();
+    if (!bbox) return;
+
+    const key = wlBuildingBBoxKey(bbox);
+    const previous = wlBuildingRequestKeys.get(key) || 0;
+
+    /* Reuse a recently loaded viewport. Force bypasses this for route/style
+       startup; ordinary driving refreshes whenever the buffered viewport changes. */
+    if (!force && Date.now() - previous < 90 * 1000) {
+      wlRenderBuildingCache();
+      return;
+    }
 
     wlBuildingFetchBusy = true;
-    wlBuildingFetchAt = here;
+    wlBuildingFetchQueued = false;
     wlBuildingFetchTime = Date.now();
+    wlBuildingRequestKeys.set(key, Date.now());
+
     try {
-      const q = '[out:json][timeout:10];way["building"](around:1150,' +
-        c.lat.toFixed(5) + ',' + c.lng.toFixed(5) + ');out tags geom 900;';
+      const box = [
+        bbox.south.toFixed(6),
+        bbox.west.toFixed(6),
+        bbox.north.toFixed(6),
+        bbox.east.toFixed(6)
+      ].join(',');
+
+      const q =
+        '[out:json][timeout:25];(' +
+        'way["building"](' + box + ');' +
+        'relation["building"](' + box + ');' +
+        ');out tags geom;';
+
       const data = await overpassFast(q);
-      const features = [];
-      (data.elements || []).forEach((el) => {
-        if (!el.geometry || el.geometry.length < 4) return;
-        const ring = el.geometry.map((p) => [p.lon, p.lat]);
-        const first = ring[0], last = ring[ring.length - 1];
-        if (first[0] !== last[0] || first[1] !== last[1]) ring.push(first.slice());
-        const tags = el.tags || {};
-        features.push({
-          type:'Feature',
-          properties:{
-            h:wlParseHeight(tags),
-            base:Math.max(0, parseFloat(tags.min_height) || 0),
-            kind:tags.building || 'yes'
-          },
-          geometry:{ type:'Polygon', coordinates:[ring] }
-        });
-      });
-      const gj = { type:'FeatureCollection', features:features };
-      if (map3d.getSource('wl-building-supplement')) {
-        map3d.getSource('wl-building-supplement').setData(gj);
-      } else {
-        map3d.addSource('wl-building-supplement', { type:'geojson', data:gj });
-        let before;
-        const labels = (map3d.getStyle().layers || []).find((l) => l.type === 'symbol' && l.layout && l.layout['text-field']);
-        before = labels && labels.id;
-        map3d.addLayer({
-          id:'wl-building-supplement-3d',
-          type:'fill-extrusion',
-          source:'wl-building-supplement',
-          minzoom:14,
-          paint:{
-            'fill-extrusion-color': lightMode ? '#c6d0d6' : '#435562',
-            'fill-extrusion-height':['get','h'],
-            'fill-extrusion-base':['get','base'],
-            'fill-extrusion-opacity':.84
-          }
-        }, before);
-      }
+      const elements = (data && data.elements) || [];
+      elements.forEach(wlConsumeBuildingElement);
+
+      const c = map3d.getCenter();
+      wlTrimBuildingCache({ lat:c.lat, lng:c.lng });
+      wlRenderBuildingCache();
+      wlSetBuildingDebug(elements.length, wlBuildingFeatureCache.size, 'all footprint sizes enabled');
     } catch (e) {
       console.warn('Supplemental building detail unavailable', e);
+      wlRenderBuildingCache();
+      wlSetBuildingDebug(0, wlBuildingFeatureCache.size, 'fetch error — cached buildings kept');
     } finally {
       wlBuildingFetchBusy = false;
+      if (wlBuildingFetchQueued) {
+        wlBuildingFetchQueued = false;
+        setTimeout(() => refreshSupplementalBuildings(false), 180);
+      }
     }
   }
 
   const wlEnsureMap3dBase = ensureMap3d;
   ensureMap3d = function wlEnsureMap3d() {
     const instance = wlEnsureMap3dBase();
-    if (instance && !instance.__wlRound15Bound) {
-      instance.__wlRound15Bound = true;
-      instance.on('load', () => setTimeout(() => refreshSupplementalBuildings(true), 350));
-      instance.on('moveend', () => {
-        if (navActive()) refreshSupplementalBuildings(false);
-      });
+    if (instance && !instance.__wlCompleteBuildingsBound) {
+      instance.__wlCompleteBuildingsBound = true;
+      let timer = 0;
+      const queue = (force) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => refreshSupplementalBuildings(!!force), force ? 80 : 350);
+      };
+      instance.on('load', () => { wlInstallMapboxBuildings(); queue(true); });
+      instance.on('moveend', () => { wlInstallMapboxBuildings(); queue(false); });
+      instance.on('zoomend', () => queue(false));
+      instance.on('rotateend', () => queue(false));
+      instance.on('pitchend', () => queue(false));
+      instance.on('style.load', () => { wlInstallMapboxBuildings(); queue(true); });
     }
     return instance;
   };
+
+
+  setTimeout(() => {
+    if (!wlMapboxToken()) {
+      console.warn('WayLyn: Mapbox building tiles are not active. Paste a public token into window.WAYLYN_MAPBOX_TOKEN near the top of this HTML file. OSM/Overpass fallback remains enabled.');
+    }
+  }, 1200);
 
   function wlCurrentLanes(step) {
     if (!step || !step.intersections) return [];
@@ -24447,7 +24763,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if(map3d.getLayer(id)) map3d.removeLayer(id);
         const before=(style.layers||[]).find(l=>l.type==='symbol');
         map3d.addLayer({
-          id,type:'fill-extrusion',source:bLayer.source,'source-layer':'building',minzoom:13,
+          id,type:'fill-extrusion',source:bLayer.source,'source-layer':'building',minzoom:12,
           paint:{
             'fill-extrusion-color':lightMode?'#c8d1d6':'#4f606c',
             'fill-extrusion-height':[
@@ -25248,7 +25564,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         const before=(layers.find(l=>l.type==='symbol')||{}).id;
         map3d.addLayer({
           id,type:'fill-extrusion',source:c.source,'source-layer':c.sourceLayer,
-          minzoom:14,
+          minzoom:12,
           filter:['any',['has','render_height'],['has','height'],['has','building:levels'],['has','building']],
           paint:{
             'fill-extrusion-color': lightMode ? '#c8cdd0' : '#59656d',
@@ -25532,94 +25848,22 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     };
   } catch(e){}
 
-  /* ---------------- broader 3D building coverage ---------------- */
+  /* ---------------- broader 3D building coverage ----------------
+     Round 22 now delegates to the authoritative viewport + 1 km loader
+     above instead of issuing a second radius-based query that could replace
+     the complete cached building set with a smaller one.
+     --------------------------------------------------------------- */
   async function refreshBuildings22(force){
     if(!map3d||!map3dReady) return;
-    if(map3d.getZoom&&map3d.getZoom()<13.6) return;
-
     try{ style3dBuildings(); }catch(e){}
-
-    /* Existing vector style remains primary. Supplemental OSM geometry fills
-       gaps around the whole visible navigation area. */
-    const c=map3d.getCenter();
-    const b=map3d.getBounds&&map3d.getBounds();
-    let radius=1700;
-    if(b){
-      try{
-        const ne=b.getNorthEast(), sw=b.getSouthWest();
-        radius=Math.min(3000,Math.max(1500,haversine(
-          {lat:c.lat,lng:c.lng},{lat:ne.lat,lng:ne.lng}
-        )*1.35));
-      }catch(e){}
-    }
-
-    try{
-      const q='[out:json][timeout:18];way["building"](around:'+Math.round(radius)+','+
-        c.lat.toFixed(5)+','+c.lng.toFixed(5)+');out tags geom;';
-      const data=await overpassFast(q);
-      const features=[];
-      (data.elements||[]).forEach(el=>{
-        if(!el.geometry||el.geometry.length<4) return;
-        const ring=el.geometry.map(p=>[p.lon,p.lat]);
-        const f=ring[0],l=ring[ring.length-1];
-        if(f[0]!==l[0]||f[1]!==l[1]) ring.push(f.slice());
-        const tags=el.tags||{};
-        let h=0;
-        try{ h=wlParseHeight(tags); }catch(e){}
-        if(!h||!isFinite(h)){
-          const levels=parseFloat(tags['building:levels']);
-          h=isFinite(levels)?Math.max(3,levels*3.05):6.6;
-        }
-        features.push({
-          type:'Feature',
-          properties:{
-            h:Math.min(350,Math.max(2.8,h)),
-            base:Math.max(0,parseFloat(tags.min_height||tags.render_min_height)||0),
-            kind:tags.building||'yes'
-          },
-          geometry:{type:'Polygon',coordinates:[ring]}
-        });
-      });
-
-      const gj={type:'FeatureCollection',features};
-      if(map3d.getSource('wl-building-supplement')){
-        map3d.getSource('wl-building-supplement').setData(gj);
-      }else{
-        map3d.addSource('wl-building-supplement',{type:'geojson',data:gj});
-      }
-
-      if(!map3d.getLayer('wl-building-supplement-3d')){
-        const layers=(map3d.getStyle().layers||[]);
-        const label=(layers.find(l=>l.type==='symbol'&&l.layout&&l.layout['text-field'])||{}).id;
-        map3d.addLayer({
-          id:'wl-building-supplement-3d',
-          type:'fill-extrusion',
-          source:'wl-building-supplement',
-          minzoom:13.6,
-          paint:{
-            'fill-extrusion-color':lightMode?'#c7cdd1':'#53626c',
-            'fill-extrusion-height':['get','h'],
-            'fill-extrusion-base':['get','base'],
-            'fill-extrusion-opacity':.88
-          }
-        },label);
-      }else{
-        try{
-          map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-color',lightMode?'#c7cdd1':'#53626c');
-          map3d.setPaintProperty('wl-building-supplement-3d','fill-extrusion-opacity',.88);
-        }catch(e){}
-      }
-    }catch(e){
-      console.warn('Expanded 3D building coverage partial',e);
-      /* Fall back to the prior cached/debounced implementation. */
-      try{ if(typeof refreshSupplementalBuildings==='function') refreshSupplementalBuildings(force); }catch(_){}
-    }
+    try{ await refreshSupplementalBuildings(!!force); }
+    catch(e){ console.warn('Expanded 3D building coverage partial',e); }
   }
 
   let r22BuildingTimer=0;
   function queueBuildings22(force){
     clearTimeout(r22BuildingTimer);
-    r22BuildingTimer=setTimeout(()=>refreshBuildings22(force),force?80:550);
+    r22BuildingTimer=setTimeout(()=>refreshBuildings22(force),force?80:350);
   }
 
   try{
@@ -25627,7 +25871,9 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       map3d.on('load',()=>queueBuildings22(true));
       map3d.on('moveend',()=>queueBuildings22(false));
       map3d.on('zoomend',()=>queueBuildings22(false));
-      map3d.on('style.load',()=>queueBuildings22(false));
+      map3d.on('rotateend',()=>queueBuildings22(false));
+      map3d.on('pitchend',()=>queueBuildings22(false));
+      map3d.on('style.load',()=>queueBuildings22(true));
     }
   }catch(e){}
 
@@ -26215,6 +26461,377 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
      ====================================================================== -->
 
 
+
+
+
+<style>
+#wlGoogle3dHost{
+  position:absolute !important;
+  inset:0 !important;
+  z-index:5 !important;
+  display:none;
+  overflow:hidden;
+  background:#071018;
+}
+#wlGoogle3dHost.active{display:block}
+#wlGoogle3dStatus{
+  position:fixed; left:50%; top:76px; transform:translateX(-50%);
+  z-index:2147483646; display:none; padding:9px 13px; border-radius:10px;
+  background:rgba(5,15,22,.9); color:#fff; font:600 12px/1.35 system-ui,sans-serif;
+  border:1px solid rgba(120,190,255,.55); pointer-events:none;
+}
+#wlGoogle3dStatus.active{display:block}
+#wlGoogle3dToggle{
+  position:fixed !important; right:18px !important; bottom:150px !important; z-index:30 !important;
+  border:1px solid rgba(255,255,255,.28); border-radius:12px;
+  padding:10px 13px; background:rgba(8,18,27,.92); color:white;
+  font:700 12px system-ui,sans-serif; cursor:pointer;
+}
+</style>
+
+<div id="wlGoogle3dHost"></div>
+<div id="wlGoogle3dStatus"></div>
+<button id="wlGoogle3dToggle" type="button">Realistic 3D</button>
+<script>
+(function(){
+  let viewer = null, tileset = null, enabled = false;
+
+  function key(){
+    const k = String(window.WAYLYN_GOOGLE_MAPS_KEY || '').trim();
+    return k && k !== 'PASTE_YOUR_GOOGLE_MAPS_API_KEY_HERE' ? k : '';
+  }
+  function status(msg, show=true){
+    const el=document.getElementById('wlGoogle3dStatus');
+    if(!el) return;
+    el.textContent=msg;
+    el.classList.toggle('active', !!show);
+  }
+  function currentCenter(){
+    try {
+      /* 1. Exact position of WayLyn's existing 3D car marker. */
+      if (typeof map3dUser !== 'undefined' && map3dUser && map3dUser.getLngLat) {
+        const p=map3dUser.getLngLat();
+        if (p && Number.isFinite(p.lng) && Number.isFinite(p.lat))
+          return {lng:p.lng,lat:p.lat,zoom:18};
+      }
+      /* 2. WayLyn's live GPS position. */
+      if (typeof livePosition !== 'undefined' && livePosition &&
+          Number.isFinite(livePosition.lng) && Number.isFinite(livePosition.lat))
+        return {lng:livePosition.lng,lat:livePosition.lat,zoom:18};
+
+      /* 3. Current navigation position. */
+      if (typeof lastNavPos !== 'undefined' && lastNavPos) {
+        const lat=Number(lastNavPos.lat), lng=Number(lastNavPos.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng))
+          return {lng:lng,lat:lat,zoom:18};
+      }
+
+      /* 4. Only then use WayLyn's 3D camera center. */
+      if (typeof map3d !== 'undefined' && map3d && map3d.getCenter){
+        const c=map3d.getCenter();
+        return {lng:c.lng,lat:c.lat,zoom:map3d.getZoom ? map3d.getZoom() : 18};
+      }
+    }catch(e){}
+    return null;
+  }
+
+  function mountGoogleInsideWayLyn3d(){
+    const host=document.getElementById('wlGoogle3dHost');
+    const target=document.getElementById('map3d');
+    if(!host || !target) return false;
+    if(host.parentElement!==target) target.appendChild(host);
+    const cs=getComputedStyle(target);
+    if(cs.position==='static') target.style.position='relative';
+    return true;
+  }
+
+  async function startGoogle3d(){
+    const apiKey=key();
+    if(!apiKey){
+      status('Paste your Google Maps Platform key near the top of this HTML file.');
+      return false;
+    }
+    if(!window.Cesium){
+      status('CesiumJS did not load.');
+      return false;
+    }
+    if(!mountGoogleInsideWayLyn3d()){
+      status('WayLyn 3D map is not ready yet.');
+      return false;
+    }
+    const c=currentCenter();
+    if(!c){
+      status('Waiting for your WayLyn navigation position…');
+      return false;
+    }
+    const host=document.getElementById('wlGoogle3dHost');
+    host.classList.add('active');
+    const dbg=document.getElementById('wlBuildingDebug');
+    if(dbg) dbg.style.display='none';
+    status('Loading Google realistic 3D at your WayLyn position…');
+
+    try{
+      if(!viewer){
+        viewer=new Cesium.Viewer('wlGoogle3dHost',{
+          animation:false, timeline:false, baseLayerPicker:false,
+          geocoder:false, homeButton:false, sceneModePicker:false,
+          navigationHelpButton:false, fullscreenButton:false,
+          infoBox:false, selectionIndicator:false,
+          baseLayer:false,
+          requestRenderMode:false
+        });
+        viewer.scene.globe.show=false;
+        viewer.scene.skyAtmosphere.show=true;
+        window.__wlGoogleViewer = viewer;
+        setTimeout(function(){
+          if (window.wlAttachGoogle3dNavigation) window.wlAttachGoogle3dNavigation(viewer);
+        }, 0);
+      }
+      if(!tileset){
+        tileset = await Cesium.Cesium3DTileset.fromUrl(
+          'https://tile.googleapis.com/v1/3dtiles/root.json?key='+encodeURIComponent(apiKey)
+        );
+        viewer.scene.primitives.add(tileset);
+      }
+
+      const c=currentCenter();
+      if(!c) throw new Error('WayLyn current position unavailable');
+      viewer.camera.flyTo({
+        destination:Cesium.Cartesian3.fromDegrees(c.lng,c.lat,650),
+        orientation:{
+          heading:Cesium.Math.toRadians(0),
+          pitch:Cesium.Math.toRadians(-42),
+          roll:0
+        },
+        duration:0.8
+      });
+      enabled=true;
+      window.__wlGoogleViewer = viewer;
+      if (window.wlAttachGoogle3dNavigation) window.wlAttachGoogle3dNavigation(viewer);
+      status('Google 3D is the active navigation map', true);
+      setTimeout(()=>status('',false),2200);
+      return true;
+    }catch(err){
+      console.error('Google Photorealistic 3D failed',err);
+      status('Google 3D failed — check API key, Map Tiles API access, billing, and browser console.');
+      return false;
+    }
+  }
+  function stopGoogle3d(){
+    document.getElementById('wlGoogle3dHost').classList.remove('active');
+    const dbg=document.getElementById('wlBuildingDebug');
+    if(dbg) dbg.style.display='';
+    enabled=false;
+    status('',false);
+  }
+  document.getElementById('wlGoogle3dToggle').addEventListener('click',async function(){
+    if(enabled){ stopGoogle3d(); this.textContent='Realistic 3D'; }
+    else if(await startGoogle3d()){ this.textContent='Standard 3D'; }
+  });
+
+
+  document.addEventListener('keydown',function(e){
+    if((e.key||'').toLowerCase()==='g' && !e.ctrlKey && !e.metaKey && !e.altKey){
+      const tag=(document.activeElement&&document.activeElement.tagName||'').toLowerCase();
+      if(tag==='input'||tag==='textarea'||tag==='select') return;
+      document.getElementById('wlGoogle3dToggle').click();
+    }
+  });
+
+  window.wlStartGooglePhotorealistic3D=startGoogle3d;
+  window.wlStopGooglePhotorealistic3D=stopGoogle3d;
+
+  window.wlGoogle3dDiagnostic=function(){
+    const result={
+      googleKeyConfigured:!!key(),
+      cesiumLoaded:!!window.Cesium,
+      google3dHost:!!document.getElementById('wlGoogle3dHost'),
+      startFunction:typeof window.wlStartGooglePhotorealistic3D
+    };
+    console.table(result);
+    status(
+      'Key: '+(result.googleKeyConfigured?'OK':'MISSING')+
+      ' • Cesium: '+(result.cesiumLoaded?'OK':'MISSING')+
+      ' • Google 3D: '+(result.startFunction==='function'?'READY':'NOT READY'),
+      true
+    );
+    return result;
+  };
+
+})();
+</script>
+
+
+<script>
+/* ================================================================
+   WAYLYN + GOOGLE PHOTOREALISTIC 3D NAVIGATION BRIDGE
+   Keeps WayLyn's navigation UI while Cesium/Google renders the world.
+   ================================================================ */
+(function () {
+  let wl3dRouteEntities = [];
+  let wl3dCar = null;
+  let wl3dTimer = null;
+
+  function viewer() {
+    try {
+      const host = document.getElementById('wlGoogle3dHost');
+      return host && Cesium && Cesium.Viewer && host.__waylynViewer;
+    } catch(e) { return null; }
+  }
+
+  function getCesiumViewer() {
+    /* The original Google 3D module keeps viewer private, so discover the
+       Cesium widget attached to the host and cache it. */
+    const host = document.getElementById('wlGoogle3dHost');
+    if (!host || !window.Cesium) return null;
+    if (host.__waylynViewer) return host.__waylynViewer;
+    try {
+      const widgets = document.querySelectorAll('#wlGoogle3dHost .cesium-viewer');
+      if (widgets.length && window.__wlGoogleViewer) {
+        host.__waylynViewer = window.__wlGoogleViewer;
+        return host.__waylynViewer;
+      }
+    } catch(e) {}
+    return window.__wlGoogleViewer || null;
+  }
+
+  function routeCoordinates() {
+    try {
+      if (typeof navCoords !== 'undefined' && Array.isArray(navCoords) && navCoords.length)
+        return navCoords;
+      if (window.allRoutes && allRoutes.length) {
+        const idx = Number.isFinite(window.activeRouteIndex) ? activeRouteIndex : 0;
+        const r = allRoutes[idx];
+        if (r && Array.isArray(r.coords)) return r.coords;
+      }
+      if (Array.isArray(window.navCoords)) return navCoords;
+    } catch(e) {}
+    return [];
+  }
+
+  function mapCenter() {
+    try {
+      if (typeof map3dUser !== 'undefined' && map3dUser && map3dUser.getLngLat) {
+        const p=map3dUser.getLngLat();
+        if(p && Number.isFinite(p.lng) && Number.isFinite(p.lat)) return [p.lng,p.lat];
+      }
+      if (typeof livePosition !== 'undefined' && livePosition &&
+          Number.isFinite(livePosition.lng) && Number.isFinite(livePosition.lat))
+        return [livePosition.lng,livePosition.lat];
+      if (typeof lastNavPos !== 'undefined' && lastNavPos) {
+        const lat=Number(lastNavPos.lat), lng=Number(lastNavPos.lng);
+        if(Number.isFinite(lat) && Number.isFinite(lng)) return [lng,lat];
+      }
+      if (typeof map3d !== 'undefined' && map3d && map3d.getCenter) {
+        const c=map3d.getCenter();
+        return [c.lng,c.lat];
+      }
+    } catch(e) {}
+    return null;
+  }
+
+  function syncRoute(v) {
+    const coords = routeCoordinates();
+    if (!v || coords.length < 2) return;
+
+    wl3dRouteEntities.forEach(e => { try { v.entities.remove(e); } catch(_){} });
+    wl3dRouteEntities = [];
+
+    const positions = [];
+    coords.forEach(c => {
+      if (!Array.isArray(c) || c.length < 2) return;
+      let a=Number(c[0]), b=Number(c[1]);
+      if (!Number.isFinite(a) || !Number.isFinite(b)) return;
+      /* WayLyn normally stores [lat,lng]. If the first value cannot be a
+         latitude, treat the pair as GeoJSON [lng,lat]. */
+      let lat=a, lng=b;
+      if (Math.abs(a)>90 && Math.abs(b)<=90) { lng=a; lat=b; }
+      positions.push(Cesium.Cartesian3.fromDegrees(lng, lat, 3.0));
+    });
+    if (positions.length < 2) return;
+
+    /* dark casing */
+    wl3dRouteEntities.push(v.entities.add({
+      polyline:{
+        positions:positions,
+        width:14,
+        material:Cesium.Color.fromCssColorString('#14263b'),
+        clampToGround:true
+      }
+    }));
+    /* WayLyn blue route */
+    wl3dRouteEntities.push(v.entities.add({
+      polyline:{
+        positions:positions,
+        width:8,
+        material:Cesium.Color.fromCssColorString('#1683ff'),
+        clampToGround:true
+      }
+    }));
+  }
+
+  function syncCarAndCamera(v) {
+    if (!v) return;
+    const c = mapCenter();
+    if (!c) return;
+
+    const pos = Cesium.Cartesian3.fromDegrees(c[0], c[1], 4);
+    if (!wl3dCar) {
+      wl3dCar = v.entities.add({
+        position:pos,
+        point:{
+          pixelSize:16,
+          color:Cesium.Color.fromCssColorString('#2b8cff'),
+          outlineColor:Cesium.Color.WHITE,
+          outlineWidth:3,
+          disableDepthTestDistance:Number.POSITIVE_INFINITY
+        }
+      });
+    } else {
+      wl3dCar.position = pos;
+    }
+
+    /* Follow WayLyn's heading when available. */
+    let heading = 0;
+    try {
+      if (window.map3d && map3d.getBearing) heading = map3d.getBearing();
+    } catch(e) {}
+
+    const signature=c[0].toFixed(6)+','+c[1].toFixed(6)+','+heading.toFixed(1);
+    if(window.__wlGoogleCameraSig!==signature){
+      window.__wlGoogleCameraSig=signature;
+      v.camera.setView({
+        destination: Cesium.Cartesian3.fromDegrees(c[0], c[1], 155),
+        orientation:{
+          heading:Cesium.Math.toRadians(heading),
+          pitch:Cesium.Math.toRadians(-58),
+          roll:0
+        }
+      });
+    }
+  }
+
+  window.wlAttachGoogle3dNavigation = function(v) {
+    if (!v) return;
+    window.__wlGoogleViewer = v;
+    const host=document.getElementById('wlGoogle3dHost');
+    if(host) host.__waylynViewer=v;
+    syncRoute(v);
+    syncCarAndCamera(v);
+    clearInterval(wl3dTimer);
+    wl3dTimer=setInterval(function(){
+      syncCarAndCamera(v);
+      /* route can change after reroute */
+      const coords=routeCoordinates();
+      if(coords.length && (!wl3dRouteEntities.length ||
+          window.__wl3dRouteLen !== coords.length)){
+        window.__wl3dRouteLen=coords.length;
+        syncRoute(v);
+      }
+    },700);
+  };
+})();
+</script>
 
 
 </body>
