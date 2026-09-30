@@ -1,5 +1,3 @@
-
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8047,11 +8045,11 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
 <aside id="aiDock" class="hidden" aria-label="Trip planner">
   <div class="ai-head">
     <span class="ai-mark">&#10022;</span>
-    <span class="ai-titles"><b>Where do you want to go?</b><span>Describe the whole trip in one line and WayLyn sets itself up.</span></span>
+    <span class="ai-titles28"><b>Where do you want to go?</b></span>
     <button class="icon-act" id="aiHide" type="button" title="Hide">&#10005;</button>
   </div>
   <div class="ai-field">
-    <textarea id="aiInput" rows="2" placeholder="Boston tonight, stop for coffee and a charge, well-lit roads, music on"></textarea>
+    <textarea id="aiInput" rows="1" placeholder="Drive to Times Square"></textarea>
     <button class="ai-go" id="aiGo" type="button">Plan it</button>
   </div>
   <div class="ai-chips" id="aiChips"></div>
@@ -21431,6 +21429,2044 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   else boot();
 })();
   /* ===== end Round 27 ===== */
+  /* ======================================================================
+     ROUND 28 — THE ELEVEN FIXES, INSIDE THE APP
+
+     Why the earlier rounds "did nothing": every one of them was pasted
+     after the app's closing })(); so it ran outside the scope that holds
+     map, map3d, navCoords, renderPoiPanel and the rest. In strict mode an
+     assignment to one of those names throws a ReferenceError and the whole
+     round quietly dies. This block sits inside that scope, so it replaces
+     the real functions and reads the real state.
+
+       1  AI Trip Planner: no line under the heading
+       2  AI Trip Planner: one four-word example inside the box
+       3  AI prompt resolves the exact destination and shows it
+       4  Guidance card: square, see-through, flush to the top-left edge
+       5  Trip overview: a compact side sheet instead of a full-screen modal
+       6  Blue route ahead never flickers or vanishes while driving
+       7  Real 3D: vector 3D + terrain, and Google Photorealistic 3D Tiles
+       8  3D is the default map; 2D stays one tap away
+       9  POIs: the 10 closest, in a small box right above Recenter
+      10  My car: pick the car you drive, shown in 3D and on the 2D map
+      11  Family: avatars placed on roads and landmarks, announced on the way
+     ====================================================================== */
+  (() => {
+    const d = document;
+    const R28 = window.WayLynRound28 = { version: '28.0.0' };
+    const guard = (label, fn, fb) => {
+      try { const v = fn(); return v === undefined ? fb : v; }
+      catch (e) { console.warn('WayLynq R28 · ' + label, e); return fb; }
+    };
+    const sess = {
+      get(k, fb) { try { const v = sessionStorage.getItem('wl28:' + k); return v == null ? fb : JSON.parse(v); } catch (e) { return fb; } },
+      set(k, v) { try { sessionStorage.setItem('wl28:' + k, JSON.stringify(v)); } catch (e) {} }
+    };
+    const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const isNav = () => d.body.classList.contains('navigating');
+
+    /* The vehicle and the family travel with the account like saved places. */
+    ['r28Vehicle', 'r28Family', 'r28Pins'].forEach((k) => { if (SYNC_KEYS.indexOf(k) < 0) SYNC_KEYS.push(k); });
+
+    /* ====================================================================
+       1 + 2 — THE AI TRIP PLANNER BOX
+       The heading stays; the sentence under it goes. The class is renamed
+       so the late Round 24 script can no longer find and rewrite it, and
+       the six example chips go too — the one example lives in the box.
+    ==================================================================== */
+    const AI_EXAMPLE = 'Drive to Times Square';
+    function tidyAiDock() {
+      const t = d.querySelector('#aiDock .ai-titles, #aiDock .ai-titles28');
+      if (t) { t.className = 'ai-titles28'; t.innerHTML = '<b>Where do you want to go?</b>'; }
+      const inp = $('aiInput');
+      if (inp) { inp.setAttribute('placeholder', AI_EXAMPLE); inp.setAttribute('rows', '1'); }
+      const chips = $('aiChips');
+      if (chips) chips.setAttribute('hidden', '');
+    }
+
+    /* ====================================================================
+       3 — ONE PROMPT, THE EXACT DESTINATION
+
+       "Drive to Times Square" used to be geocoded by taking Nominatim's
+       first answer, and the old example sentence ("Boston tonight, ...")
+       never produced a destination at all, because the local reader only
+       recognised "to <place>". Now: the verb is stripped, the first clause
+       is tried when there is no "to", and up to ten candidates are ranked
+       by how famous they are, how well the name matches and how close
+       they are. The result is shown as a card with its full address and
+       the runners-up one tap away.
+    ==================================================================== */
+    const VERB = /^\s*(?:please\s+)?(?:(?:can|could|would)\s+you\s+)?(?:drive|take|navigate|go|head|route|get|bring|ride|walk|bike|cycle|directions?|show(?:\s+me)?(?:\s+the\s+way)?|find(?:\s+me)?\s+(?:a\s+)?route)(?:\s+me)?\s+(?:to|towards?|toward|into|for)\s+/i;
+    function cleanDest(q) {
+      let s = String(q || '').trim().replace(/[.?!]+$/, '');
+      s = s.replace(VERB, '').replace(/^(?:to|towards?)\s+/i, '');
+      s = s.replace(/\s+(?:please|now|asap|right now|tonight|today|tomorrow|this (?:morning|afternoon|evening))$/i, '');
+      return s.trim();
+    }
+    const TIMEWORDS = /\b(tonight|today|tomorrow|this (morning|afternoon|evening)|now|asap|right away|at \d{1,2}(:\d{2})?\s*(am|pm)?)\b/gi;
+    const NOT_A_PLACE = /^(night|day|dark|light|satellite|music|weather|radar|mute|voice|alerts?|show|find|add|stop|fuel|gas|petrol|coffee|food|lunch|dinner|charge|charging|ev|parking|restroom|avoid|prefer|well|start|go|play|share|save|report|open|follow|set|leave|arrive|keep|traffic)\b/i;
+    function firstClauseDestination(text) {
+      const low = String(text || '').toLowerCase();
+      if (/\b(keep|same|current|existing|this)\s+(the\s+)?(destination|route|trip)\b|\bon the way\b|\bdon'?t change\b/.test(low)) return null;
+      let first = String(text || '').split(/[,;.!?]|\s+(?:and|then|with|while|but|via)\s+/i)[0] || '';
+      first = cleanDest(first).replace(TIMEWORDS, ' ').replace(/\s+/g, ' ').trim();
+      if (!first || first.length < 2 || first.split(' ').length > 6) return null;
+      if (NOT_A_PLACE.test(first)) return null;
+      return first;
+    }
+
+    const geoCache = new Map();
+    function geoBias() {
+      if (lastNavPos) return lastNavPos;
+      if (livePosition) return livePosition;
+      return guard('bias', () => { const c = map.getCenter(); return map.getZoom() >= 5 ? { lat: c.lat, lng: c.lng } : null; }, null);
+    }
+    async function candidates(query) {
+      const q = cleanDest(query);
+      if (!q) return [];
+      const key = norm(q);
+      const hit = geoCache.get(key);
+      if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.list;
+      const bias = geoBias();
+      let url = NOMINATIM + '?format=json&limit=10&addressdetails=1&namedetails=1&extratags=1&dedupe=1&q=' + encodeURIComponent(q);
+      if (bias) {
+        const dLat = 1.5, dLng = 1.5 / Math.max(0.25, Math.cos(bias.lat * Math.PI / 180));
+        url += '&viewbox=' + [bias.lng - dLng, bias.lat + dLat, bias.lng + dLng, bias.lat - dLat].map((v) => v.toFixed(4)).join(',') + '&bounded=0';
+      }
+      if (navigator.language) url += '&accept-language=' + encodeURIComponent(navigator.language);
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('Nominatim ' + res.status);
+      const raw = await res.json();
+      const qn = norm(q), toks = qn.split(' ').filter((t) => t.length > 1);
+      const list = (Array.isArray(raw) ? raw : []).map((c) => {
+        const p = placeFromNominatim(c);
+        const nm = norm(p.name), dn = norm(c.display_name);
+        let s = (+c.importance || 0.05) * 3;
+        if (nm === qn) s += 1.2;
+        else if (nm && (nm.startsWith(qn) || qn.startsWith(nm))) s += 0.6;
+        else if (nm && (nm.indexOf(qn) >= 0 || qn.indexOf(nm) >= 0)) s += 0.3;
+        if (toks.length) s += 0.5 * toks.filter((t) => dn.indexOf(t) >= 0).length / toks.length;
+        let km = null;
+        if (bias) { km = haversine(bias, p) / 1000; s += 0.9 * Math.exp(-km / 40); }
+        if (c.class === 'highway' && !/^(services|rest_area)$/.test(c.type)) s -= 0.15;
+        const a = c.address || {};
+        p.city = a.city || a.town || a.village || a.suburb || a.county || a.state || a.country || '';
+        p.fullAddress = c.display_name;
+        p._score = s; p._km = km;
+        return p;
+      }).filter((p) => isFinite(p.lat) && isFinite(p.lng)).sort((a, b) => b._score - a._score);
+      geoCache.set(key, { at: Date.now(), list: list });
+      return list;
+    }
+    R28.candidates = candidates;
+
+    const priorGeocode = geocode;
+    geocode = async function r28Geocode(q) {
+      try { const list = await candidates(q); if (list.length) return list[0]; } catch (e) { /* fall back below */ }
+      return priorGeocode(q);
+    };
+
+    const priorLoose = aiGeocodeLoose;
+    aiGeocodeLoose = async function r28AiGeocodeLoose(text) {
+      const q = cleanDest(text);
+      const tries = [q];
+      const head = q.split(/\s+(?:and|then|but|while|with|plus|via)\s+|,/i)[0].trim();
+      if (head && head !== q) tries.push(head);
+      for (const t of tries) {
+        let list = [];
+        try { list = await candidates(t); } catch (e) { list = []; }
+        if (list.length) { R28.lastCands = { query: t, list: list }; return list[0]; }
+      }
+      return priorLoose(text);
+    };
+
+    const priorParse = aiParseLocal;
+    aiParseLocal = function r28AiParseLocal(text) {
+      const plan = priorParse(text);
+      if (plan.destination && /^__/.test(plan.destination)) return plan;
+      if (plan.destination) {
+        plan.destination = cleanDest(plan.destination).replace(TIMEWORDS, ' ').replace(/\s+/g, ' ').trim() || plan.destination;
+      } else if (!plan.nearestCategory) {
+        const guess = firstClauseDestination(text);
+        if (guess) { plan.destination = guess; plan.say = 'Setting up your trip.'; }
+      }
+      return plan;
+    };
+
+    const priorAiApply = aiApply;
+    aiApply = async function r28AiApply(plan) {
+      R28.lastCands = null;
+      d.body.classList.add('r28-ai-active');
+      const out = await priorAiApply(plan);
+      guard('destination card', showDestCard);
+      return out;
+    };
+
+    function placeLine(p) { return String(p.name || p.label || 'Destination').split(',')[0] + (p.city && norm(p.city) !== norm(p.name) ? ', ' + p.city : ''); }
+    function focusDest(zoom) {
+      if (!destPlace) return;
+      guard('focus', () => {
+        map.setView([destPlace.lat, destPlace.lng], zoom || 17, { animate: true });
+        if (map3d && map3dReady && !isNav() && R28.view === '3d') {
+          map3d.easeTo({ center: [destPlace.lng, destPlace.lat], zoom: (zoom || 17) - 0.5, pitch: 60, duration: 900 }, { r28: true });
+        }
+        if (R28.view === 'photo' && R28.photo) R28.photo.flyTo(destPlace.lat, destPlace.lng, 420);
+      });
+    }
+    function showDestCard() {
+      const c = R28.lastCands;
+      const box = $('aiOut');
+      if (!c || !destPlace || !box) return;
+      const old = box.querySelector('.r28-dest');
+      if (old && old.closest('.ai-step')) old.closest('.ai-step').remove();
+      const from = livePosition || originPlace;
+      const dist = from ? fmtDistance(haversine(from, destPlace)) + ' from you' : '';
+      const same = (p) => Math.abs(p.lat - destPlace.lat) < 1e-5 && Math.abs(p.lng - destPlace.lng) < 1e-5;
+      const alts = c.list.filter((p) => !same(p)).slice(0, 3);
+      const html =
+        '<div class="r28-dest">' +
+          '<div class="r28-dest-name">\u{1F4CD} ' + esc(String(destPlace.name || destPlace.label).split(',')[0]) + '</div>' +
+          '<div class="r28-dest-addr">' + esc(destPlace.fullAddress || destPlace.address || destPlace.label || '') + '</div>' +
+          '<div class="r28-dest-meta">' + esc([dist, destPlace.lat.toFixed(5) + ', ' + destPlace.lng.toFixed(5)].filter(Boolean).join(' · ')) +
+            ' <button type="button" class="r28-dest-show">Show on map</button></div>' +
+          (alts.length ? '<div class="r28-dest-alt"><span>Not this one?</span>' +
+            alts.map((p, i) => '<button type="button" data-r28alt="' + i + '">' + esc(placeLine(p)) + '</button>').join('') + '</div>' : '') +
+        '</div>';
+      aiSay('ok', html);
+      const card = box.querySelector('.r28-dest');
+      if (!card) return;
+      const show = card.querySelector('.r28-dest-show');
+      if (show) show.addEventListener('click', () => focusDest(17));
+      card.querySelectorAll('[data-r28alt]').forEach((b) => b.addEventListener('click', async () => {
+        const p = alts[+b.dataset.r28alt];
+        if (!p) return;
+        b.disabled = true;
+        try {
+          const origin = (originPlace && !/map cent/i.test(originPlace.name || '')) ? originPlace : await resolveOrigin();
+          await planRoute(origin, p, modeSelect.value, 'ai');
+          R28.lastCands = { query: c.query, list: [p].concat(c.list.filter((x) => x !== p)) };
+          showDestCard();
+          aiSay('ok', 'Routed to <b>' + esc(placeLine(p)) + '</b>');
+        } catch (e) { aiSay('warn', 'Could not route to that one.'); b.disabled = false; }
+      }));
+    }
+
+    /* ====================================================================
+       4 — THE GUIDANCE CARD: SQUARE, SEE-THROUGH, TOP-LEFT EDGE
+       The card is a square sized from the screen, pinned to the very
+       corner. The mic / add-stop row that used to sit above it now sits
+       under it, and on a narrow phone the top-right buttons turn into a
+       column so nothing overlaps the square.
+    ==================================================================== */
+    function rowWidth(el) {
+      if (!el) return 0;
+      const kids = Array.prototype.filter.call(el.children, (k) => k.id !== 'navMenu' && getComputedStyle(k).display !== 'none' && k.getBoundingClientRect().width > 0);
+      const gap = parseFloat(getComputedStyle(el).columnGap || getComputedStyle(el).gap) || 8;
+      return kids.reduce((a, k) => a + k.getBoundingClientRect().width, 0) + gap * Math.max(0, kids.length - 1);
+    }
+    function navLayout() {
+      if (!isNav()) return;
+      const root = d.documentElement.style;
+      const top = $('navTop'), acts = $('wlNavActions');
+      if (top && acts && acts.parentElement !== top) top.appendChild(acts);
+      const vw = innerWidth, vh = innerHeight;
+      let S = Math.round(clamp(Math.min(vw * 0.30, vh * 0.40), 184, 300));
+      const tr = $('navTopRight');
+      const trW = rowWidth(tr);
+      const stack = vw - trW - 24 < S + 12;
+      if (stack) S = Math.round(clamp(Math.min(S, vw - 78), 168, 300));
+      d.body.classList.toggle('r28-stack', stack);
+      root.setProperty('--r28-card', S + 'px');
+      const trR = tr ? tr.getBoundingClientRect() : null;
+      const trBottom = trR && trR.height ? Math.round(trR.bottom) : 64;
+      root.setProperty('--r28-tr-bottom', trBottom + 'px');
+      const sp = $('speedCluster');
+      const spR = sp ? sp.getBoundingClientRect() : null;
+      root.setProperty('--r28-speed-bottom', Math.round(spR && spR.height ? spR.bottom : trBottom + 70) + 'px');
+      const fab = $('fabStack');
+      const fr = fab ? fab.getBoundingClientRect() : null;
+      if (fr && fr.height) {
+        root.setProperty('--r28-fab-top', Math.round(fr.top) + 'px');
+        const rc = $('recenterFab');
+        const rr = rc && rc.getBoundingClientRect();
+        root.setProperty('--r28-poi-right', Math.max(4, Math.round(vw - (rr && rr.width ? rr.right : fr.right))) + 'px');
+        root.setProperty('--r28-poi-bottom', Math.round(vh - fr.top + 8) + 'px');
+        const room = fr.top - 8 - Math.max(trBottom, spR && spR.height ? spR.bottom : 0) - 12;
+        root.setProperty('--r28-poi-maxh', Math.round(clamp(Math.min(vh * 0.42, 392), 150, Math.max(150, room))) + 'px');
+      }
+    }
+
+    /* ====================================================================
+       6 — THE ROUTE AHEAD, LIVE AND STEADY
+
+       What made it glitch:
+         - the traffic bands ahead were cut by point COUNT, not distance,
+           so the blue line started in the wrong place or not at all;
+         - every 160 ms all route polylines were removed and re-added,
+           which flashes on slower devices;
+         - GPS fixes and the between-fix sweep fed different distances,
+           so the split point jumped back and forth.
+       Now the split is made on the true distance along the route, the
+       polylines are created once and only their points change, progress
+       never steps backwards on jitter, and the 3D source is updated at a
+       steady pace and rebuilt by itself if a style reload drops it.
+    ==================================================================== */
+    const prog = { sig: '', along: 0 };
+    let bandCache = { segs: null, sig: '', bands: null };
+    function routeSig() {
+      if (!navCoords.length) return '';
+      const a = navCoords[0], b = navCoords[navCoords.length - 1];
+      return navCoords.length + ':' + a[0].toFixed(5) + ',' + a[1].toFixed(5) + ':' + b[0].toFixed(5) + ',' + b[1].toFixed(5);
+    }
+    function totalLen() { return navCum.length ? navCum[navCum.length - 1] : 0; }
+    function steady(dist) {
+      const sig = routeSig();
+      const tot = totalLen();
+      const v = clamp(+dist || 0, 0, tot);
+      if (sig !== prog.sig) { prog.sig = sig; prog.along = v; bandCache.sig = ''; return v; }
+      if (v < prog.along - 80) prog.along = v;          // a genuine U-turn, not jitter
+      else prog.along = Math.max(prog.along, v);
+      return prog.along;
+    }
+    R28.progress = () => prog.along;
+    function segAt(dist) {
+      let lo = 0, hi = navCum.length - 2;
+      if (hi < 0) return 0;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (navCum[mid] <= dist) lo = mid; else hi = mid - 1;
+      }
+      return lo;
+    }
+    function pointAt(i, dist) {
+      const a = navCoords[i], b = navCoords[i + 1] || a;
+      const span = (navCum[i + 1] || navCum[i]) - navCum[i];
+      const f = span > 0 ? clamp((dist - navCum[i]) / span, 0, 1) : 0;
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+    }
+    function sliceBetween(from, to) {
+      const ia = segAt(from), ib = segAt(to);
+      const pts = [pointAt(ia, from)];
+      for (let j = ia + 1; j <= ib; j++) pts.push(navCoords[j]);
+      pts.push(pointAt(ib, to));
+      return pts.filter((p, k) => k === 0 || p[0] !== pts[k - 1][0] || p[1] !== pts[k - 1][1]);
+    }
+    function bands() {
+      const tot = totalLen();
+      if (bandCache.segs === trafficSegments && bandCache.sig === prog.sig && bandCache.bands) return bandCache.bands;
+      let out = [{ from: 0, to: tot, level: 'none' }];
+      if (trafficSegments && trafficSegments.length && tot > 0) {
+        let acc = 0;
+        const raw = trafficSegments.map((seg) => { const len = segMeters(seg); const b = { from: acc, to: acc + len, level: seg.level || 'none' }; acc += len; return b; });
+        const k = acc > 0 ? tot / acc : 0;
+        /* Bands built for a different line (a stale reroute) would paint the
+           wrong stretch, so they are only used when the lengths agree. */
+        if (k > 0.8 && k < 1.25) {
+          out = [];
+          raw.forEach((b) => {
+            const f = b.from * k, t = b.to * k;
+            const last = out[out.length - 1];
+            if (last && last.level === b.level) last.to = t; else out.push({ from: f, to: t, level: b.level });
+          });
+          if (out.length) { out[0].from = 0; out[out.length - 1].to = tot; }
+        }
+      }
+      bandCache = { segs: trafficSegments, sig: prog.sig, bands: out };
+      return out;
+    }
+    splitRouteAt = function r28SplitRouteAt(distAlong) {
+      const res = { past: [], ahead: [], aheadSegs: [] };
+      if (navCoords.length < 2 || navCum.length !== navCoords.length) return res;
+      const tot = totalLen();
+      const dist = clamp(+distAlong || 0, 0, tot);
+      const i = segAt(dist);
+      const cut = pointAt(i, dist);
+      res.past = navCoords.slice(0, i + 1).concat([cut]);
+      res.ahead = [cut].concat(navCoords.slice(i + 1));
+      if (tot - dist < 0.5) { res.ahead = []; return res; }
+      bands().forEach((b) => {
+        if (b.to <= dist) return;
+        const pts = sliceBetween(Math.max(b.from, dist), b.to);
+        if (pts.length >= 2) res.aheadSegs.push({ coords: pts, level: b.level });
+      });
+      return res;
+    };
+
+    let parts3dAt = 0, pending3d = null, timer3d = null;
+    function push3d(dist) {
+      pending3d = dist;
+      if (timer3d) return;
+      const wait = Math.max(0, 140 - (Date.now() - parts3dAt));
+      timer3d = setTimeout(() => {
+        timer3d = null;
+        parts3dAt = Date.now();
+        apply3d(pending3d);
+      }, wait);
+    }
+    function apply3d(dist) {
+      if (!map3d || !map3dReady) return;
+      guard('3d route', () => {
+        const src = map3d.getSource('wl-route');
+        if (!src) { if (allRoutes[activeRouteIndex]) setup3dRoute(); return; }
+        src.setData(routeGeoJSON(dist));
+      });
+    }
+    update3dProgress = function r28Update3dProgress(distAlong) {
+      if (!navCoords.length) return;
+      push3d(steady(distAlong));
+    };
+
+    renderProgressSplit = function r28RenderProgressSplit(distAlong) {
+      if (navCoords.length < 2) return;
+      const dist = steady(distAlong);
+      const s = splitRouteAt(dist);
+      const done = routeDoneColor();
+      const casing = lightMode ? '#ffffff' : '#04121a';
+      guard('2d route', () => {
+        if (s.past.length > 1) {
+          if (!progressPast) progressPast = L.polyline(s.past, { color: done, weight: 7, opacity: 0.9, lineJoin: 'round', className: 'wl-route-past' }).addTo(map);
+          else { progressPast.setLatLngs(s.past); if (progressPast.options.color !== done) progressPast.setStyle({ color: done }); }
+        } else if (progressPast) { map.removeLayer(progressPast); progressPast = null; }
+
+        if (s.ahead.length > 1) {
+          if (!progressAhead) progressAhead = L.polyline(s.ahead, { color: casing, weight: 12, opacity: 0.85, lineJoin: 'round' }).addTo(map);
+          else { progressAhead.setLatLngs(s.ahead); if (progressAhead.options.color !== casing) progressAhead.setStyle({ color: casing }); }
+        } else if (progressAhead) { map.removeLayer(progressAhead); progressAhead = null; }
+
+        const parts = s.aheadSegs.length ? s.aheadSegs : (s.ahead.length > 1 ? [{ coords: s.ahead, level: 'none' }] : []);
+        for (let j = 0; j < parts.length; j++) {
+          const col = trafficColor(parts[j].level);
+          let pl = progressAheadParts[j];
+          if (!pl) {
+            pl = L.polyline(parts[j].coords, { color: col, weight: 7.5, opacity: 1, lineJoin: 'round', className: 'glow-route' }).addTo(map);
+            progressAheadParts[j] = pl;
+          } else {
+            pl.setLatLngs(parts[j].coords);
+            if (pl.options.color !== col) pl.setStyle({ color: col });
+          }
+        }
+        while (progressAheadParts.length > parts.length) map.removeLayer(progressAheadParts.pop());
+      });
+      push3d(dist);
+    };
+
+    clearProgressSplit = function r28ClearProgressSplit() {
+      guard('clear route', () => {
+        if (progressPast) { map.removeLayer(progressPast); progressPast = null; }
+        if (progressAhead) { map.removeLayer(progressAhead); progressAhead = null; }
+        progressAheadParts.forEach((l) => map.removeLayer(l));
+        progressAheadParts = [];
+      });
+      prog.sig = ''; prog.along = 0;
+    };
+
+    /* Buildings added after the route would draw over it in 3D; the route
+       layers are kept on top of every extrusion, under the car. */
+    function keepRouteOnTop() {
+      if (!map3d || !map3dReady || !map3d.getLayer('wl-route-line')) return;
+      guard('route order', () => {
+        const layers = map3d.getStyle().layers || [];
+        const idx = (id) => layers.findIndex((l) => l.id === id);
+        const routeIdx = idx('wl-route-casing');
+        const lastExtrusion = layers.reduce((m, l, i) => (l.type === 'fill-extrusion' ? i : m), -1);
+        if (routeIdx >= 0 && lastExtrusion > routeIdx) {
+          ['wl-route-roadbed', 'wl-route-casing', 'wl-route-line'].forEach((id) => { if (map3d.getLayer(id)) map3d.moveLayer(id); });
+          for (let i = 0; i < 10; i++) { const id = 'wl-lane-divider-' + i; if (map3d.getLayer(id)) map3d.moveLayer(id); }
+          if (map3d.getLayer('r28-car')) map3d.moveLayer('r28-car');
+        }
+      });
+    }
+
+    /* ====================================================================
+       9 — POIs: THE TEN CLOSEST, RIGHT ABOVE RECENTER
+       The list is its own small box pinned to the bottom-right, its right
+       edge on the Recenter button's right edge and its bottom just above
+       it. Ten rows at most, closest first, measured from the car. The map
+       markers are cut to the same ten so the map stays readable.
+    ==================================================================== */
+    function poiHome() {
+      const p = $('poiPanel');
+      if (!p) return null;
+      if (p.parentElement !== d.body) d.body.appendChild(p);
+      p.classList.add('r28-poi');
+      return p;
+    }
+    function here() {
+      return lastNavPos || livePosition || guard('anchor', () => {
+        const r = allRoutes[activeRouteIndex];
+        if (r && r.coords.length) return { lat: r.coords[0][0], lng: r.coords[0][1] };
+        const c = map.getCenter(); return { lat: c.lat, lng: c.lng };
+      }, null);
+    }
+    function closest10(items) {
+      const at = here();
+      return (items || []).map((el) => {
+        const m = at ? haversine(at, el) : (el.metersFromMe || 0);
+        return { el: el, m: m };
+      }).sort((a, b) => a.m - b.m).slice(0, 10);
+    }
+    function brandIcon(key, place) {
+      const B = window.WayLynRound27 && window.WayLynRound27.Brand;
+      const cfg = POI[key] || {};
+      const chip = '<span class="r28-poi-emoji" style="background:' + cssVar(cfg.color || '--signal', '#4d9bff') + '">' + (cfg.emoji || '•') + '</span>';
+      if (!B || !B.html) return chip;
+      return guard('brand', () => B.html(place, 26), chip) || chip;
+    }
+    function compassWord(from, to) {
+      const b = bearing(from, to);
+      if (isNav() && headingDeg != null) {
+        const rel = ((b - headingDeg + 540) % 360) - 180;
+        if (Math.abs(rel) < 35) return 'ahead';
+        if (Math.abs(rel) > 145) return 'behind';
+        return rel > 0 ? 'right' : 'left';
+      }
+      return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8];
+    }
+
+    const priorRenderPoiPanel = renderPoiPanel;
+    renderPoiPanel = function r28RenderPoiPanel(key, items) {
+      const panel = poiHome();
+      if (!panel) return priorRenderPoiPanel(key, items);
+      const cfg = POI[key] || { label: key, emoji: '•' };
+      guard('close others', () => closeOtherRightPanels('poi'));
+      const top = closest10(items);
+      const at = here();
+      panel.innerHTML =
+        '<div class="r28-poi-head"><span class="r28-poi-title">' + (cfg.emoji || '') + ' ' + esc(cfg.label) + '</span>' +
+          '<span class="r28-poi-count">' + (top.length ? top.length + ' closest' : 'none') + '</span>' +
+          '<button class="icon-act" id="poiHide" type="button" title="Close" aria-label="Close">✕</button></div>' +
+        '<div class="r28-poi-list">' +
+        (top.length ? top.map((t, i) => {
+          const place = poiToPlace(key, t.el);
+          return '<div class="r28-poi-row">' +
+            '<button type="button" class="r28-poi-open" data-i="' + i + '">' +
+              '<span class="r28-poi-ico">' + brandIcon(key, place) + '</span>' +
+              '<span class="r28-poi-name">' + esc(place.name) + '</span>' +
+              '<span class="r28-poi-dist">' + esc(fmtDistance(t.m)) + (at ? '<small>' + esc(compassWord(at, t.el)) + '</small>' : '') + '</span>' +
+            '</button>' +
+            '<button type="button" class="r28-poi-add" data-add="' + i + '" title="Add as a stop" aria-label="Add as a stop">+</button>' +
+          '</div>';
+        }).join('') : '<div class="r28-poi-empty">Nothing of this kind is mapped nearby.</div>') +
+        '</div>';
+      panel.classList.remove('hidden');
+      d.body.classList.add('r28-poi-open');
+      const hide = $('poiHide');
+      if (hide) hide.addEventListener('click', () => closePoi(key));
+      panel.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', () => {
+        const item = top[+b.dataset.i] && top[+b.dataset.i].el;
+        if (!item) return;
+        if (!isNav()) {
+          guard('pan', () => map.setView([item.lat, item.lng], 17, { animate: true }));
+        }
+        if (key === 'ev' && typeof showChargerDetail === 'function') showChargerDetail(item.lat, item.lng, poiName(key, item.tags), item.tags);
+        else showPlaceCard(poiToPlace(key, item));
+      }));
+      panel.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        const item = top[+b.dataset.add] && top[+b.dataset.add].el;
+        if (!item) return;
+        b.disabled = true;
+        try {
+          if (key === 'ev' && typeof addChargeStop === 'function') await addChargeStop(item.lat, item.lng, poiName(key, item.tags));
+          else await addStopSmart(poiToPlace(key, item), (POI[key] || {}).dwell || 0);
+          b.textContent = '✓';
+        } catch (e) { b.disabled = false; }
+      }));
+      scheduleLayout();
+    };
+
+    const priorDrawPoi = drawPoi;
+    drawPoi = function r28DrawPoi(key, items) {
+      return priorDrawPoi(key, closest10(items).map((t) => t.el));
+    };
+
+    const priorClosePoi = closePoi;
+    closePoi = function r28ClosePoi(key) {
+      const out = priorClosePoi(key);
+      d.body.classList.remove('r28-poi-open');
+      return out;
+    };
+    const priorLoading = renderPoiLoading;
+    renderPoiLoading = function r28RenderPoiLoading(key) {
+      poiHome();
+      const out = priorLoading(key);
+      d.body.classList.add('r28-poi-open');
+      scheduleLayout();
+      return out;
+    };
+    const priorError = renderPoiError;
+    renderPoiError = function r28RenderPoiError(key, err) {
+      poiHome();
+      const out = priorError(key, err);
+      d.body.classList.add('r28-poi-open');
+      scheduleLayout();
+      return out;
+    };
+
+    /* In the map view (no Recenter button) the box sits above the view
+       switch in the same corner. */
+    function browseLayout() {
+      if (isNav()) return;
+      const root = d.documentElement.style;
+      const vw = innerWidth, vh = innerHeight;
+      const ctl = $('r28ViewCtl');
+      const dock = $('dock');
+      let bottom = 24;
+      const dr = dock && getComputedStyle(dock).display !== 'none' ? dock.getBoundingClientRect() : null;
+      if (dr && dr.height && dr.right > vw - 260) bottom = Math.round(vh - dr.top + 10);
+      root.setProperty('--r28-ctl-bottom', bottom + 'px');
+      const cr = ctl ? ctl.getBoundingClientRect() : null;
+      const ctlTop = cr && cr.height ? cr.top : vh - bottom;
+      root.setProperty('--r28-poi-right', '16px');
+      root.setProperty('--r28-poi-bottom', Math.round(vh - ctlTop + 8) + 'px');
+      root.setProperty('--r28-poi-maxh', Math.round(clamp(Math.min(vh * 0.42, 392), 150, Math.max(150, ctlTop - 140))) + 'px');
+    }
+
+    let layoutRaf = 0;
+    function scheduleLayout() {
+      if (layoutRaf) return;
+      layoutRaf = requestAnimationFrame(() => {
+        layoutRaf = 0;
+        guard('nav layout', navLayout);
+        guard('browse layout', browseLayout);
+      });
+    }
+    R28.scheduleLayout = scheduleLayout;
+
+    /* ====================================================================
+       10 — MY CAR
+       A catalogue of the cars people actually drive. Each is built from
+       its body style (length, width, roofline, cabin position, bed or no
+       bed) and painted the colour chosen, so a white Model 3 reads as a
+       low white sedan with a glass roof and an F-150 as a long pickup.
+       These are drawn shapes, not the manufacturers' licensed models.
+    ==================================================================== */
+    const BODY = {
+      sedan:        { L: 4.70, W: 1.85, hb: 0.95, hc: 1.44, cab: [0.24, 0.68], rr: 0.55, fr: 0.75, wheel: 0.34, hood: 0.10 },
+      'sedan-long': { L: 5.00, W: 1.95, hb: 0.96, hc: 1.44, cab: [0.22, 0.68], rr: 0.60, fr: 0.80, wheel: 0.35, hood: 0.10 },
+      hatch:        { L: 4.30, W: 1.80, hb: 0.96, hc: 1.50, cab: [0.10, 0.66], rr: 0.30, fr: 0.72, wheel: 0.33, hood: 0.12 },
+      crossover:    { L: 4.75, W: 1.92, hb: 1.05, hc: 1.63, cab: [0.08, 0.66], rr: 0.28, fr: 0.62, wheel: 0.37, hood: 0.10 },
+      suv:          { L: 5.05, W: 2.00, hb: 1.12, hc: 1.76, cab: [0.06, 0.68], rr: 0.15, fr: 0.55, wheel: 0.39, hood: 0.08 },
+      boxy:         { L: 4.40, W: 1.90, hb: 1.15, hc: 1.86, cab: [0.06, 0.66], rr: 0.05, fr: 0.25, wheel: 0.42, hood: 0.02 },
+      pickup:       { L: 5.85, W: 2.03, hb: 1.15, hc: 1.92, cab: [0.40, 0.70], rr: 0.08, fr: 0.55, wheel: 0.42, hood: 0.05, bed: true },
+      wedge:        { L: 5.70, W: 2.20, hb: 1.10, hc: 1.90, cab: [0.20, 0.62], rr: 0.00, fr: 0.00, wheel: 0.44, hood: 0.00, wedge: true },
+      coupe:        { L: 4.50, W: 1.85, hb: 0.85, hc: 1.30, cab: [0.30, 0.66], rr: 0.70, fr: 0.70, wheel: 0.34, hood: 0.10 },
+      van:          { L: 5.15, W: 2.00, hb: 1.10, hc: 1.78, cab: [0.05, 0.80], rr: 0.10, fr: 0.60, wheel: 0.36, hood: 0.10 },
+      mini:         { L: 3.85, W: 1.73, hb: 0.95, hc: 1.42, cab: [0.12, 0.72], rr: 0.15, fr: 0.45, wheel: 0.30, hood: 0.10 },
+      moto:         { L: 2.10, W: 0.80, hb: 0.90, hc: 1.20, cab: [0.30, 0.60], rr: 0.00, fr: 0.00, wheel: 0.32, hood: 0.00, moto: true }
+    };
+    const VEHICLES = [
+      { id: 'tesla-model-3', make: 'Tesla', model: 'Model 3', body: 'sedan', color: '#e8ecef', glassRoof: true },
+      { id: 'tesla-model-y', make: 'Tesla', model: 'Model Y', body: 'crossover', color: '#1c1f24', glassRoof: true },
+      { id: 'tesla-model-s', make: 'Tesla', model: 'Model S', body: 'sedan-long', color: '#9b1c22', glassRoof: true },
+      { id: 'tesla-model-x', make: 'Tesla', model: 'Model X', body: 'suv', color: '#f2f4f6', glassRoof: true },
+      { id: 'tesla-cybertruck', make: 'Tesla', model: 'Cybertruck', body: 'wedge', color: '#b9bec4' },
+      { id: 'toyota-camry', make: 'Toyota', model: 'Camry', body: 'sedan', color: '#3d5a80' },
+      { id: 'toyota-corolla', make: 'Toyota', model: 'Corolla', body: 'sedan', color: '#9aa3ab' },
+      { id: 'toyota-rav4', make: 'Toyota', model: 'RAV4', body: 'crossover', color: '#6b7b5e' },
+      { id: 'toyota-tacoma', make: 'Toyota', model: 'Tacoma', body: 'pickup', color: '#b0171f' },
+      { id: 'honda-civic', make: 'Honda', model: 'Civic', body: 'hatch', color: '#c0392b' },
+      { id: 'honda-accord', make: 'Honda', model: 'Accord', body: 'sedan', color: '#1c1f24' },
+      { id: 'honda-cr-v', make: 'Honda', model: 'CR-V', body: 'crossover', color: '#5d6d7e' },
+      { id: 'honda-odyssey', make: 'Honda', model: 'Odyssey', body: 'van', color: '#7f8c8d' },
+      { id: 'ford-f150', make: 'Ford', model: 'F-150', body: 'pickup', color: '#1f3a5f' },
+      { id: 'ford-mustang', make: 'Ford', model: 'Mustang', body: 'coupe', color: '#f1c40f' },
+      { id: 'ford-explorer', make: 'Ford', model: 'Explorer', body: 'suv', color: '#2b2b2b' },
+      { id: 'chevrolet-silverado', make: 'Chevrolet', model: 'Silverado', body: 'pickup', color: '#9aa3ab' },
+      { id: 'chevrolet-equinox', make: 'Chevrolet', model: 'Equinox', body: 'crossover', color: '#e8ecef' },
+      { id: 'jeep-wrangler', make: 'Jeep', model: 'Wrangler', body: 'boxy', color: '#2e7d32' },
+      { id: 'jeep-grand-cherokee', make: 'Jeep', model: 'Grand Cherokee', body: 'suv', color: '#1c1f24' },
+      { id: 'bmw-3', make: 'BMW', model: '3 Series', body: 'sedan', color: '#0d47a1' },
+      { id: 'bmw-x5', make: 'BMW', model: 'X5', body: 'suv', color: '#e8ecef' },
+      { id: 'mercedes-c', make: 'Mercedes-Benz', model: 'C-Class', body: 'sedan', color: '#9aa3ab' },
+      { id: 'mercedes-gle', make: 'Mercedes-Benz', model: 'GLE', body: 'suv', color: '#1c1f24' },
+      { id: 'audi-q5', make: 'Audi', model: 'Q5', body: 'crossover', color: '#5d6d7e' },
+      { id: 'porsche-911', make: 'Porsche', model: '911', body: 'coupe', color: '#bdc3c7' },
+      { id: 'rivian-r1t', make: 'Rivian', model: 'R1T', body: 'pickup', color: '#f0e6d2' },
+      { id: 'rivian-r1s', make: 'Rivian', model: 'R1S', body: 'suv', color: '#2e7d32' },
+      { id: 'hyundai-ioniq5', make: 'Hyundai', model: 'Ioniq 5', body: 'hatch', color: '#aab7b8' },
+      { id: 'kia-ev6', make: 'Kia', model: 'EV6', body: 'crossover', color: '#34495e' },
+      { id: 'vw-id4', make: 'Volkswagen', model: 'ID.4', body: 'crossover', color: '#e8ecef' },
+      { id: 'vw-golf', make: 'Volkswagen', model: 'Golf', body: 'hatch', color: '#1f4fa3' },
+      { id: 'subaru-outback', make: 'Subaru', model: 'Outback', body: 'crossover', color: '#556b2f' },
+      { id: 'nissan-leaf', make: 'Nissan', model: 'Leaf', body: 'hatch', color: '#e8ecef' },
+      { id: 'mini-cooper', make: 'MINI', model: 'Cooper', body: 'mini', color: '#b0171f' },
+      { id: 'generic-sedan', make: 'Other', model: 'Sedan', body: 'sedan', color: '#4d9bff' },
+      { id: 'generic-hatch', make: 'Other', model: 'Hatchback', body: 'hatch', color: '#4d9bff' },
+      { id: 'generic-suv', make: 'Other', model: 'SUV', body: 'suv', color: '#4d9bff' },
+      { id: 'generic-pickup', make: 'Other', model: 'Pickup truck', body: 'pickup', color: '#4d9bff' },
+      { id: 'generic-van', make: 'Other', model: 'Minivan', body: 'van', color: '#4d9bff' },
+      { id: 'generic-coupe', make: 'Other', model: 'Sports coupe', body: 'coupe', color: '#4d9bff' },
+      { id: 'generic-moto', make: 'Other', model: 'Motorcycle', body: 'moto', color: '#e74c3c' }
+    ];
+    const PAINTS = [
+      ['#e8ecef', 'White'], ['#1c1f24', 'Black'], ['#9aa3ab', 'Silver'], ['#5d6d7e', 'Grey'],
+      ['#b0171f', 'Red'], ['#1f4fa3', 'Blue'], ['#0d2b52', 'Navy'], ['#2e7d32', 'Green'],
+      ['#f1c40f', 'Yellow'], ['#e67e22', 'Orange'], ['#6d4c41', 'Brown'], ['#4d9bff', 'WayLynq blue']
+    ];
+    function vehicle() {
+      const saved = Store.get('r28Vehicle', null);
+      const base = VEHICLES.find((v) => v.id === (saved && saved.id)) || VEHICLES.find((v) => v.id === 'generic-sedan');
+      return Object.assign({}, base, { color: (saved && /^#[0-9a-f]{6}$/i.test(saved.color || '')) ? saved.color : base.color });
+    }
+    R28.vehicle = vehicle;
+
+    function profile(v) {
+      const b = BODY[v.body] || BODY.sedan;
+      const L = b.L, c = b.wheel * 0.62, hb = b.hb, hc = b.hc;
+      const r0 = b.cab[0] * L, r1 = b.cab[1] * L;
+      let lower, glass;
+      if (b.wedge) {
+        lower = [[0.02 * L, c], [0, c + 0.1], [0, hb + 0.25], [0.50 * L, hc], [L, hb - 0.02], [L, c + 0.12], [0.97 * L, c]];
+        glass = [[0.27 * L, hb + 0.40], [0.50 * L, hc - 0.07], [0.74 * L, hb + 0.36], [0.50 * L, hc - 0.26]];
+      } else {
+        const hood = hb - b.hood;
+        lower = [[0.02 * L, c], [0, c + 0.12], [0, hb * 0.9], [0.05 * L, hb], [r0, hb], [r1, hb], [0.9 * L, hood], [L, hood - 0.16], [L, c + 0.14], [0.97 * L, c]];
+        glass = [[r0, hb], [r0 + b.rr, hc], [r1 - b.fr, hc], [r1, hb]];
+      }
+      return { L: L, W: b.W, c: c, hb: hb, hc: hc, r0: r0, r1: r1, lower: lower, glass: glass, wheel: b.wheel, axles: [0.18 * L, 0.8 * L], b: b };
+    }
+
+    /* Seen from the side: the picker's preview. Front faces right. */
+    function sideSVG(v, w, h) {
+      const P = profile(v);
+      w = w || 280; h = h || 118;
+      const pad = 14, sx = (w - pad * 2) / Math.max(P.L, 4.2), base = h - 12;
+      const X = (u) => (pad + (u + (Math.max(P.L, 4.2) - P.L) / 2) * sx).toFixed(1);
+      const Y = (z) => (base - z * sx).toFixed(1);
+      const poly = (pts) => pts.map((p) => X(p[0]) + ',' + Y(p[1])).join(' ');
+      let s = '<svg class="r28-side" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" aria-hidden="true">' +
+        '<ellipse cx="' + X(P.L / 2) + '" cy="' + (base + 3) + '" rx="' + (P.L * sx * 0.52).toFixed(1) + '" ry="5" fill="rgba(0,0,0,.28)"/>';
+      if (P.b.moto) {
+        s += '<rect x="' + X(0.45) + '" y="' + Y(0.95) + '" width="' + (1.2 * sx).toFixed(1) + '" height="' + (0.35 * sx).toFixed(1) + '" rx="6" fill="' + v.color + '"/>' +
+             '<circle cx="' + X(1.05) + '" cy="' + Y(1.55) + '" r="' + (0.2 * sx).toFixed(1) + '" fill="#222"/>' +
+             '<rect x="' + X(0.85) + '" y="' + Y(1.35) + '" width="' + (0.4 * sx).toFixed(1) + '" height="' + (0.45 * sx).toFixed(1) + '" rx="5" fill="#333"/>';
+        [0.35, 1.75].forEach((u) => { s += '<circle cx="' + X(u) + '" cy="' + Y(0.32) + '" r="' + (0.32 * sx).toFixed(1) + '" fill="#15181b"/><circle cx="' + X(u) + '" cy="' + Y(0.32) + '" r="' + (0.16 * sx).toFixed(1) + '" fill="#b8c0c7"/>'; });
+        return s + '</svg>';
+      }
+      s += '<polygon points="' + poly(P.lower) + '" fill="' + v.color + '" stroke="rgba(0,0,0,.35)" stroke-width="1.2" stroke-linejoin="round"/>';
+      s += '<polygon points="' + poly(P.glass) + '" fill="#1c2a35" stroke="' + v.color + '" stroke-width="2" stroke-linejoin="round"/>';
+      if (!P.b.wedge) {
+        const pillar = (P.r0 + P.r1) / 2;
+        s += '<line x1="' + X(pillar) + '" y1="' + Y(P.hb) + '" x2="' + X(pillar) + '" y2="' + Y(P.hc) + '" stroke="' + v.color + '" stroke-width="3"/>';
+      }
+      if (P.b.bed) s += '<line x1="' + X(0.04 * P.L) + '" y1="' + Y(P.hb - 0.05) + '" x2="' + X(P.r0 - 0.08) + '" y2="' + Y(P.hb - 0.05) + '" stroke="rgba(0,0,0,.45)" stroke-width="2"/>';
+      s += '<rect x="' + (+X(P.L) - 7) + '" y="' + Y(P.hb - P.b.hood - 0.02) + '" width="6" height="4" rx="1.5" fill="#fffbe0"/>';
+      s += '<rect x="' + (+X(0) + 1) + '" y="' + Y(P.hb * 0.86) + '" width="5" height="5" rx="1.5" fill="#ff2a3a"/>';
+      P.axles.forEach((u) => {
+        s += '<circle cx="' + X(u) + '" cy="' + Y(P.wheel) + '" r="' + (P.wheel * sx).toFixed(1) + '" fill="#15181b"/>' +
+             '<circle cx="' + X(u) + '" cy="' + Y(P.wheel) + '" r="' + (P.wheel * sx * 0.55).toFixed(1) + '" fill="#b8c0c7"/>';
+      });
+      return s + '</svg>';
+    }
+
+    /* Seen from above: the 2D map marker. Front points up. */
+    function topSVG(v) {
+      const P = profile(v);
+      const Lp = 42, Wp = clamp(Lp * P.W / P.L, 12, 24), cx = 15, y1 = 44, y0 = y1 - Lp;
+      const x0 = cx - Wp / 2;
+      const yu = (u) => (y1 - (u / P.L) * Lp);
+      let s = '<svg class="locator-car r28-topcar" viewBox="0 0 30 46" aria-hidden="true">';
+      if (P.b.moto) {
+        s += '<ellipse cx="15" cy="23" rx="5" ry="20" fill="' + v.color + '" stroke="var(--bg,#0b1219)" stroke-width="2"/><circle cx="15" cy="21" r="4" fill="#222"/>';
+        return s + '</svg>';
+      }
+      s += '<rect x="' + x0.toFixed(1) + '" y="' + y0 + '" width="' + Wp.toFixed(1) + '" height="' + Lp + '" rx="' + Math.min(6, Wp * 0.34).toFixed(1) + '" fill="' + v.color + '" stroke="var(--bg,#0b1219)" stroke-width="2"/>';
+      const gx = x0 + 1.8, gw = Wp - 3.6;
+      if (P.b.wedge) {
+        s += '<path d="M' + gx.toFixed(1) + ' ' + yu(0.62 * P.L).toFixed(1) + ' L' + (cx).toFixed(1) + ' ' + (yu(0.68 * P.L)).toFixed(1) + ' L' + (gx + gw).toFixed(1) + ' ' + yu(0.62 * P.L).toFixed(1) + ' L' + (gx + gw).toFixed(1) + ' ' + yu(0.2 * P.L).toFixed(1) + ' L' + gx.toFixed(1) + ' ' + yu(0.2 * P.L).toFixed(1) + ' Z" fill="rgba(10,18,26,.55)"/>';
+      } else {
+        const wsTop = yu(P.r1), wsBot = yu(P.r1 - P.b.fr), rwTop = yu(P.r0 + P.b.rr), rwBot = yu(P.r0);
+        s += '<path d="M' + (gx + 1).toFixed(1) + ' ' + wsTop.toFixed(1) + ' L' + (gx + gw - 1).toFixed(1) + ' ' + wsTop.toFixed(1) + ' L' + (gx + gw).toFixed(1) + ' ' + wsBot.toFixed(1) + ' L' + gx.toFixed(1) + ' ' + wsBot.toFixed(1) + ' Z" fill="rgba(10,18,26,.62)"/>';
+        s += '<rect x="' + gx.toFixed(1) + '" y="' + wsBot.toFixed(1) + '" width="' + gw.toFixed(1) + '" height="' + Math.max(0.5, rwTop - wsBot).toFixed(1) + '" rx="2" fill="' + (v.glassRoof ? 'rgba(10,18,26,.72)' : 'rgba(255,255,255,.14)') + '"/>';
+        s += '<path d="M' + gx.toFixed(1) + ' ' + rwTop.toFixed(1) + ' L' + (gx + gw).toFixed(1) + ' ' + rwTop.toFixed(1) + ' L' + (gx + gw - 1).toFixed(1) + ' ' + rwBot.toFixed(1) + ' L' + (gx + 1).toFixed(1) + ' ' + rwBot.toFixed(1) + ' Z" fill="rgba(10,18,26,.55)"/>';
+        if (P.b.bed) s += '<rect x="' + (gx + 0.6).toFixed(1) + '" y="' + yu(P.r0 - 0.1).toFixed(1) + '" width="' + (gw - 1.2).toFixed(1) + '" height="' + (yu(0.04 * P.L) - yu(P.r0 - 0.1)).toFixed(1) + '" rx="1.5" fill="rgba(0,0,0,.34)"/>';
+      }
+      s += '<rect x="' + (x0 + 1.5).toFixed(1) + '" y="' + (y0 + 0.6) + '" width="3.4" height="1.8" rx=".8" fill="#fffbe0"/><rect x="' + (x0 + Wp - 4.9).toFixed(1) + '" y="' + (y0 + 0.6) + '" width="3.4" height="1.8" rx=".8" fill="#fffbe0"/>';
+      s += '<rect x="' + (x0 + 1.5).toFixed(1) + '" y="' + (y1 - 2.4) + '" width="3.4" height="1.6" rx=".8" fill="#ff2a3a"/><rect x="' + (x0 + Wp - 4.9).toFixed(1) + '" y="' + (y1 - 2.4) + '" width="3.4" height="1.6" rx=".8" fill="#ff2a3a"/>';
+      return s + '</svg>';
+    }
+
+    /* Every place the app draws the "you are here" puck now draws your car. */
+    locatorHtml = function r28LocatorHtml(deg) {
+      return '<div class="locator r28-locator"><div class="locator-pulse"></div>' +
+        '<div class="locator-rotor" style="transform:rotate(' + (+deg || 0) + 'deg)">' + topSVG(vehicle()) + '</div></div>';
+    };
+
+    /* ---- the true-3D car on the MapLibre map (three.js custom layer) ---- */
+    const THREE_URLS = [
+      'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js',
+      'https://unpkg.com/three@0.160.0/build/three.min.js'
+    ];
+    let threeLoading = null;
+    function loadThree() {
+      if (window.THREE && window.THREE.WebGLRenderer) return Promise.resolve(window.THREE);
+      if (threeLoading) return threeLoading;
+      threeLoading = new Promise((resolve, reject) => {
+        let i = 0;
+        const next = () => {
+          if (i >= THREE_URLS.length) { reject(new Error('three.js could not be downloaded')); return; }
+          const s = d.createElement('script');
+          s.src = THREE_URLS[i++]; s.async = true;
+          s.onload = () => (window.THREE && window.THREE.WebGLRenderer ? resolve(window.THREE) : next());
+          s.onerror = () => { s.remove(); next(); };
+          d.head.appendChild(s);
+        };
+        next();
+      });
+      return threeLoading;
+    }
+
+    const CAR = { three: null, scene: null, group: null, key: '', loading: false, failed: false, ready: false, cur: null, tgt: null, raf: 0, last: 0, visible: false };
+    R28.car = CAR;
+    function buildCarModel(THREE, v) {
+      const P = profile(v);
+      const g = new THREE.Group();
+      const paint = new THREE.MeshStandardMaterial({ color: new THREE.Color(v.color), metalness: 0.5, roughness: 0.34 });
+      const glassM = new THREE.MeshStandardMaterial({ color: 0x15212b, metalness: 0.35, roughness: 0.14 });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x16191c, metalness: 0.1, roughness: 0.85 });
+      const rimM = new THREE.MeshStandardMaterial({ color: 0xb8c0c7, metalness: 0.85, roughness: 0.25 });
+      const headM = new THREE.MeshStandardMaterial({ color: 0xf6fbff, emissive: 0xdff4ff, emissiveIntensity: 0.9 });
+      const tailM = new THREE.MeshStandardMaterial({ color: 0xff2a3a, emissive: 0xaa0010, emissiveIntensity: 0.8 });
+      /* A side profile (length x height) extruded across the width, then
+         turned so length runs along +Y (forward), height along +Z. */
+      const extrude = (pts, width, mat, bevel) => {
+        const sh = new THREE.Shape();
+        sh.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], pts[i][1]);
+        sh.closePath();
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: width, steps: 1, bevelEnabled: !!bevel, bevelThickness: bevel || 0, bevelSize: bevel || 0, bevelSegments: 2 });
+        geo.rotateX(Math.PI / 2);
+        geo.rotateZ(Math.PI / 2);
+        geo.translate(-width / 2, -P.L / 2, 0);
+        return new THREE.Mesh(geo, mat);
+      };
+      const box = (w, l, h, mat, x, y, z) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, l, h), mat); m.position.set(x, y, z); g.add(m); return m; };
+
+      const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 32), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false }));
+      shadow.scale.set(P.W * 0.72, P.L * 0.56, 1); shadow.position.z = 0.03; g.add(shadow);
+
+      if (P.b.moto) {
+        box(0.32, 1.3, 0.38, paint, 0, 0, 0.72);
+        box(0.36, 0.42, 0.55, dark, 0, -0.1, 1.2);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), dark); head.position.set(0, 0.05, 1.62); g.add(head);
+        [-0.72, 0.72].forEach((y) => {
+          const t = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 20), dark); t.rotation.z = Math.PI / 2; t.position.set(0, y, 0.32); g.add(t);
+        });
+        return g;
+      }
+      g.add(extrude(P.lower, P.W - 0.1, paint, 0.05));
+      g.add(extrude(P.glass, P.W * 0.84, glassM, 0.03));
+      if (!P.b.wedge) {
+        const y0 = P.r0 + P.b.rr, y1 = P.r1 - P.b.fr;
+        if (y1 - y0 > 0.2) box(P.W * 0.8, y1 - y0 - 0.06, 0.05, v.glassRoof ? glassM : paint, 0, (y0 + y1) / 2 - P.L / 2, P.hc + 0.01);
+      }
+      if (P.b.bed) box(P.W * 0.8, P.r0 - 0.12 * P.L, 0.04, dark, 0, (0.06 * P.L + P.r0 - 0.06 * P.L) / 2 - P.L / 2 + 0.03 * P.L, P.hb - 0.01);
+      const R = P.wheel;
+      const tireG = new THREE.CylinderGeometry(R, R, 0.28, 22); tireG.rotateZ(Math.PI / 2);
+      const rimG = new THREE.CylinderGeometry(R * 0.58, R * 0.58, 0.3, 18); rimG.rotateZ(Math.PI / 2);
+      P.axles.forEach((u) => [-1, 1].forEach((side) => {
+        const x = side * (P.W / 2 - 0.15), y = u - P.L / 2;
+        const t = new THREE.Mesh(tireG, dark); t.position.set(x, y, R); g.add(t);
+        const r = new THREE.Mesh(rimG, rimM); r.position.set(x, y, R); g.add(r);
+      }));
+      const hz = P.b.wedge ? P.hb - 0.1 : P.hb - P.b.hood - 0.12;
+      [-1, 1].forEach((side) => {
+        box(0.36, 0.06, 0.09, headM, side * (P.W / 2 - 0.34), P.L / 2 - 0.02, hz);
+        box(0.36, 0.06, 0.09, tailM, side * (P.W / 2 - 0.34), -P.L / 2 + 0.02, P.hb * 0.86);
+      });
+      return g;
+    }
+    function disposeGroup(obj) {
+      obj.traverse((o) => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+      });
+    }
+    function rebuildCar() {
+      const THREE = CAR.three;
+      if (!THREE || !CAR.scene) return;
+      const v = vehicle(), key = v.id + v.color;
+      if (CAR.group && CAR.key === key) return;
+      if (CAR.group) { CAR.scene.remove(CAR.group); disposeGroup(CAR.group); }
+      CAR.group = buildCarModel(THREE, v);
+      CAR.key = key;
+      CAR.scene.add(CAR.group);
+      if (map3d) guard('repaint', () => map3d.triggerRepaint());
+    }
+    /* A car at true scale is a speck at street zoom, so it is drawn at a
+       steady on-screen size the way every navigation app draws its puck. */
+    function carScale(m, lat) {
+      const P = profile(vehicle());
+      const mpp = 40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * Math.pow(2, m.getZoom()));
+      const px = isNav() ? 64 : 50;
+      return Math.max(1, px * mpp / P.L);
+    }
+    function addCarLayer(THREE) {
+      if (!map3d || !map3dReady || map3d.getLayer('r28-car')) return;
+      const layer = {
+        id: 'r28-car', type: 'custom', renderingMode: '3d',
+        onAdd(m, gl) {
+          this.m = m;
+          this.camera = new THREE.Camera();
+          this.scene = new THREE.Scene();
+          this.scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4550, 2.0));
+          const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(-3, -6, 10); this.scene.add(sun);
+          const fill = new THREE.DirectionalLight(0xcfe8ff, 0.8); fill.position.set(5, 4, 6); this.scene.add(fill);
+          this.renderer = new THREE.WebGLRenderer({ canvas: m.getCanvas(), context: gl, antialias: true });
+          this.renderer.autoClear = false;
+          CAR.scene = this.scene; CAR.group = null; CAR.key = '';
+          rebuildCar();
+          CAR.ready = true;
+          d.body.classList.add('r28-car3d');
+        },
+        render(gl, matrix) {
+          const st = CAR.cur;
+          if (!st || !CAR.group || !CAR.visible) return;
+          const mat = (Array.isArray(matrix) || ArrayBuffer.isView(matrix)) ? matrix
+            : (matrix && ((matrix.defaultProjectionData && matrix.defaultProjectionData.mainMatrix) || matrix.modelViewProjectionMatrix));
+          if (!mat) return;
+          let elev = 0;
+          try { if (this.m.getTerrain && this.m.getTerrain()) elev = this.m.queryTerrainElevation([st.lng, st.lat]) || 0; } catch (e) { elev = 0; }
+          const mc = maplibregl.MercatorCoordinate.fromLngLat([st.lng, st.lat], elev);
+          const s = mc.meterInMercatorCoordinateUnits() * carScale(this.m, st.lat);
+          const M = new THREE.Matrix4().fromArray(mat);
+          const T = new THREE.Matrix4().makeTranslation(mc.x, mc.y, mc.z);
+          const S = new THREE.Matrix4().makeScale(s, -s, s);
+          const Rz = new THREE.Matrix4().makeRotationZ(-st.hdg * Math.PI / 180);
+          this.camera.projectionMatrix = M.multiply(T).multiply(S).multiply(Rz);
+          this.renderer.resetState();
+          this.renderer.render(this.scene, this.camera);
+        },
+        onRemove() {
+          CAR.ready = false; CAR.scene = null; CAR.group = null; CAR.key = '';
+          d.body.classList.remove('r28-car3d');
+          guard('dispose renderer', () => this.renderer.dispose());
+        }
+      };
+      guard('add car layer', () => map3d.addLayer(layer));
+    }
+    function ensureCar() {
+      if (CAR.failed || !map3d || !map3dReady || R28.view !== '3d') return;
+      if (map3d.getLayer('r28-car')) return;
+      if (CAR.three) { addCarLayer(CAR.three); return; }
+      if (CAR.loading) return;
+      CAR.loading = true;
+      loadThree().then((THREE) => { CAR.loading = false; CAR.three = THREE; addCarLayer(THREE); })
+        .catch((e) => { CAR.loading = false; CAR.failed = true; console.warn('WayLynq R28: 3D car unavailable, keeping the drawn marker', e); });
+    }
+    function setCarTarget(lat, lng, hdg) {
+      if (!isFinite(lat) || !isFinite(lng)) return;
+      const t = { lat: lat, lng: lng, hdg: ((+hdg || 0) % 360 + 360) % 360 };
+      if (!CAR.cur || haversine(CAR.cur, t) > 400) CAR.cur = Object.assign({}, t);
+      CAR.tgt = t;
+      CAR.visible = true;
+      if (!CAR.raf) { CAR.last = performance.now(); CAR.raf = requestAnimationFrame(stepCar); }
+    }
+    function stepCar(now) {
+      CAR.raf = 0;
+      const c = CAR.cur, t = CAR.tgt;
+      if (!c || !t) return;
+      const dt = Math.min(0.25, Math.max(0, (now - CAR.last) / 1000));
+      CAR.last = now;
+      const a = 1 - Math.exp(-dt / 0.16);
+      c.lat += (t.lat - c.lat) * a;
+      c.lng += (t.lng - c.lng) * a;
+      const turn = ((t.hdg - c.hdg + 540) % 360) - 180;
+      c.hdg = (c.hdg + turn * Math.min(1, a * 1.3) + 360) % 360;
+      if (map3d && CAR.ready) map3d.triggerRepaint();
+      const far = Math.abs(t.lat - c.lat) + Math.abs(t.lng - c.lng) > 2e-8 || Math.abs(turn) > 0.2;
+      if (far) CAR.raf = requestAnimationFrame(stepCar);
+    }
+
+    /* Nav: the car follows the marker the refined route-matching places. */
+    const priorUpdateUser = updateMap3dUser;
+    updateMap3dUser = function r28UpdateMap3dUser(lat, lng) {
+      const out = priorUpdateUser(lat, lng);
+      guard('car target', () => {
+        const p = map3dUser && map3dUser.getLngLat ? map3dUser.getLngLat() : null;
+        const at = p ? { lat: p.lat, lng: p.lng } : { lat: lat, lng: lng };
+        const hdg = navCoords.length ? roadBearingAt(Math.max(refinedMarkerAlong || 0, navDistAlong || 0), 30) : headingDeg;
+        setCarTarget(at.lat, at.lng, hdg);
+        PH.car(at.lat, at.lng, hdg);
+      });
+      return out;
+    };
+    /* The hidden 3D camera does not need to chase the car in 2D or photo. */
+    const priorSetCam = setCameraTarget;
+    setCameraTarget = function r28SetCameraTarget() {
+      if (R28.view !== '3d') return;
+      return priorSetCam.apply(this, arguments);
+    };
+    /* OpenFreeMap already carries building heights; the Overpass top-up is
+       kept for the driving view so browsing in 3D does not hammer it. */
+    const priorSupp = refreshSupplementalBuildings;
+    refreshSupplementalBuildings = function r28RefreshSupplementalBuildings(force) {
+      if (!isNav()) return Promise.resolve();
+      return priorSupp(force);
+    };
+
+    /* ====================================================================
+       7 + 8 — 3D BY DEFAULT, 2D AND PHOTOREAL ONE TAP AWAY
+
+       3D   MapLibre with extruded buildings, terrain (AWS Terrarium DEM)
+            and sky, used for browsing as well as driving now. It follows
+            the 2D map both ways, so search, pins, POIs and routes all work.
+       2D   the Leaflet map, also available while navigating.
+       Photo Google Photorealistic 3D Tiles through CesiumJS — the same
+            photogrammetry Google Earth uses — with the route, your car and
+            the family pins drawn on it.
+    ==================================================================== */
+    const VIEWS = ['2d', '3d', 'photo'];
+    R28.view = '2d';
+    function webglOK() {
+      if (R28._gl == null) {
+        try { const c = d.createElement('canvas'); R28._gl = !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl'))); }
+        catch (e) { R28._gl = false; }
+      }
+      return R28._gl && typeof maplibregl !== 'undefined';
+    }
+    function photoEl() {
+      let el = $('r28Photo');
+      if (!el) { el = d.createElement('div'); el.id = 'r28Photo'; d.body.appendChild(el); }
+      return el;
+    }
+    function mountViews() {
+      const m3 = $('map3d'), nm = $('navMode'), mp = $('map');
+      if (!m3 || !nm || !mp) return;
+      const ph = photoEl();
+      if (isNav()) {
+        if (m3.parentElement !== nm) nm.insertBefore(m3, nm.firstChild);
+      } else if (m3.parentElement !== d.body || m3.previousElementSibling !== mp) mp.after(m3);
+      if (ph.previousElementSibling !== m3) m3.after(ph);
+      m3.classList.toggle('r28-browse', !isNav());
+      ph.classList.toggle('r28-browse', !isNav());
+    }
+
+    let lockLeaflet = 0;
+    function fromLeaflet(animate, withPitch) {
+      if (!map3d || isNav() || R28.view !== '3d') return;
+      guard('from 2d', () => {
+        const c = map.getCenter(), z = Math.max(0, map.getZoom() - 1);
+        const o = { center: [c.lng, c.lat], zoom: z };
+        if (withPitch) { o.pitch = z < 4 ? 0 : z < 9 ? 40 : 58; }
+        if (animate) map3d.easeTo(Object.assign(o, { duration: 650 }), { r28: true });
+        else map3d.jumpTo(o, { r28: true });
+      });
+    }
+    function toLeaflet() {
+      if (!map3d || isNav() || R28.view !== '3d') return;
+      guard('to 2d', () => {
+        const c = map3d.getCenter();
+        lockLeaflet = Date.now();
+        map.setView([c.lat, c.lng], clamp(map3d.getZoom() + 1, map.getMinZoom() || 1, map.getMaxZoom() || 20), { animate: false });
+      });
+    }
+    function onLeafletMoveEnd() {
+      if (Date.now() - lockLeaflet < 400) return;
+      if (isNav() || R28.view !== '3d' || !map3d || !map3dReady) return;
+      if (sync3dScene(false)) return;          // a new route fits itself
+      fromLeaflet(true, false);
+    }
+
+    function setTerrain(on) {
+      if (!map3d || !map3dReady) return;
+      guard('terrain', () => {
+        if (on) {
+          if (!map3d.getSource('r28-dem')) {
+            map3d.addSource('r28-dem', {
+              type: 'raster-dem', encoding: 'terrarium', tileSize: 256, maxzoom: 14,
+              tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+              attribution: 'Elevation &copy; Mapzen, AWS Open Data'
+            });
+          }
+          if (!map3d.getTerrain()) map3d.setTerrain({ source: 'r28-dem', exaggeration: 1.2 });
+        } else if (map3d.getTerrain && map3d.getTerrain()) map3d.setTerrain(null);
+      });
+      guard('sky', () => {
+        if (!map3d.setSky) return;
+        const night = !lightMode;
+        map3d.setSky({
+          'sky-color': night ? '#0b1a2e' : '#79bff5', 'horizon-color': night ? '#23364d' : '#e6f3ff',
+          'fog-color': night ? '#1b2735' : '#dfe9f2', 'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.6,
+          'fog-ground-blend': 0.2, 'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0]
+        });
+      });
+    }
+
+    const extra3d = { origin: null, held: null, user: null };
+    let sceneSig = '', fitSig = '';
+    function marker3d(slot, ll, html, anchor) {
+      if (!ll) { if (extra3d[slot]) { extra3d[slot].remove(); extra3d[slot] = null; } return; }
+      if (!extra3d[slot]) {
+        const el = d.createElement('div'); el.innerHTML = html;
+        extra3d[slot] = new maplibregl.Marker({ element: el, anchor: anchor || 'center' }).setLngLat([ll.lng, ll.lat]).addTo(map3d);
+      } else extra3d[slot].setLngLat([ll.lng, ll.lat]);
+    }
+    function alternates3d() {
+      const alts = allRoutes.map((r, i) => (i === activeRouteIndex ? null : r)).filter(Boolean);
+      const data = { type: 'FeatureCollection', features: alts.map((r) => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r.coords.map((c) => [c[1], c[0]]) } })) };
+      const src = map3d.getSource('r28-alts');
+      if (src) { src.setData(data); return; }
+      if (!alts.length) return;
+      map3d.addSource('r28-alts', { type: 'geojson', data: data });
+      map3d.addLayer({ id: 'r28-alts', type: 'line', source: 'r28-alts', layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': lightMode ? '#8fa3b3' : '#7d8e9c', 'line-width': 6, 'line-opacity': 0.75 } },
+        map3d.getLayer('wl-route-casing') ? 'wl-route-casing' : undefined);
+    }
+    function sync3dScene(force) {
+      if (!map3d || !map3dReady || isNav()) return false;
+      const r = allRoutes[activeRouteIndex];
+      const rs = r ? allRoutes.length + ':' + activeRouteIndex + ':' + r.coords.length + ':' + Math.round(r.distance) : '';
+      const hp = heldPin && heldPin.getLatLng ? heldPin.getLatLng() : null;
+      const sig = [rs, destPlace ? destPlace.lat + ',' + destPlace.lng : '', stops.length,
+        originPlace ? originPlace.lat + ',' + originPlace.lng : '', hp ? hp.lat + ',' + hp.lng : ''].join('|');
+      if (!force && sig === sceneSig) return false;
+      sceneSig = sig;
+      guard('3d scene', () => {
+        if (r) { setup3dRoute(); laneLayers(false); }
+        else {
+          const src = map3d.getSource('wl-route');
+          if (src) src.setData({ type: 'FeatureCollection', features: [] });
+          map3dMarkers.forEach((mk) => mk.remove()); map3dMarkers = [];
+        }
+        alternates3d();
+        marker3d('origin', r && originPlace && !/your location/i.test(originPlace.name || '') ? originPlace : null, '<div class="wl-pin origin"></div>');
+        marker3d('held', hp, '<div class="wl-pin"></div>');
+      });
+      let fitted = false;
+      if (r && rs !== fitSig) {
+        fitSig = rs;
+        guard('fit route', () => {
+          let w = 180, e = -180, s = 90, n = -90;
+          r.coords.forEach((c) => { if (c[1] < w) w = c[1]; if (c[1] > e) e = c[1]; if (c[0] < s) s = c[0]; if (c[0] > n) n = c[0]; });
+          const panel = d.body.classList.contains('panel-open') && $('tripPanel') ? $('tripPanel').getBoundingClientRect().width : 0;
+          const vw = innerWidth;
+          const left = panel && vw > 760 ? panel + 40 : 50;
+          map3d.fitBounds([[w, s], [e, n]], { padding: { top: 90, bottom: 150, left: left, right: 60 }, pitch: 45, bearing: 0, duration: 900, maxZoom: 16.5 }, { r28: true });
+          fitted = true;
+        });
+      }
+      if (!r) fitSig = '';
+      return fitted;
+    }
+    /* The wide roadbed and lane dividers are for the street-level driving
+       view; at city scale in the browse view they would paint a grey band. */
+    function laneLayers(show) {
+      if (!map3d || !map3dReady) return;
+      guard('lane layers', () => {
+        const vis = show ? 'visible' : 'none';
+        ['wl-route-roadbed'].concat([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => 'wl-lane-divider-' + i)).forEach((id) => {
+          if (map3d.getLayer(id) && map3d.getLayoutProperty(id, 'visibility') !== vis) map3d.setLayoutProperty(id, 'visibility', vis);
+        });
+      });
+    }
+    function browseUser3d() {
+      const p = livePosition;
+      if (!p) return;
+      if (CAR.ready) { marker3d('user', null); setCarTarget(p.lat, p.lng, headingDeg || 0); return; }
+      marker3d('user', p, locatorHtml(headingDeg || 0));
+    }
+
+    function wireMap3d(m) {
+      if (m.__r28) return;
+      m.__r28 = true;
+      m.on('moveend', (e) => { if (e && e.r28) return; if (!isNav() && R28.view === '3d') toLeaflet(); });
+      m.on('click', (e) => {
+        if (isNav() || R28.view !== '3d') return;
+        if (FAM.placing) { FAM.placeAt(e.lngLat.lat, e.lngLat.lng); return; }
+        guard('forward click', () => map.fire('click', { latlng: L.latLng(e.lngLat.lat, e.lngLat.lng), originalEvent: e.originalEvent }));
+      });
+      /* A right-click that was really the start of a tilt or turn must not
+         drop a pin, so it waits a moment and stands down if the map moves. */
+      let ctxTimer = null;
+      const cancelCtx = () => { clearTimeout(ctxTimer); ctxTimer = null; };
+      m.on('contextmenu', (e) => {
+        if (isNav() || R28.view !== '3d') return;
+        cancelCtx();
+        const ll = e.lngLat;
+        ctxTimer = setTimeout(() => guard('forward pin', () => map.fire('contextmenu', { latlng: L.latLng(ll.lat, ll.lng) })), 380);
+      });
+      ['rotatestart', 'pitchstart', 'dragstart', 'zoomstart'].forEach((ev) => m.on(ev, (e) => { if (e && e.r28) return; cancelCtx(); }));
+      const el = m.getCanvasContainer();
+      let t = null, moved = false;
+      el.addEventListener('touchstart', (ev) => {
+        if (isNav() || ev.touches.length !== 1) { clearTimeout(t); return; }
+        moved = false;
+        const p = ev.touches[0];
+        clearTimeout(t);
+        t = setTimeout(() => {
+          if (moved) return;
+          const r = el.getBoundingClientRect();
+          const ll = m.unproject([p.clientX - r.left, p.clientY - r.top]);
+          if (FAM.placing) FAM.placeAt(ll.lat, ll.lng);
+          else guard('long press', () => map.fire('contextmenu', { latlng: L.latLng(ll.lat, ll.lng) }));
+        }, 600);
+      }, { passive: true });
+      el.addEventListener('touchmove', () => { moved = true; clearTimeout(t); }, { passive: true });
+      el.addEventListener('touchend', () => clearTimeout(t), { passive: true });
+      const onReady = () => {
+        guard('poi 3d', () => refreshAllPoiLayers());
+        FAM.render3d();
+        if (!isNav() && R28.view === '3d') { setTerrain(true); sync3dScene(true); }
+        ensureCar();
+      };
+      if (map3dReady) setTimeout(onReady, 0); else m.once('load', onReady);
+      guard('nav control', () => m.addControl(new maplibregl.NavigationControl({ visualizePitch: true, showCompass: true }), 'top-left'));
+    }
+
+    function applyView(mode, opts) {
+      opts = opts || {};
+      if (VIEWS.indexOf(mode) < 0) mode = '3d';
+      if (mode === '3d' && !webglOK()) mode = '2d';
+      const prev = R28.view;
+      R28.view = mode;
+      if (!opts.noSave) sess.set('view', mode);
+      mountViews();
+      VIEWS.forEach((v) => d.body.classList.toggle('r28-v' + v, v === mode));
+      if (mode === '3d') {
+        const m = guard('ensure 3d', () => ensureMap3d(), null);
+        if (!m) { applyView('2d', opts); return; }
+        wireMap3d(m);
+        if (!isNav()) fromLeaflet(false, true);
+        const after = () => {
+          guard('3d resize', () => m.resize());
+          if (!isNav()) { setTerrain(true); fromLeaflet(false, true); sync3dScene(true); browseUser3d(); }
+          else {
+            setTerrain(false);
+            const p = lastNavPos || livePosition;
+            if (p && navFollow) {
+              /* the app reads any zoom it did not start as the driver taking over */
+              suppressFollowBreak = true;
+              guard('3d snap', () => m.jumpTo({ center: [p.lng, p.lat], zoom: 17.6, pitch: 62, bearing: northUp ? 0 : (headingDeg || 0) }));
+              setTimeout(() => { suppressFollowBreak = false; }, 250);
+            }
+          }
+          ensureCar();
+        };
+        if (map3dReady) requestAnimationFrame(after); else m.once('load', after);
+      } else if (mode === '2d') {
+        setTimeout(() => guard('2d size', () => map.invalidateSize()), 40);
+        if (isNav()) {
+          const p = lastNavPos || livePosition;
+          if (p && navFollow) {
+            suppressFollowBreak = true;
+            guard('2d follow', () => map.setView([p.lat, p.lng], Math.max(map.getZoom(), 16.5), { animate: false }));
+            setTimeout(() => { suppressFollowBreak = false; }, 250);
+          }
+        }
+      }
+      if (mode === 'photo') {
+        PH.start().then((ok) => { if (!ok && R28.view === 'photo') applyView(prev && prev !== 'photo' ? prev : '3d', Object.assign({}, opts, { quiet: true })); });
+      } else PH.stop();
+      syncViewButtons();
+      if (!opts.quiet) {
+        showBubble(mode === '2d' ? '2D map.' : mode === '3d'
+          ? '3D map. Drag with two fingers, or right-drag, to tilt and turn it.'
+          : 'Photorealistic 3D from Google. Loading the city…');
+      }
+      scheduleLayout();
+    }
+    R28.setView = applyView;
+    function cycleView() {
+      const order = PH.available() ? ['3d', '2d', 'photo'] : ['3d', '2d'];
+      const i = order.indexOf(R28.view);
+      applyView(order[(i + 1) % order.length]);
+    }
+    function syncViewButtons() {
+      const ctl = $('r28ViewCtl');
+      if (ctl) ctl.querySelectorAll('[data-v]').forEach((b) => { b.classList.toggle('on', b.dataset.v === R28.view); b.setAttribute('aria-pressed', String(b.dataset.v === R28.view)); });
+      const lbl = $('r28NavViewLbl');
+      if (lbl) lbl.textContent = R28.view === '2d' ? '2D' : R28.view === 'photo' ? 'Photo' : '3D';
+      ['2d', '3d', 'photo'].forEach((v) => { const b = $('r28Menu' + (v === '2d' ? '2d' : v === '3d' ? '3d' : 'Photo')); if (b) b.classList.toggle('on', R28.view === v); });
+    }
+
+    /* ---- Google Photorealistic 3D Tiles (CesiumJS) ---- */
+    const PH = R28.photo = (() => {
+      let viewer = null, tileset = null, starting = null, active = false;
+      let routeEnt = null, destEnt = null, carBody = null, carCab = null, routeSig = '';
+      let groundH = null, groundAt = null, groundBusy = false, lastCar = null, pinEnts = [];
+      const key = () => { const k = String(window.WAYLYN_GOOGLE_MAPS_KEY || '').trim(); return k && !/PASTE_YOUR/i.test(k) ? k : ''; };
+      const C = () => window.Cesium;
+      function available() { return !!key() && !!window.Cesium; }
+      function destPoint(lat, lng, brg, m) {
+        const R = 6378137, b = brg * Math.PI / 180, la = lat * Math.PI / 180, lo = lng * Math.PI / 180, dd = m / R;
+        const la2 = Math.asin(Math.sin(la) * Math.cos(dd) + Math.cos(la) * Math.sin(dd) * Math.cos(b));
+        const lo2 = lo + Math.atan2(Math.sin(b) * Math.sin(dd) * Math.cos(la), Math.cos(dd) - Math.sin(la) * Math.sin(la2));
+        return { lat: la2 * 180 / Math.PI, lng: lo2 * 180 / Math.PI };
+      }
+      async function start() {
+        if (!key()) { showBubble('Photorealistic 3D needs a Google Maps Platform key with the Map Tiles API turned on.'); return false; }
+        if (!C()) { showBubble('The photorealistic 3D engine (CesiumJS) did not download, so the 3D map stays on.'); return false; }
+        active = true;
+        if (viewer) { viewer.useDefaultRenderLoop = true; setTimeout(() => after(false), 30); return true; }
+        if (starting) return starting;
+        starting = (async () => {
+          try {
+            const Ce = C();
+            try { Ce.Ion.defaultAccessToken = ''; } catch (e) { /* older builds */ }
+            viewer = new Ce.Viewer(photoEl(), {
+              animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false,
+              sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false, infoBox: false,
+              selectionIndicator: false, baseLayer: false, skyBox: false, requestRenderMode: false
+            });
+            viewer.scene.globe.show = false;
+            try { viewer.scene.skyAtmosphere.show = true; } catch (e) {}
+            viewer.scene.backgroundColor = Ce.Color.fromCssColorString('#9cc9ec');
+            tileset = await Ce.Cesium3DTileset.fromUrl('https://tile.googleapis.com/v1/3dtiles/root.json?key=' + encodeURIComponent(key()), { showCreditsOnScreen: true, maximumScreenSpaceError: 12 });
+            viewer.scene.primitives.add(tileset);
+            wireClicks();
+            after(true);
+            return true;
+          } catch (e) {
+            console.warn('WayLynq R28: Google Photorealistic 3D failed', e);
+            showBubble('Google Photorealistic 3D did not load. The key needs the Map Tiles API with billing on, and this site allowed in its restrictions.');
+            destroy();
+            return false;
+          } finally { starting = null; }
+        })();
+        return starting;
+      }
+      function destroy() {
+        active = false;
+        guard('cesium destroy', () => { if (viewer) viewer.destroy(); });
+        viewer = null; tileset = null; routeEnt = destEnt = carBody = carCab = null; routeSig = ''; pinEnts = [];
+        const el = $('r28Photo'); if (el) el.innerHTML = '';
+      }
+      function stop() {
+        active = false;
+        if (!viewer) return;
+        guard('photo release', () => { viewer.camera.lookAtTransform(C().Matrix4.IDENTITY); viewer.useDefaultRenderLoop = false; });
+      }
+      function after(first) {
+        if (!viewer || !active) return;
+        guard('photo resize', () => viewer.resize());
+        syncRoute(); renderPins(FAM.list());
+        if (lastCar) car(lastCar.lat, lastCar.lng, lastCar.hdg);
+        if (!isNav()) {
+          const c = map.getCenter();
+          const mpp = 156543.034 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, map.getZoom());
+          flyTo(c.lat, c.lng, clamp(mpp * innerHeight * 0.9, 260, 2.5e6), first ? 0 : 1.2);
+        }
+      }
+      function flyTo(lat, lng, range, dur) {
+        if (!viewer) return;
+        const Ce = C();
+        const doFly = (h) => guard('photo fly', () => {
+          viewer.camera.lookAtTransform(Ce.Matrix4.IDENTITY);
+          viewer.camera.flyToBoundingSphere(new Ce.BoundingSphere(Ce.Cartesian3.fromDegrees(lng, lat, h), 1), {
+            offset: new Ce.HeadingPitchRange(0, Ce.Math.toRadians(range > 20000 ? -80 : -42), range),
+            duration: dur == null ? 1.2 : dur
+          });
+        });
+        fetch('https://api.open-meteo.com/v1/elevation?latitude=' + lat.toFixed(5) + '&longitude=' + lng.toFixed(5))
+          .then((r) => r.json()).then((j) => doFly((j && j.elevation && +j.elevation[0]) || 0)).catch(() => doFly(0));
+      }
+      function wireClicks() {
+        const Ce = C();
+        const h = new Ce.ScreenSpaceEventHandler(viewer.scene.canvas);
+        const ll = (pos) => {
+          const cart = viewer.scene.pickPosition(pos);
+          if (!cart) return null;
+          const g = Ce.Cartographic.fromCartesian(cart);
+          return { lat: Ce.Math.toDegrees(g.latitude), lng: Ce.Math.toDegrees(g.longitude) };
+        };
+        h.setInputAction((e) => {
+          if (isNav()) return;
+          const p = ll(e.position); if (!p) return;
+          if (FAM.placing) { FAM.placeAt(p.lat, p.lng); return; }
+          guard('photo click', () => map.fire('click', { latlng: L.latLng(p.lat, p.lng) }));
+        }, Ce.ScreenSpaceEventType.LEFT_CLICK);
+        h.setInputAction((e) => {
+          if (isNav()) return;
+          const p = ll(e.position); if (!p) return;
+          guard('photo pin', () => map.fire('contextmenu', { latlng: L.latLng(p.lat, p.lng) }));
+        }, Ce.ScreenSpaceEventType.RIGHT_CLICK);
+        viewer.camera.moveEnd.addEventListener(() => {
+          if (isNav() || !active) return;
+          const r = viewer.scene.canvas.getBoundingClientRect();
+          const p = ll(new Ce.Cartesian2(r.width / 2, r.height / 2));
+          if (p) { lockLeaflet = Date.now(); guard('photo to 2d', () => map.setView([p.lat, p.lng], map.getZoom(), { animate: false })); }
+        });
+      }
+      function syncRoute() {
+        if (!viewer) return;
+        const Ce = C();
+        const r = allRoutes[activeRouteIndex];
+        const sig = r ? r.coords.length + ':' + Math.round(r.distance) + (destPlace ? ':' + destPlace.lat + ',' + destPlace.lng : '') : '';
+        if (sig === routeSig) return;
+        routeSig = sig;
+        if (routeEnt) { viewer.entities.remove(routeEnt); routeEnt = null; }
+        if (destEnt) { viewer.entities.remove(destEnt); destEnt = null; }
+        if (!r) return;
+        guard('photo route', () => {
+          const step = Math.max(1, Math.floor(r.coords.length / 1800));
+          const flat = [];
+          for (let i = 0; i < r.coords.length; i += step) flat.push(r.coords[i][1], r.coords[i][0]);
+          const last = r.coords[r.coords.length - 1];
+          flat.push(last[1], last[0]);
+          routeEnt = viewer.entities.add({ polyline: {
+            positions: Ce.Cartesian3.fromDegreesArray(flat), width: 10, clampToGround: true,
+            classificationType: Ce.ClassificationType.CESIUM_3D_TILE,
+            material: Ce.Color.fromCssColorString('#2f8cff').withAlpha(0.95)
+          } });
+          if (destPlace) {
+            destEnt = viewer.entities.add({
+              position: Ce.Cartesian3.fromDegrees(destPlace.lng, destPlace.lat),
+              billboard: { image: svgUrl(pinSVG()), verticalOrigin: Ce.VerticalOrigin.BOTTOM, heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+              label: { text: String(destPlace.name || destPlace.label || '').split(',')[0], font: '600 15px Inter, sans-serif', fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -46), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+            });
+          }
+        });
+      }
+      function sampleGround(lat, lng) {
+        if (!viewer || groundBusy) return;
+        if (groundAt && haversine(groundAt, { lat: lat, lng: lng }) < 120 && groundH != null) return;
+        groundBusy = true;
+        const Ce = C();
+        viewer.scene.sampleHeightMostDetailed([Ce.Cartographic.fromDegrees(lng, lat)]).then((res) => {
+          const hgt = res && res[0] && res[0].height;
+          if (isFinite(hgt)) { groundH = hgt; groundAt = { lat: lat, lng: lng }; }
+        }).catch(() => {}).then(() => { groundBusy = false; });
+      }
+      function car(lat, lng, hdg) {
+        lastCar = { lat: lat, lng: lng, hdg: hdg };
+        if (!viewer || !active) return;
+        const Ce = C();
+        guard('photo car', () => {
+          const v = vehicle(), P = profile(v), k = 2.4, gh = groundH || 0;
+          const col = Ce.Color.fromCssColorString(v.color);
+          const orient = (at) => Ce.Transforms.headingPitchRollQuaternion(at, new Ce.HeadingPitchRoll(Ce.Math.toRadians(hdg - 90), 0, 0));
+          const bodyAt = Ce.Cartesian3.fromDegrees(lng, lat, gh + (P.c + (P.hb - P.c) / 2) * k);
+          const cabC = destPoint(lat, lng, hdg, ((P.r0 + P.r1) / 2 - P.L / 2) * k);
+          const cabAt = Ce.Cartesian3.fromDegrees(cabC.lng, cabC.lat, gh + (P.hb + (P.hc - P.hb) / 2) * k);
+          if (!carBody) {
+            carBody = viewer.entities.add({ position: bodyAt, orientation: orient(bodyAt), box: { dimensions: new Ce.Cartesian3(P.L * k, P.W * k, (P.hb - P.c) * k), material: col } });
+            carCab = viewer.entities.add({ position: cabAt, orientation: orient(cabAt), box: { dimensions: new Ce.Cartesian3((P.r1 - P.r0) * k * 0.92, P.W * 0.84 * k, (P.hc - P.hb) * k), material: Ce.Color.fromCssColorString('#1c2a35') } });
+          } else {
+            carBody.position = bodyAt; carBody.orientation = orient(bodyAt);
+            carBody.box.dimensions = new Ce.Cartesian3(P.L * k, P.W * k, (P.hb - P.c) * k);
+            carBody.box.material = col;
+            carCab.position = cabAt; carCab.orientation = orient(cabAt);
+          }
+          sampleGround(lat, lng);
+          if (isNav() && navFollow) {
+            viewer.camera.lookAt(Ce.Cartesian3.fromDegrees(lng, lat, gh + 2), new Ce.HeadingPitchRange(Ce.Math.toRadians(hdg), Ce.Math.toRadians(-24), 170));
+          }
+        });
+      }
+      function refreshCar() { if (carBody && viewer) { viewer.entities.remove(carBody); viewer.entities.remove(carCab); carBody = carCab = null; } if (lastCar) car(lastCar.lat, lastCar.lng, lastCar.hdg); }
+      function renderPins(list) {
+        if (!viewer) return;
+        const Ce = C();
+        pinEnts.forEach((e) => viewer.entities.remove(e)); pinEnts = [];
+        guard('photo pins', () => list.forEach((it) => {
+          pinEnts.push(viewer.entities.add({
+            position: Ce.Cartesian3.fromDegrees(it.pin.lng, it.pin.lat),
+            billboard: { image: svgUrl(avatarSVG(it.member.avatar, it.member.ring, 56)), width: 48, height: 48, verticalOrigin: Ce.VerticalOrigin.BOTTOM, heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+            label: { text: it.member.name + ' · ' + it.pin.label, font: '600 14px Inter, sans-serif', fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -54), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+          }));
+        }));
+      }
+      function tick() {
+        if (!viewer || !active) return;
+        syncRoute();
+        if (!isNav() && livePosition) car(livePosition.lat, livePosition.lng, headingDeg || 0);
+      }
+      return { start, stop, tick, car, refreshCar, renderPins, flyTo, available, isActive: () => active };
+    })();
+
+    function svgUrl(svg) { return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg); }
+    function pinSVG() {
+      return '<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44"><path d="M17 1C8.2 1 1 8 1 16.6 1 28.5 17 43 17 43s16-14.5 16-26.4C33 8 25.8 1 17 1z" fill="#ff4d5e" stroke="#fff" stroke-width="2"/><circle cx="17" cy="16.5" r="6" fill="#fff"/></svg>';
+    }
+
+    /* ====================================================================
+       11 — FAMILY: AVATARS ON ROADS AND LANDMARKS
+    ==================================================================== */
+    const AVATARS = [
+      { id: 'dad', label: 'Dad', skin: '#f1c27d', hair: '#3b2a1a', style: 'short', extra: 'beard' },
+      { id: 'mom', label: 'Mom', skin: '#e0ac69', hair: '#5a3825', style: 'long' },
+      { id: 'grandpa', label: 'Grandpa', skin: '#f5d0a9', hair: '#d9d9d9', style: 'bald', extra: 'glasses' },
+      { id: 'grandma', label: 'Grandma', skin: '#f3cfb3', hair: '#e6e6e6', style: 'bun', extra: 'glasses' },
+      { id: 'boy', label: 'Boy', skin: '#c68642', hair: '#1b1b1b', style: 'short', extra: 'cap' },
+      { id: 'girl', label: 'Girl', skin: '#f1c27d', hair: '#a0522d', style: 'pigtails', extra: 'bow' },
+      { id: 'baby', label: 'Baby', skin: '#ffdbac', hair: '#e8c07d', style: 'curl' },
+      { id: 'teen', label: 'Teen', skin: '#8d5524', hair: '#111111', style: 'curly', extra: 'headphones' },
+      { id: 'aunt', label: 'Aunt', skin: '#ffe0bd', hair: '#b5651d', style: 'bob' },
+      { id: 'uncle', label: 'Uncle', skin: '#d8a47f', hair: '#222222', style: 'short', extra: 'mustache' },
+      { id: 'hero', label: 'Hero', skin: '#f1c27d', hair: '#222222', style: 'short', extra: 'mask' },
+      { id: 'royal', label: 'Royal', skin: '#e0ac69', hair: '#ffcc80', style: 'long', extra: 'crown' },
+      { id: 'dog', label: 'Dog', animal: 'dog', skin: '#c49a6c' },
+      { id: 'cat', label: 'Cat', animal: 'cat', skin: '#9e9e9e' },
+      { id: 'robot', label: 'Robot', animal: 'robot', skin: '#90a4ae' },
+      { id: 'star', label: 'Star', animal: 'star', skin: '#ffd54f' }
+    ];
+    const RINGS = ['#4d9bff', '#ff5d6c', '#ffb020', '#34c759', '#a58bff', '#00c2c7', '#ff7ac6', '#8d6e63'];
+    function avatarSVG(id, ring, size) {
+      const a = AVATARS.find((x) => x.id === id) || AVATARS[0];
+      const r = ring || '#4d9bff', sz = size || 44;
+      let s = '<svg xmlns="http://www.w3.org/2000/svg" class="r28-av" viewBox="0 0 64 64" width="' + sz + '" height="' + sz + '" aria-hidden="true">' +
+        '<circle cx="32" cy="32" r="31" fill="' + r + '"/><circle cx="32" cy="32" r="27" fill="#f7fbff"/>';
+      const eyes = '<circle cx="26" cy="35" r="2.3" fill="#222"/><circle cx="38" cy="35" r="2.3" fill="#222"/>';
+      const smile = '<path d="M26 41.5 Q32 46.5 38 41.5" fill="none" stroke="#6b2f2f" stroke-width="2.2" stroke-linecap="round"/>';
+      if (a.animal === 'dog') {
+        s += '<ellipse cx="17" cy="33" rx="6" ry="12" fill="#7a5230"/><ellipse cx="47" cy="33" rx="6" ry="12" fill="#7a5230"/>' +
+             '<circle cx="32" cy="35" r="15" fill="' + a.skin + '"/><ellipse cx="32" cy="42" rx="8" ry="6" fill="#e9d3b8"/>' + eyes +
+             '<ellipse cx="32" cy="39.5" rx="3.4" ry="2.4" fill="#222"/><path d="M29 44 Q32 47 35 44" fill="none" stroke="#222" stroke-width="1.6"/>';
+      } else if (a.animal === 'cat') {
+        s += '<path d="M18 26 L20 12 L29 21 Z M46 26 L44 12 L35 21 Z" fill="' + a.skin + '"/><circle cx="32" cy="35" r="15" fill="' + a.skin + '"/>' +
+             '<circle cx="26" cy="34" r="2.5" fill="#2e7d32"/><circle cx="38" cy="34" r="2.5" fill="#2e7d32"/><path d="M30.5 39 L33.5 39 L32 41 Z" fill="#e57373"/>' +
+             '<path d="M20 40 L27 40 M20 43 L27 42 M44 40 L37 40 M44 43 L37 42" stroke="#555" stroke-width="1"/>';
+      } else if (a.animal === 'robot') {
+        s += '<line x1="32" y1="13" x2="32" y2="20" stroke="#607d8b" stroke-width="2"/><circle cx="32" cy="12" r="3" fill="#ff5d6c"/>' +
+             '<rect x="18" y="20" width="28" height="28" rx="6" fill="' + a.skin + '"/><rect x="22" y="28" width="8" height="7" rx="2" fill="#00e5ff"/><rect x="34" y="28" width="8" height="7" rx="2" fill="#00e5ff"/>' +
+             '<rect x="25" y="40" width="14" height="3" rx="1.5" fill="#37474f"/>';
+      } else if (a.animal === 'star') {
+        s += '<path d="M32 12 L37.6 25.4 L52 26.6 L41 36 L44.4 50 L32 42.6 L19.6 50 L23 36 L12 26.6 L26.4 25.4 Z" fill="' + a.skin + '" stroke="#f39c12" stroke-width="1.5"/>' +
+             '<circle cx="28" cy="32" r="1.8" fill="#222"/><circle cx="36" cy="32" r="1.8" fill="#222"/><path d="M28.5 37 Q32 40 35.5 37" fill="none" stroke="#6b2f2f" stroke-width="1.8" stroke-linecap="round"/>';
+      } else {
+        const hair = a.hair;
+        if (a.style === 'long') s += '<path d="M15 38 Q14 17 32 16 Q50 17 49 38 L49 52 Q43 47 43 40 L21 40 Q21 47 15 52 Z" fill="' + hair + '"/>';
+        if (a.style === 'pigtails') s += '<circle cx="15" cy="33" r="6" fill="' + hair + '"/><circle cx="49" cy="33" r="6" fill="' + hair + '"/>';
+        if (a.style === 'bun') s += '<circle cx="32" cy="16" r="6.5" fill="' + hair + '"/>';
+        s += '<circle cx="32" cy="35" r="15" fill="' + a.skin + '"/>';
+        if (a.style === 'short' || a.style === 'bun' || a.style === 'pigtails') s += '<path d="M17 33 Q17 18 32 18 Q47 18 47 33 Q44 25 32 25 Q20 25 17 33 Z" fill="' + hair + '"/>';
+        if (a.style === 'long') s += '<path d="M17 32 Q18 19 32 19 Q46 19 47 32 Q40 24 32 26 Q24 24 17 32 Z" fill="' + hair + '"/>';
+        if (a.style === 'bob') s += '<path d="M16 42 Q14 18 32 18 Q50 18 48 42 L44 42 Q45 27 32 26 Q19 27 20 42 Z" fill="' + hair + '"/>';
+        if (a.style === 'bald') s += '<path d="M17 34 Q17 29 20 27 M47 34 Q47 29 44 27" stroke="' + hair + '" stroke-width="4" fill="none" stroke-linecap="round"/>';
+        if (a.style === 'curl') s += '<path d="M32 20 q5 -4 2 -7 q-4 -2 -5 2" fill="none" stroke="' + hair + '" stroke-width="2.6" stroke-linecap="round"/>';
+        if (a.style === 'curly') s += '<g fill="' + hair + '"><circle cx="20" cy="27" r="5"/><circle cx="26" cy="21" r="5.5"/><circle cx="33" cy="19" r="6"/><circle cx="40" cy="21" r="5.5"/><circle cx="45" cy="27" r="5"/></g>';
+        s += eyes + smile;
+        if (a.extra === 'glasses') s += '<g fill="none" stroke="#333" stroke-width="1.6"><circle cx="26" cy="35" r="4.6"/><circle cx="38" cy="35" r="4.6"/><path d="M30.6 35 L33.4 35"/></g>';
+        if (a.extra === 'beard') s += '<path d="M18 38 Q19 51 32 51 Q45 51 46 38 Q41 45 32 45 Q23 45 18 38 Z" fill="' + hair + '"/>' + smile;
+        if (a.extra === 'mustache') s += '<path d="M25 40.5 Q28.5 38 32 40 Q35.5 38 39 40.5 Q35.5 42.2 32 41.2 Q28.5 42.2 25 40.5 Z" fill="' + hair + '"/>';
+        if (a.extra === 'cap') s += '<path d="M17 30 Q18 16 32 16 Q46 16 47 30 Z" fill="#e53935"/><path d="M40 29 Q52 28 55 31 L40 31 Z" fill="#b71c1c"/>';
+        if (a.extra === 'bow') s += '<path d="M40 18 L47 14 L47 23 Z M40 18 L33 14 L33 23 Z" fill="#ff4f9a"/><circle cx="40" cy="18.5" r="2.2" fill="#d81b60"/>';
+        if (a.extra === 'crown') s += '<path d="M21 21 L24 11 L28.5 18 L32 9 L35.5 18 L40 11 L43 21 Z" fill="#ffca28" stroke="#f57f17" stroke-width="1"/>';
+        if (a.extra === 'mask') s += '<path d="M18 32 Q32 28 46 32 L46 38 Q32 34 18 38 Z" fill="#1e3a8a"/><circle cx="26" cy="35" r="2" fill="#fff"/><circle cx="38" cy="35" r="2" fill="#fff"/>';
+        if (a.extra === 'headphones') s += '<path d="M16 36 Q16 16 32 16 Q48 16 48 36" fill="none" stroke="#263238" stroke-width="3"/><rect x="12" y="32" width="7" height="11" rx="3" fill="#ff5d6c"/><rect x="45" y="32" width="7" height="11" rx="3" fill="#ff5d6c"/>';
+      }
+      return s + '</svg>';
+    }
+    R28.avatarSVG = avatarSVG;
+
+    const FAM = R28.family = (() => {
+      let layer = null, marks3d = [], announced = {}, placing = null, draft = null;
+      const members = () => Store.get('r28Family', []) || [];
+      const pins = () => Store.get('r28Pins', []) || [];
+      const byId = (id) => members().find((m) => m.id === id);
+      function list() { return pins().map((p) => ({ pin: p, member: byId(p.memberId) })).filter((x) => x.member); }
+      function pinHtml(it) {
+        return '<div class="r28-pin' + (it.pin.kind === 'road' ? ' road' : '') + '" data-r28pin="' + esc(it.pin.id) + '">' +
+          '<span class="r28-pin-av">' + avatarSVG(it.member.avatar, it.member.ring, 40) + '</span>' +
+          '<span class="r28-pin-lbl"><b>' + esc(it.member.name) + '</b>' + esc(it.pin.label) + '</span></div>';
+      }
+      function render2d() {
+        guard('pins 2d', () => {
+          if (!layer) layer = L.layerGroup().addTo(map);
+          layer.clearLayers();
+          list().forEach((it) => {
+            L.marker([it.pin.lat, it.pin.lng], {
+              icon: L.divIcon({ className: '', html: pinHtml(it), iconSize: [40, 40], iconAnchor: [20, 40] }),
+              zIndexOffset: 600, keyboard: false
+            }).addTo(layer);
+          });
+        });
+      }
+      function render3d() {
+        if (!map3d || typeof maplibregl === 'undefined') return;
+        guard('pins 3d', () => {
+          marks3d.forEach((m) => m.remove()); marks3d = [];
+          list().forEach((it) => {
+            const w = d.createElement('div'); w.innerHTML = pinHtml(it);
+            marks3d.push(new maplibregl.Marker({ element: w.firstElementChild, anchor: 'bottom-left', offset: [-20, 0] }).setLngLat([it.pin.lng, it.pin.lat]).addTo(map3d));
+          });
+        });
+      }
+      function render() { render2d(); render3d(); PH.renderPins(list()); renderModalLists(); }
+
+      /* While driving: say whose spot it is when the car reaches it, or turns
+         onto a road someone's avatar marks. Once per spot per twenty minutes. */
+      function currentRoads() {
+        const out = [];
+        const st = navSteps && navSteps[navStepIndex];
+        if (st) { out.push(st.name, st.ref); }
+        ['roadName', 'onRoadName'].forEach((id) => { const el = $(id); if (el) out.push(el.textContent); });
+        return out.map(norm).filter((s) => s && s.length > 2 && s !== 'on route');
+      }
+      function check() {
+        const at = isNav() ? (lastNavPos || livePosition) : null;
+        if (!at) return;
+        const all = list();
+        if (!all.length) return;
+        const roads = currentRoads();
+        const now = Date.now();
+        for (const it of all) {
+          if (announced[it.pin.id] && now - announced[it.pin.id] < 20 * 60 * 1000) continue;
+          const m = haversine(at, it.pin);
+          let hit = m < (it.pin.kind === 'road' ? 260 : 190);
+          if (!hit && it.pin.kind === 'road' && it.pin.road) {
+            const rn = norm(it.pin.road);
+            hit = roads.some((r) => r === rn || (rn.length > 4 && (r.indexOf(rn) >= 0 || rn.indexOf(r) >= 0)));
+          }
+          if (hit) { announced[it.pin.id] = now; callout(it); break; }
+        }
+      }
+      let toastT = null;
+      function callout(it) {
+        let el = $('r28FamToast');
+        if (!el) { el = d.createElement('div'); el.id = 'r28FamToast'; d.body.appendChild(el); }
+        const road = it.pin.kind === 'road';
+        el.innerHTML = '<span class="r28-ft-av">' + avatarSVG(it.member.avatar, it.member.ring, 52) + '</span>' +
+          '<span class="r28-ft-txt"><b>' + esc(it.member.name) + '</b>' + esc((road ? 'Their road: ' : '') + it.pin.label) + '</span>';
+        el.classList.add('show');
+        clearTimeout(toastT);
+        toastT = setTimeout(() => el.classList.remove('show'), 7000);
+        d.querySelectorAll('[data-r28pin="' + it.pin.id + '"]').forEach((n) => { n.classList.remove('r28-hi'); void n.offsetWidth; n.classList.add('r28-hi'); });
+        guard('speak', () => speak((road ? 'You are on ' + it.member.name + "'s road, " : it.member.name + "'s spot: ") + it.pin.label + '.', false));
+      }
+
+      /* ---- placing ---- */
+      function startPlacing(memberId) {
+        const m = byId(memberId);
+        if (!m) { showBubble('Add a family member first.'); return; }
+        placing = { memberId: memberId };
+        closeModal('r28FamModal');
+        let b = $('r28Banner');
+        if (!b) {
+          b = d.createElement('div'); b.id = 'r28Banner';
+          d.body.appendChild(b);
+        }
+        b.innerHTML = '<span class="r28-bn-av">' + avatarSVG(m.avatar, m.ring, 30) + '</span><span>Tap the map where <b>' + esc(m.name) + '</b> goes — a landmark, or a spot on their road</span><button type="button" id="r28BannerX">Cancel</button>';
+        b.classList.add('show');
+        $('r28BannerX').onclick = stopPlacing;
+        d.body.classList.add('r28-placing');
+      }
+      function stopPlacing() {
+        placing = null;
+        const b = $('r28Banner'); if (b) b.classList.remove('show');
+        d.body.classList.remove('r28-placing');
+      }
+      async function placeAt(lat, lng) {
+        if (!placing) return;
+        const memberId = placing.memberId;
+        stopPlacing();
+        let label = '', road = '';
+        try {
+          const res = await fetch(NOMINATIM_REV + '?format=json&zoom=18&addressdetails=1&namedetails=1&lat=' + lat + '&lon=' + lng);
+          const j = await res.json();
+          const a = (j && j.address) || {};
+          road = a.road || a.pedestrian || a.highway || '';
+          label = (j && j.namedetails && j.namedetails.name) || a.tourism || a.amenity || a.building || road || shortLabel(j.display_name || '');
+        } catch (e) { /* offline: the driver names it */ }
+        openSheet({ memberId: memberId, lat: lat, lng: lng, label: label || 'Our spot', road: road, kind: 'landmark' });
+      }
+      function placeHere(memberId) {
+        const p = lastNavPos || livePosition;
+        if (!p) { showBubble('WayLynq does not have your position yet. Allow location, or tap the map instead.'); return; }
+        placing = { memberId: memberId };
+        closeModal('r28FamModal');
+        placeAt(p.lat, p.lng).then(() => { if (draft) setKind('road'); });
+      }
+      function openSheet(dr) {
+        draft = dr;
+        let sh = $('r28PinSheet');
+        if (!sh) {
+          sh = d.createElement('div'); sh.id = 'r28PinSheet'; sh.setAttribute('role', 'dialog'); sh.setAttribute('aria-label', 'Place a family avatar');
+          sh.innerHTML = '<div class="r28-ps-top"><span class="r28-ps-av" id="r28PsAv"></span><div class="r28-ps-main">' +
+            '<input id="r28PsLabel" maxlength="40" placeholder="What is this place?" autocomplete="off" />' +
+            '<div class="r28-ps-kind" role="group" aria-label="Kind"><button type="button" data-kind="landmark">\u{1F3DB} Landmark</button><button type="button" data-kind="road">\u{1F6E3} Their road</button></div>' +
+            '<div class="r28-ps-sub" id="r28PsSub"></div></div></div>' +
+            '<div class="r28-ps-btns"><button type="button" class="primary" id="r28PsSave">Place avatar</button><button type="button" id="r28PsCancel">Cancel</button></div>';
+          d.body.appendChild(sh);
+          sh.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => setKind(b.dataset.kind)));
+          $('r28PsCancel').addEventListener('click', () => { sh.classList.remove('show'); draft = null; });
+          $('r28PsSave').addEventListener('click', savePin);
+          $('r28PsLabel').addEventListener('keydown', (e) => { if (e.key === 'Enter') savePin(); });
+        }
+        const m = byId(dr.memberId);
+        $('r28PsAv').innerHTML = avatarSVG(m.avatar, m.ring, 48);
+        $('r28PsLabel').value = dr.label;
+        setKind(dr.kind || 'landmark');
+        sh.classList.add('show');
+        setTimeout(() => { const i = $('r28PsLabel'); if (i && innerWidth > 760) i.select(); }, 60);
+      }
+      function setKind(kind) {
+        if (!draft) return;
+        draft.kind = kind;
+        const sh = $('r28PinSheet');
+        if (sh) sh.querySelectorAll('[data-kind]').forEach((b) => b.classList.toggle('on', b.dataset.kind === kind));
+        const sub = $('r28PsSub');
+        if (sub) sub.textContent = kind === 'road'
+          ? (draft.road ? 'Announced whenever you drive on ' + draft.road + '.' : 'Announced when you drive past this point.')
+          : 'Announced when you drive past it.';
+        if (kind === 'road' && draft.road && $('r28PsLabel') && (!$('r28PsLabel').value || $('r28PsLabel').value === draft.label)) $('r28PsLabel').value = draft.road;
+      }
+      function savePin() {
+        if (!draft) return;
+        const label = ($('r28PsLabel').value || '').trim() || draft.label || 'Our spot';
+        const list0 = pins();
+        list0.push({ id: 'p' + uid(), memberId: draft.memberId, kind: draft.kind || 'landmark', label: label.slice(0, 40), road: draft.road || '', lat: +draft.lat.toFixed(6), lng: +draft.lng.toFixed(6), at: Date.now() });
+        Store.set('r28Pins', list0);
+        const m = byId(draft.memberId);
+        $('r28PinSheet').classList.remove('show');
+        draft = null;
+        render();
+        showBubble((m ? m.name : 'Avatar') + ' placed: ' + label);
+      }
+      function removePin(id) { Store.set('r28Pins', pins().filter((p) => p.id !== id)); render(); }
+      function addMember(name, avatar, ring) {
+        const list0 = members();
+        const m = { id: 'm' + uid(), name: (name || (AVATARS.find((a) => a.id === avatar) || {}).label || 'Family').slice(0, 24), avatar: avatar, ring: ring };
+        list0.push(m);
+        Store.set('r28Family', list0);
+        renderModalLists();
+        return m;
+      }
+      function removeMember(id) {
+        Store.set('r28Family', members().filter((m) => m.id !== id));
+        Store.set('r28Pins', pins().filter((p) => p.memberId !== id));
+        render();
+      }
+      function renderModalLists() {
+        const crew = $('r28Crew');
+        if (!crew) return;
+        const ms = members();
+        crew.innerHTML = ms.length ? ms.map((m) => '<div class="r28-mem">' + avatarSVG(m.avatar, m.ring, 40) + '<span>' + esc(m.name) + '</span>' +
+          '<button type="button" class="r28-x" data-delmem="' + esc(m.id) + '" title="Remove ' + esc(m.name) + '" aria-label="Remove ' + esc(m.name) + '">✕</button></div>').join('')
+          : '<div class="r28-empty">No one yet — add the family below.</div>';
+        crew.querySelectorAll('[data-delmem]').forEach((b) => b.addEventListener('click', () => removeMember(b.dataset.delmem)));
+        const who = $('r28PlaceWho');
+        if (who) {
+          const keep = who.value;
+          who.innerHTML = ms.map((m) => '<option value="' + esc(m.id) + '">' + esc(m.name) + '</option>').join('') || '<option value="">Add someone first</option>';
+          if (keep && ms.some((m) => m.id === keep)) who.value = keep;
+        }
+        const pl = $('r28PinList');
+        if (pl) {
+          const all = list();
+          $('r28PinCount').textContent = all.length ? '(' + all.length + ')' : '';
+          pl.innerHTML = all.length ? all.map((it) => '<div class="r28-pinrow">' + avatarSVG(it.member.avatar, it.member.ring, 30) +
+            '<span class="r28-pr-txt"><b>' + esc(it.member.name) + '</b>' + esc(it.pin.label) + '<small>' + (it.pin.kind === 'road' ? 'Road' : 'Landmark') + '</small></span>' +
+            '<button type="button" data-showpin="' + esc(it.pin.id) + '" title="Show on map">\u{1F50E}</button>' +
+            '<button type="button" class="r28-x" data-delpin="' + esc(it.pin.id) + '" title="Remove" aria-label="Remove">✕</button></div>').join('')
+            : '<div class="r28-empty">Nothing placed yet.</div>';
+          pl.querySelectorAll('[data-delpin]').forEach((b) => b.addEventListener('click', () => removePin(b.dataset.delpin)));
+          pl.querySelectorAll('[data-showpin]').forEach((b) => b.addEventListener('click', () => {
+            const p = pins().find((x) => x.id === b.dataset.showpin);
+            if (!p) return;
+            closeModal('r28FamModal');
+            guard('show pin', () => map.setView([p.lat, p.lng], 17, { animate: true }));
+            if (R28.view === 'photo') PH.flyTo(p.lat, p.lng, 380);
+          }));
+        }
+      }
+      async function searchLandmark(q) {
+        const out = $('r28PlaceRes');
+        if (!out || !q.trim()) return;
+        out.innerHTML = '<div class="r28-empty">Searching…</div>';
+        try {
+          const list0 = (await candidates(q)).slice(0, 5);
+          out.innerHTML = list0.length ? list0.map((p, i) => '<button type="button" data-lm="' + i + '"><b>' + esc(String(p.name).split(',')[0]) + '</b><span>' + esc(p.fullAddress || p.label || '') + '</span></button>').join('')
+            : '<div class="r28-empty">No match. Try adding the city.</div>';
+          out.querySelectorAll('[data-lm]').forEach((b) => b.addEventListener('click', () => {
+            const p = list0[+b.dataset.lm];
+            const who = $('r28PlaceWho').value;
+            if (!who) { showBubble('Add a family member first.'); return; }
+            closeModal('r28FamModal');
+            openSheet({ memberId: who, lat: p.lat, lng: p.lng, label: String(p.name).split(',')[0], road: '', kind: 'landmark' });
+            guard('pan', () => map.setView([p.lat, p.lng], 16, { animate: true }));
+          }));
+        } catch (e) { out.innerHTML = '<div class="r28-empty">The place search did not answer. Try again.</div>'; }
+      }
+      return { list, render, render3d, check, placeAt, startPlacing, placeHere, stopPlacing, addMember, renderModalLists, searchLandmark,
+        get placing() { return placing; } };
+    })();
+
+    /* ====================================================================
+       THE CONTROLS AND DIALOGS
+    ==================================================================== */
+    function openModal(id) { const m = $(id); if (m) m.classList.add('show'); }
+    function closeModal(id) { const m = $(id); if (m) m.classList.remove('show'); }
+    function modalShell(id, title, body) {
+      const m = d.createElement('div');
+      m.id = id; m.className = 'wl-modal r28-modal';
+      m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true');
+      m.innerHTML = '<div class="wl-modal-inner"><div class="panel-title r28-mt">' + title +
+        '<button class="icon-act" type="button" data-close="1" aria-label="Close">✕</button></div>' + body + '</div>';
+      m.addEventListener('click', (e) => { if (e.target === m || (e.target.closest && e.target.closest('[data-close]'))) m.classList.remove('show'); });
+      d.body.appendChild(m);
+      return m;
+    }
+    let carDraft = null;
+    function buildModals() {
+      if ($('r28CarModal')) return;
+      const makes = [];
+      VEHICLES.forEach((v) => { if (makes.indexOf(v.make) < 0) makes.push(v.make); });
+      const options = makes.map((mk) => '<optgroup label="' + esc(mk) + '">' +
+        VEHICLES.filter((v) => v.make === mk).map((v) => '<option value="' + v.id + '">' + esc((mk === 'Other' ? '' : mk + ' ') + v.model) + '</option>').join('') + '</optgroup>').join('');
+      modalShell('r28CarModal', '\u{1F697} My car',
+        '<div class="r28-car-prev" id="r28CarPrev"></div>' +
+        '<div class="r28-car-name" id="r28CarName"></div>' +
+        '<label for="r28CarSel">Make and model</label><select id="r28CarSel" class="r28-select">' + options + '</select>' +
+        '<label>Colour</label><div class="r28-paints" id="r28Paints">' +
+          PAINTS.map((p) => '<button type="button" data-paint="' + p[0] + '" title="' + p[1] + '" aria-label="' + p[1] + '" style="background:' + p[0] + '"></button>').join('') +
+          '<label class="r28-paint-custom" title="Any colour"><input type="color" id="r28PaintAny" value="#4d9bff" aria-label="Any colour" /></label></div>' +
+        '<div class="modal-btns"><button id="r28CarSave" class="primary" type="button">Drive this car</button><button type="button" data-close="1">Cancel</button></div>' +
+        '<div class="pc-src">Shown in true 3D on the 3D map and from above on the 2D map. Each shape follows the model’s body style and your colour; they are drawn, not the makers’ licensed 3D models.</div>');
+      const upd = () => {
+        const base = VEHICLES.find((v) => v.id === carDraft.id) || VEHICLES[0];
+        const v = Object.assign({}, base, { color: carDraft.color });
+        $('r28CarPrev').innerHTML = sideSVG(v, 300, 124);
+        $('r28CarName').textContent = (v.make === 'Other' ? '' : v.make + ' ') + v.model;
+        $('r28Paints').querySelectorAll('[data-paint]').forEach((b) => b.classList.toggle('on', b.dataset.paint.toLowerCase() === carDraft.color.toLowerCase()));
+      };
+      $('r28CarSel').addEventListener('change', (e) => {
+        const base = VEHICLES.find((v) => v.id === e.target.value);
+        carDraft.id = e.target.value;
+        if (base && !carDraft.colorPicked) carDraft.color = base.color;
+        upd();
+      });
+      $('r28Paints').addEventListener('click', (e) => { const b = e.target.closest('[data-paint]'); if (!b) return; carDraft.color = b.dataset.paint; carDraft.colorPicked = true; upd(); });
+      $('r28PaintAny').addEventListener('input', (e) => { carDraft.color = e.target.value; carDraft.colorPicked = true; upd(); });
+      $('r28CarSave').addEventListener('click', () => {
+        Store.set('r28Vehicle', { id: carDraft.id, color: carDraft.color });
+        closeModal('r28CarModal');
+        refreshVehicle();
+        const v = vehicle();
+        showBubble('Now driving: ' + (v.make === 'Other' ? '' : v.make + ' ') + v.model + '.');
+      });
+      R28._carUpd = upd;
+
+      modalShell('r28FamModal', '\u{1F46A} Family & places',
+        '<div class="r28-sec">Your crew</div><div class="r28-crew" id="r28Crew"></div>' +
+        '<details class="r28-addmem" id="r28AddMem"><summary>＋ Add a family member</summary>' +
+          '<div class="r28-avgrid" id="r28AvGrid">' + AVATARS.map((a, i) => '<button type="button" data-av="' + a.id + '" class="' + (i === 0 ? 'on' : '') + '" title="' + a.label + '" aria-label="' + a.label + '">' + avatarSVG(a.id, '#dbe4ea', 46) + '</button>').join('') + '</div>' +
+          '<div class="r28-row"><input id="r28MemName" maxlength="24" placeholder="Name, e.g. Grandma" autocomplete="off" />' +
+          '<div class="r28-rings" id="r28Rings">' + RINGS.map((c, i) => '<button type="button" data-ring="' + c + '" class="' + (i === 0 ? 'on' : '') + '" style="background:' + c + '" aria-label="Ring colour ' + (i + 1) + '"></button>').join('') + '</div></div>' +
+          '<button type="button" class="r28-primary" id="r28MemAdd">Add to crew</button></details>' +
+        '<div class="r28-sec">Put someone on the map</div>' +
+        '<div class="r28-place"><select id="r28PlaceWho" class="r28-select" aria-label="Who"></select>' +
+          '<div class="r28-place-btns"><button type="button" id="r28PlaceTap">\u{1F4CD} Tap the map</button><button type="button" id="r28PlaceHere">\u{1F6E3} The road I’m on</button></div>' +
+          '<div class="r28-row"><input id="r28PlaceQ" placeholder="…or search a landmark" autocomplete="off" /><button type="button" id="r28PlaceGo">Find</button></div>' +
+          '<div class="r28-place-res" id="r28PlaceRes"></div></div>' +
+        '<div class="r28-sec">Placed <span id="r28PinCount"></span></div><div class="r28-pinlist" id="r28PinList"></div>' +
+        '<div class="pc-src">Avatars show on the 2D, 3D and photoreal maps. While you drive, WayLynq calls out whose spot it is as you pass it, or when you turn onto someone’s road.</div>');
+      let avPick = AVATARS[0].id, ringPick = RINGS[0];
+      $('r28AvGrid').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-av]'); if (!b) return;
+        avPick = b.dataset.av;
+        $('r28AvGrid').querySelectorAll('[data-av]').forEach((x) => x.classList.toggle('on', x === b));
+        const nm = $('r28MemName');
+        if (nm && !nm.value.trim()) nm.placeholder = 'Name, e.g. ' + (AVATARS.find((a) => a.id === avPick) || {}).label;
+      });
+      $('r28Rings').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-ring]'); if (!b) return;
+        ringPick = b.dataset.ring;
+        $('r28Rings').querySelectorAll('[data-ring]').forEach((x) => x.classList.toggle('on', x === b));
+      });
+      $('r28MemAdd').addEventListener('click', () => {
+        const nm = $('r28MemName');
+        const m = FAM.addMember(nm.value.trim(), avPick, ringPick);
+        nm.value = '';
+        const who = $('r28PlaceWho'); if (who) who.value = m.id;
+        showBubble(m.name + ' joined the crew.');
+      });
+      $('r28PlaceTap').addEventListener('click', () => { const w = $('r28PlaceWho').value; if (!w) { showBubble('Add a family member first.'); return; } FAM.startPlacing(w); });
+      $('r28PlaceHere').addEventListener('click', () => { const w = $('r28PlaceWho').value; if (!w) { showBubble('Add a family member first.'); return; } FAM.placeHere(w); });
+      $('r28PlaceGo').addEventListener('click', () => FAM.searchLandmark($('r28PlaceQ').value));
+      $('r28PlaceQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') FAM.searchLandmark($('r28PlaceQ').value); });
+    }
+    function openCarModal() {
+      buildModals();
+      const v = vehicle();
+      carDraft = { id: v.id, color: v.color, colorPicked: false };
+      $('r28CarSel').value = v.id;
+      $('r28PaintAny').value = v.color;
+      R28._carUpd();
+      openModal('r28CarModal');
+      syncProfileCar();
+    }
+    function openFamModal() {
+      buildModals();
+      FAM.renderModalLists();
+      const add = $('r28AddMem');
+      if (add) add.open = !(Store.get('r28Family', []) || []).length;
+      openModal('r28FamModal');
+    }
+    /* Hooks for testing from the console. */
+    R28.debug = {
+      startNav: () => enterNavMode(), endNav: () => exitNavMode(), poi: (k) => togglePoi(k), ai: (t) => aiRun(t),
+      tripSheet: () => openTripSheet(), fix: (lat, lng, spd) => onNavPosition({ coords: { latitude: lat, longitude: lng, accuracy: 8, speed: spd == null ? 12 : spd, heading: null } }),
+      state: () => ({ view: R28.view, along: prog.along, sig: prog.sig, parts: progressAheadParts.length, past: !!progressPast, car: CAR.ready, map3dReady: map3dReady, route: !!(map3d && map3d.getSource && map3d.getSource('wl-route')),
+        cam: map3d ? { c: map3d.getCenter(), z: map3d.getZoom(), p: map3d.getPitch(), b: map3d.getBearing() } : null,
+        layers: map3d && map3d.getStyle() ? map3d.getStyle().layers.map((l) => l.id + (l.layout && l.layout.visibility === 'none' ? '(off)' : '')).join(',') : '',
+        feats: map3d && map3d.getSource('wl-route') ? (map3d.getSource('wl-route')._data || {}).features && map3d.getSource('wl-route')._data.features.length : -1,
+        navDistAlong: navDistAlong, stepIdx: navStepIndex, stepStart: navStepStart, steps: navSteps.map((x) => x.maneuver && x.maneuver.type), traveled: traveledMeters, fixAt: fixAt, carCur: CAR.cur, live: livePosition, lastNav: lastNavPos, arrival: arrivalShown, navFollow: navFollow, camTarget: camTarget, camNow: camNow, camLoop: !!camRaf, recenterWaiting: $('recenterFab').className })
+    };
+    R28.openCar = openCarModal;
+    R28.openFamily = openFamModal;
+    function refreshVehicle() {
+      guard('vehicle icons', () => {
+        if (liveMarker) liveMarker.setIcon(locatorIcon(headingDeg));
+        if (navDot) navDot.setIcon(locatorIcon(headingDeg));
+        if (map3dUser && map3dUser.getElement) map3dUser.getElement().innerHTML = locatorHtml(0);
+        if (extra3d.user) extra3d.user.getElement().innerHTML = locatorHtml(headingDeg || 0);
+      });
+      rebuildCar();
+      PH.refreshCar();
+      syncProfileCar();
+    }
+    function syncProfileCar() {
+      const row = $('r28ProfileCar');
+      if (!row) return;
+      const v = vehicle();
+      row.querySelector('.r28-pc-car').innerHTML = sideSVG(v, 92, 40);
+      row.querySelector('.r28-pc-name').textContent = (v.make === 'Other' ? '' : v.make + ' ') + v.model;
+    }
+
+    function buildControls() {
+      if (!$('r28ViewCtl')) {
+        const c = d.createElement('div');
+        c.id = 'r28ViewCtl'; c.setAttribute('role', 'group'); c.setAttribute('aria-label', 'Map view');
+        c.innerHTML = '<button type="button" data-v="2d" title="Flat map">2D</button>' +
+          '<button type="button" data-v="3d" title="3D map with buildings and terrain">3D</button>' +
+          '<button type="button" data-v="photo" title="Google photorealistic 3D">Photo 3D</button>';
+        c.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) applyView(b.dataset.v); });
+        d.body.appendChild(c);
+      }
+      const tr = $('navTopRight');
+      if (tr && !$('r28NavView')) {
+        const b = d.createElement('button');
+        b.id = 'r28NavView'; b.className = 'nav-btn'; b.type = 'button'; b.title = '3D / 2D / Photo';
+        b.innerHTML = '<span class="r28-nv-ico" aria-hidden="true">◰</span><span class="nav-btn-label" id="r28NavViewLbl">3D</span>';
+        tr.insertBefore(b, $('navMenuToggle') || null);
+        b.addEventListener('click', (e) => { e.stopPropagation(); cycleView(); });
+      }
+      const menu = $('navMenu');
+      if (menu && !$('r28MenuCar')) {
+        const sep = menu.querySelector('.menu-sep');
+        const add = (idx, html, fn) => {
+          const b = d.createElement('button');
+          b.id = idx; b.type = 'button'; b.innerHTML = html;
+          b.addEventListener('click', () => { menu.classList.add('hidden'); fn(); });
+          menu.insertBefore(b, sep || null);
+        };
+        add('r28Menu3d', '\u{1F3D9}️ 3D map', () => applyView('3d'));
+        add('r28Menu2d', '\u{1F5FA}️ 2D map', () => applyView('2d'));
+        add('r28MenuPhoto', '\u{1F6F0}️ Photoreal 3D (Google)', () => applyView('photo'));
+        add('r28MenuCar', '\u{1F697} My car', openCarModal);
+        add('r28MenuFam', '\u{1F46A} Family & places', openFamModal);
+      }
+      const rail = $('quick-rail');
+      if (rail && !$('qrR28Car')) {
+        const mk = (idx, ico, label, fn) => {
+          const b = d.createElement('button');
+          b.className = 'qr-btn'; b.id = idx; b.type = 'button';
+          b.innerHTML = '<span class="qr-ico">' + ico + '</span><span class="qr-label">' + label + '</span>';
+          b.addEventListener('click', fn);
+          return b;
+        };
+        const after = $('qrMusic');
+        const car = mk('qrR28Car', '\u{1F697}', 'My car', openCarModal);
+        const fam = mk('qrR28Fam', '\u{1F46A}', 'Family', openFamModal);
+        if (after && after.parentElement === rail) { after.after(car); car.after(fam); }
+        else { rail.insertBefore(fam, rail.firstChild); rail.insertBefore(car, fam); }
+      }
+      const pm = d.querySelector('#profileModal .wl-modal-inner');
+      if (pm && !$('r28ProfileCar')) {
+        const row = d.createElement('div');
+        row.id = 'r28ProfileCar'; row.className = 'r28-profile-car';
+        row.innerHTML = '<span class="r28-pc-car"></span><span class="r28-pc-txt"><small>Vehicle</small><b class="r28-pc-name"></b></span>' +
+          '<button type="button" id="r28ProfileCarBtn">Change</button><button type="button" id="r28ProfileFamBtn">\u{1F46A} Family</button>';
+        const btns = pm.querySelector('.modal-btns');
+        pm.insertBefore(row, btns || null);
+        $('r28ProfileCarBtn').addEventListener('click', () => { closeModal('profileModal'); openCarModal(); });
+        $('r28ProfileFamBtn').addEventListener('click', () => { closeModal('profileModal'); openFamModal(); });
+        syncProfileCar();
+      }
+      syncViewButtons();
+    }
+
+    /* The old "Realistic 3D" button lived outside the app and could never
+       see its state; its host is removed and its key shortcut disarmed. */
+    function neutralizeOldGoogle() {
+      const t = $('wlGoogle3dToggle');
+      if (t && !t.__r28) { const c = t.cloneNode(true); c.__r28 = true; c.setAttribute('hidden', ''); t.replaceWith(c); }
+      ['wlGoogle3dHost', 'wlGoogle3dStatus'].forEach((x) => { const e = $(x); if (e) e.setAttribute('hidden', ''); });
+    }
+
+    /* ====================================================================
+       RUNNING IT
+    ==================================================================== */
+    let wasNav = null;
+    function onBodyClass() {
+      const nav = isNav();
+      if (nav === wasNav) { scheduleLayout(); return; }
+      wasNav = nav;
+      if (nav) {
+        prog.sig = '';
+        /* Coming from the 3D map, the driving view's first camera move
+           changes the zoom, which the app reads as the driver panning away.
+           Follow is held on while the app settles the camera. */
+        suppressFollowBreak = true;
+        setTimeout(() => { suppressFollowBreak = false; }, 1600);
+      }
+      applyView(R28.view, { quiet: true, noSave: true });
+      laneLayers(nav);
+      if (!nav) {
+        setTimeout(() => { if (R28.view === '3d') { sync3dScene(true); fromLeaflet(false, true); } }, 150);
+      }
+      scheduleLayout();
+      setTimeout(scheduleLayout, 400);
+    }
+    function tick() {
+      scheduleLayout();
+      if (R28.view === '3d' && map3d && map3dReady) {
+        if (!isNav()) { sync3dScene(false); browseUser3d(); }
+        else if (navCoords.length && allRoutes[activeRouteIndex] && !map3d.getSource('wl-route')) guard('route heal', () => setup3dRoute());
+        keepRouteOnTop();
+        laneLayers(isNav());
+        if (!map3d.getLayer('r28-car') && CAR.three && !CAR.failed) addCarLayer(CAR.three);
+        if (!marksOk3d()) FAM.render3d();
+      }
+      if (R28.view === 'photo') PH.tick();
+      guard('family check', FAM.check);
+    }
+    function marksOk3d() { return !FAM.list().length || !!d.querySelector('#map3d .r28-pin'); }
+
+    function onLeafletClickPlacing(e) { if (FAM.placing && e && e.latlng) FAM.placeAt(e.latlng.lat, e.latlng.lng); }
+
+    function boot() {
+      guard('ai dock', tidyAiDock);
+      guard('poi home', poiHome);
+      guard('controls', buildControls);
+      guard('dialogs', buildModals);
+      guard('old google', neutralizeOldGoogle);
+      guard('pins', FAM.render);
+      new MutationObserver(onBodyClass).observe(d.body, { attributes: true, attributeFilter: ['class'] });
+      addEventListener('resize', scheduleLayout, { passive: true });
+      if (window.visualViewport) visualViewport.addEventListener('resize', scheduleLayout, { passive: true });
+      map.on('moveend', onLeafletMoveEnd);
+      map.on('click', onLeafletClickPlacing);
+      d.addEventListener('keydown', (e) => { if (e.key === 'Escape' && FAM.placing) FAM.stopPlacing(); });
+      R28.view = sess.get('view', '3d');
+      wasNav = null;
+      onBodyClass();
+      setInterval(tick, 700);
+      const late = () => { guard('ai dock', tidyAiDock); guard('old google', neutralizeOldGoogle); guard('controls', buildControls); scheduleLayout(); };
+      addEventListener('load', () => { late(); setTimeout(late, 700); }, { once: true });
+      setTimeout(late, 1500);
+      console.log('WayLynq Round 28 ready — 3D by default, exact AI destinations, steady route, 10 closest POIs, my car, family avatars');
+    }
+    if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot);
+    else boot();
+  })();
+  /* ===== end Round 28 ===== */
+
 
 })();
 
@@ -26893,7 +28929,7 @@ body.navigating .wl-route-past{opacity:.42!important}
 function plannerFix(){
   const titles=document.querySelector('#aiDock .ai-titles');
   if(titles){
-    const b=titles.querySelector('b'); if(b)b.textContent='AI Trip Planner';
+    const b=titles.querySelector('b'); if(b)b.textContent='Where do you want to go?';
     const sub=titles.querySelector('span'); if(sub)sub.remove();
   }
   const ai=document.getElementById('aiInput');
@@ -26962,6 +28998,435 @@ if(document.readyState==='loading'){
 window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:true});
 })();
 </script>
+
+
+<style id="waylynq-round28-css">
+/* ======================================================================
+   ROUND 28 — layout and look for the eleven fixes. Loaded last, and every
+   rule that fights an older round is written more specifically than it.
+   ====================================================================== */
+
+/* ---------- 1 + 2  AI Trip Planner ---------- */
+#aiDock .ai-titles28 { flex: 1; min-width: 0; display: flex; align-items: center; min-height: 30px; }
+#aiDock .ai-titles28 b { display: block; font-size: 1.14rem; font-weight: 700; color: var(--text-bright); line-height: 1.25; }
+#aiDock .ai-titles28 span { display: none !important; }
+#aiDock .ai-head { padding-bottom: 10px !important; border-bottom: none !important; box-shadow: none !important; }
+#aiDock .ai-field { border-top: none !important; }
+#aiDock #aiChips, #aiDock .ai-chips { display: none !important; }
+#aiDock #aiInput { min-height: 46px; }
+/* the planner stays on screen while the route it just planned opens the panel */
+@media (min-width: 761px) {
+  html body.panel-open.r28-ai-active #aiDock:not(.hidden) { display: flex !important; left: calc(var(--panel-w, 400px) + 16px) !important; }
+  html body.panel-open.r28-ai-active #aiOpen { left: calc(var(--panel-w, 400px) + 16px) !important; }
+}
+.r28-dest { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.r28-dest-name { font-weight: 800; font-size: 1.02rem; color: var(--text-bright); }
+.r28-dest-addr { font-size: .84rem; color: var(--text-dim); line-height: 1.35; }
+.r28-dest-meta { font-size: .76rem; color: var(--text-faint); display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.r28-dest-show { border: 1px solid var(--line-soft); background: transparent; color: var(--signal); border-radius: 999px; padding: 3px 10px; font: 700 .74rem var(--font-ui); cursor: pointer; }
+.r28-dest-alt { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.r28-dest-alt span { font-size: .76rem; color: var(--text-faint); }
+.r28-dest-alt button { border: 1px solid var(--line-soft); background: rgba(var(--signal-rgb), .08); color: var(--text); border-radius: 999px; padding: 4px 10px; font: 600 .76rem var(--font-ui); cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r28-dest-alt button:hover { border-color: var(--signal); color: var(--signal); }
+
+/* ---------- 4  guidance card: square, see-through, flush top-left ---------- */
+html body.navigating #navMode #navTop {
+  position: absolute !important;
+  top: env(safe-area-inset-top, 0px) !important;
+  left: env(safe-area-inset-left, 0px) !important;
+  right: auto !important; bottom: auto !important;
+  width: var(--r28-card, 240px) !important;
+  max-width: var(--r28-card, 240px) !important;
+  min-width: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  z-index: 18 !important;
+  display: flex !important; flex-direction: column !important; gap: 6px !important;
+  background: none !important; border: none !important; box-shadow: none !important;
+  transform: none !important;
+}
+html body.navigating #navMode #navTop[hidden] { display: none !important; }
+html body.navigating #navMode #navTop .nav-card {
+  box-sizing: border-box !important;
+  width: var(--r28-card, 240px) !important; min-width: 0 !important; max-width: var(--r28-card, 240px) !important;
+  height: var(--r28-card, 240px) !important; min-height: var(--r28-card, 240px) !important; max-height: var(--r28-card, 240px) !important;
+  display: flex !important; flex-direction: column !important;
+  padding: 0 !important; margin: 0 !important;
+  overflow: hidden !important;
+  color: #ffffff !important;
+  background: rgba(5, 9, 15, .44) !important;
+  backdrop-filter: blur(5px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(5px) saturate(1.15) !important;
+  border: 1px solid rgba(255, 255, 255, .30) !important;
+  border-top: 0 !important; border-left: 0 !important;
+  border-radius: 0 0 6px 0 !important;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .30) !important;
+  cursor: pointer;
+}
+html body.navigating #navMode #navTop .nav-card::before,
+html body.navigating #navMode #navTop .nav-card::after { display: none !important; }
+html body.navigating #navMode #navTop .nav-card-main {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  grid-auto-rows: auto !important;
+  align-content: start !important; align-items: center !important;
+  column-gap: calc(var(--r28-card, 240px) * .05) !important; row-gap: 4px !important;
+  padding: calc(var(--r28-card, 240px) * .065) calc(var(--r28-card, 240px) * .07) 4px !important;
+  flex: 1 1 auto !important; min-height: 0 !important; height: auto !important; max-height: none !important;
+  width: auto !important; min-width: 0 !important; max-width: none !important;
+  background: transparent !important; border: 0 !important; overflow: hidden !important;
+}
+html body.navigating #navMode #navTop .turn-text { display: contents !important; }
+html body.navigating #navMode #navTop #turnArrow {
+  grid-column: 1 !important; grid-row: 1 !important;
+  width: calc(var(--r28-card, 240px) * .25) !important; min-width: calc(var(--r28-card, 240px) * .25) !important; max-width: calc(var(--r28-card, 240px) * .25) !important;
+  height: calc(var(--r28-card, 240px) * .25) !important;
+  font-size: calc(var(--r28-card, 240px) * .2) !important;
+  color: #43e3ff !important; background: transparent !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .75));
+}
+html body.navigating #navMode #navTop #turnArrow .wl-arrow { width: 100% !important; height: 100% !important; }
+html body.navigating #navMode #navTop .turn-dist-row {
+  grid-column: 2 !important; grid-row: 1 !important;
+  display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 4px 8px !important; min-width: 0 !important;
+}
+html body.navigating #navMode #navTop #turnDistance {
+  font-size: calc(var(--r28-card, 240px) * .16) !important; font-weight: 800 !important; line-height: 1 !important;
+  color: #ffffff !important; letter-spacing: -.02em !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .85) !important;
+}
+html body.navigating #navMode #navTop .exit-badge.inline { font-size: calc(var(--r28-card, 240px) * .058) !important; }
+html body.navigating #navMode #navTop .turn-shield svg { height: calc(var(--r28-card, 240px) * .1) !important; }
+html body.navigating #navMode #navTop #turnStreet {
+  grid-column: 1 / -1 !important; grid-row: 2 !important;
+  margin: 2px 0 0 !important;
+  font-size: calc(var(--r28-card, 240px) * .078) !important; font-weight: 650 !important; line-height: 1.22 !important;
+  color: #ffffff !important;
+  -webkit-line-clamp: 3 !important; display: -webkit-box !important; -webkit-box-orient: vertical !important; overflow: hidden !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9) !important;
+}
+html body.navigating #navMode #navTop #turnStreet b { color: #ffe05a !important; font-weight: 800 !important; }
+html body.navigating #navMode #navTop #turnSigns {
+  grid-column: 1 / -1 !important; grid-row: 3 !important;
+  font-size: calc(var(--r28-card, 240px) * .056) !important; color: rgba(255, 255, 255, .86) !important;
+  white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .85) !important;
+}
+html body.navigating #navMode #navTop #turnSigns.hidden { display: none !important; }
+html body.navigating #navMode #navTop #roadRow,
+html body.navigating #navMode #navTop #nextList,
+html body.navigating #navMode #navTop #trafficAhead { display: none !important; }
+html body.navigating #navMode #navTop #tripLine {
+  display: flex !important; align-items: center !important; gap: 8px !important;
+  margin: auto 0 0 !important;
+  padding: calc(var(--r28-card, 240px) * .035) calc(var(--r28-card, 240px) * .07) !important;
+  min-height: 0 !important;
+  background: rgba(0, 0, 0, .30) !important; border-top: 1px solid rgba(255, 255, 255, .20) !important;
+  font-size: calc(var(--r28-card, 240px) * .058) !important; color: rgba(255, 255, 255, .88) !important;
+}
+html body.navigating #navMode #navTop #tripLine.hidden { display: none !important; }
+html body.navigating #navMode #navTop #tripLine .tl-road { color: #ffffff !important; font-size: calc(var(--r28-card, 240px) * .064) !important; font-weight: 700 !important; text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+html body.navigating #navMode #navTop #tripLine .tl-left { color: rgba(255, 255, 255, .85) !important; font-size: calc(var(--r28-card, 240px) * .054) !important; }
+html body.navigating #navMode #navTop #tripLine .tl-left b { color: #7fd6ff !important; font-size: calc(var(--r28-card, 240px) * .07) !important; }
+html body.navigating #navMode #navTop #tripLine .tl-shield svg { height: calc(var(--r28-card, 240px) * .085) !important; }
+html body.navigating #navMode #navTop #tripCompass { width: calc(var(--r28-card, 240px) * .12) !important; height: calc(var(--r28-card, 240px) * .12) !important; flex: 0 0 auto !important; }
+html body.navigating #navMode #navTop #destRow {
+  display: flex !important; align-items: center !important; gap: 6px !important;
+  padding: 3px calc(var(--r28-card, 240px) * .07) calc(var(--r28-card, 240px) * .04) !important;
+  background: rgba(0, 0, 0, .30) !important; border: 0 !important;
+  font-size: calc(var(--r28-card, 240px) * .056) !important; color: rgba(255, 255, 255, .9) !important;
+  white-space: nowrap !important; overflow: hidden !important;
+}
+html body.navigating #navMode #navTop #destRow .tl-dest { overflow: hidden !important; text-overflow: ellipsis !important; color: #ffffff !important; font-weight: 600 !important; }
+/* lanes and "then" sit under the square, same width, same glass */
+html body.navigating #navMode #navTop #laneBar:not(.hidden),
+html body.navigating #navMode #navTop #thenRow:not(.hidden) {
+  width: var(--r28-card, 240px) !important; max-width: var(--r28-card, 240px) !important; box-sizing: border-box !important;
+  margin: 0 !important; border-radius: 0 6px 6px 0 !important;
+  background: rgba(5, 9, 15, .5) !important; color: #fff !important;
+  backdrop-filter: blur(5px) !important; -webkit-backdrop-filter: blur(5px) !important;
+  border: 1px solid rgba(255, 255, 255, .22) !important; border-left: 0 !important;
+}
+/* the mic / add-stop row now lives under the card instead of above it */
+html body.navigating #navMode #navTop #wlNavActions {
+  position: static !important; top: auto !important; left: auto !important;
+  margin: 2px 0 0 8px !important; max-width: none !important; overflow: visible !important;
+}
+html body.navigating #navMode #navTop #wlNavActions .wl-ref-circle,
+html body.navigating #navMode #navTop #wlNavActions .wl-ref-pill { height: 44px !important; font-size: 15px !important; }
+html body.navigating #navMode #navTop #wlNavActions .wl-ref-circle { width: 44px !important; font-size: 20px !important; }
+/* light theme: the card keeps its dark glass so white text keeps its contrast */
+html body.navigating.light-mode #navMode #navTop .nav-card { background: rgba(8, 13, 20, .52) !important; }
+/* narrow phones: the top-right buttons become a column beside the square */
+html body.navigating.r28-stack #navMode #navTopRight {
+  flex-direction: column !important; align-items: flex-end !important;
+  top: env(safe-area-inset-top, 8px) !important; right: 8px !important; max-width: 60px !important;
+}
+html body.navigating.r28-stack #navMode #navTopRight .nav-btn-label { display: none !important; }
+html body.navigating.r28-stack #navMode #navTopRight .nav-btn,
+html body.navigating.r28-stack #navMode #navTopRight #wlExitRef { width: 46px !important; min-width: 46px !important; padding: 0 !important; justify-content: center !important; }
+html body.navigating.r28-stack #navMode #speedCluster { top: calc(var(--r28-tr-bottom, 280px) + 8px) !important; }
+html body.navigating.r28-stack #navMode #wlRightRail { display: none !important; }
+#r28NavView .r28-nv-ico { font-size: 1.05rem; line-height: 1; }
+
+/* ---------- 5  trip overview: a compact side sheet ---------- */
+#tripSheet .ts-inner { display: flex; flex-direction: column; }
+#tripSheet .ts-body { flex: 1 1 auto !important; min-height: 0 !important; overflow-y: auto !important; }
+html body.navigating #tripSheet.show {
+  display: block !important; background: transparent !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+  pointer-events: none !important; padding: 0 !important;
+}
+html body.navigating #tripSheet .ts-inner {
+  pointer-events: auto !important;
+  position: fixed !important;
+  top: calc(var(--r28-speed-bottom, 150px) + 10px) !important;
+  right: 10px !important; left: auto !important; bottom: auto !important;
+  width: min(340px, calc(100vw - 20px)) !important;
+  max-width: none !important;
+  max-height: max(220px, calc(var(--r28-fab-top, 700px) - var(--r28-speed-bottom, 150px) - 22px)) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .42) !important;
+  overflow: hidden !important;
+}
+html body.navigating #tripSheet .ts-head { padding: 11px 12px 9px !important; }
+html body.navigating #tripSheet .ts-title { font-size: 1.02rem !important; line-height: 1.25 !important; }
+html body.navigating #tripSheet .ts-kpis { gap: 6px !important; margin-top: 8px !important; }
+html body.navigating #tripSheet .ts-kpi { padding: 6px 8px !important; border-radius: 10px !important; }
+html body.navigating #tripSheet .ts-kpi b { font-size: 1.12rem !important; line-height: 1.1 !important; }
+html body.navigating #tripSheet .ts-kpi span { font-size: .6rem !important; margin-top: 2px !important; }
+html body.navigating #tripSheet .ts-traffic { margin-top: 8px !important; }
+html body.navigating #tripSheet .ts-row { padding-top: 7px !important; padding-bottom: 7px !important; }
+html body.navigating #tripSheet .ts-src { font-size: .7rem !important; }
+@media (max-width: 640px) {
+  html body.navigating #tripSheet .ts-inner {
+    top: auto !important; left: 8px !important; right: 8px !important;
+    bottom: calc(var(--wl27-bar-h, 64px) + 18px) !important;
+    width: auto !important; max-height: 52vh !important;
+  }
+}
+
+/* ---------- 7 + 8  the three views ---------- */
+#map3d.r28-browse { position: fixed !important; inset: 0 !important; z-index: 0 !important; }
+html body:not(.navigating).r28-v3d #map3d { display: block !important; }
+html body:not(.navigating).r28-v2d #map3d,
+html body:not(.navigating).r28-vphoto #map3d { display: none !important; }
+html body.navigating.r28-v2d #map3d,
+html body.navigating.r28-vphoto #map3d { display: none !important; }
+#r28Photo { display: none; background: #9cc9ec; overflow: hidden; }
+#r28Photo.r28-browse { position: fixed; inset: 0; z-index: 0; }
+#navMode > #r28Photo { position: absolute; inset: 0; z-index: 0; }
+html body.r28-vphoto #r28Photo { display: block !important; }
+#r28Photo .cesium-viewer, #r28Photo .cesium-widget, #r28Photo canvas { width: 100% !important; height: 100% !important; }
+#r28Photo .cesium-viewer-bottom { bottom: 6px; left: 6px; }
+html body.r28-vphoto:not(.navigating) .leaflet-control-zoom { display: none !important; }
+/* in 2D and photo while driving, the map under the HUD takes the gestures */
+html body.navigating.r28-v2d #navMode,
+html body.navigating.r28-vphoto #navMode { pointer-events: none !important; }
+html body.navigating.r28-v2d #navMode > *:not(#map3d):not(#navBlink):not(#navProgressWrap):not(#r28Photo),
+html body.navigating.r28-vphoto #navMode > *:not(#map3d):not(#navBlink):not(#navProgressWrap) { pointer-events: auto; }
+/* MapLibre's zoom / tilt / compass, where Leaflet's zoom buttons were */
+#map3d.r28-browse .maplibregl-ctrl-top-left { top: 64px; left: 10px; }
+html body.panel-open #map3d.r28-browse .maplibregl-ctrl-top-left { left: calc(var(--panel-w, 400px) + 10px); }
+@media (max-width: 760px) { html body.panel-open #map3d.r28-browse .maplibregl-ctrl-top-left { left: 10px; } }
+#navMode #map3d .maplibregl-ctrl-top-left { display: none !important; }
+/* your own car replaces the round puck in 3D */
+html body.r28-car3d #map3d .maplibregl-marker .locator,
+html body.r28-car3d #map3d .maplibregl-marker .wl-car3d { opacity: 0 !important; }
+/* the old "Realistic 3D" button that could never reach the app */
+#wlGoogle3dToggle, #wlGoogle3dHost, #wlGoogle3dStatus { display: none !important; }
+
+#r28ViewCtl {
+  position: fixed; right: 16px; bottom: var(--r28-ctl-bottom, 96px); z-index: 4150;
+  display: flex; gap: 2px; padding: 3px; border-radius: 999px;
+  background: var(--surface, rgba(15, 22, 30, .92)); border: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+#r28ViewCtl button {
+  height: 36px; min-width: 46px; padding: 0 13px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text, #dfe8ee);
+  font: 700 13.5px/1 var(--font-ui, system-ui, sans-serif); cursor: pointer; white-space: nowrap;
+}
+#r28ViewCtl button:hover { color: var(--signal, #4d9bff); }
+#r28ViewCtl button.on { background: var(--signal, #4d9bff); color: var(--signal-ink, #04121f); }
+html body.navigating #r28ViewCtl { display: none !important; }
+#navMenu button.on { color: var(--signal, #4d9bff) !important; }
+
+/* ---------- 9  the ten closest, right above Recenter ---------- */
+html body #poiPanel.r28-poi {
+  position: fixed !important; top: auto !important; left: auto !important;
+  right: var(--r28-poi-right, 12px) !important; bottom: var(--r28-poi-bottom, 96px) !important;
+  width: min(292px, calc(100vw - 24px)) !important; max-width: none !important; min-width: 0 !important;
+  max-height: var(--r28-poi-maxh, 40vh) !important;
+  margin: 0 !important; padding: 0 !important;
+  display: flex !important; flex-direction: column !important; overflow: hidden !important;
+  z-index: 4960 !important;
+  border-radius: 14px !important;
+  background: rgba(10, 16, 23, .9) !important; color: #eef4f8 !important;
+  border: 1px solid rgba(255, 255, 255, .14) !important;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .35) !important;
+  backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important;
+  transform: none !important;
+}
+html body #poiPanel.r28-poi.hidden { display: none !important; }
+html body.light-mode #poiPanel.r28-poi { background: rgba(255, 255, 255, .95) !important; color: #13212b !important; border-color: rgba(0, 0, 0, .1) !important; }
+#poiPanel.r28-poi .panel-title { padding: 9px 10px 7px 12px !important; margin: 0 !important; font-size: .82rem !important; display: flex; align-items: center; gap: 8px; }
+#poiPanel.r28-poi .panel-title .icon-act { margin-left: auto; }
+#poiPanel.r28-poi .panel-empty, #poiPanel.r28-poi .panel-item { padding: 8px 12px !important; font-size: .8rem !important; }
+#poiPanel.r28-poi .modal-actions { padding: 0 10px 10px !important; }
+.r28-poi-head { display: flex; align-items: center; gap: 8px; padding: 8px 6px 7px 12px; border-bottom: 1px solid rgba(127, 140, 150, .22); flex: 0 0 auto; }
+.r28-poi-title { font-weight: 800; font-size: .9rem; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r28-poi-count { font-size: .7rem; opacity: .72; white-space: nowrap; font-weight: 600; }
+.r28-poi-head .icon-act { width: 28px !important; height: 28px !important; min-width: 28px !important; font-size: .8rem !important; }
+.r28-poi-list { overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 3px 4px 5px; overscroll-behavior: contain; }
+.r28-poi-row { display: flex; align-items: center; gap: 2px; }
+.r28-poi-open {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 6px;
+  border: 0; background: transparent; color: inherit; border-radius: 9px; cursor: pointer; text-align: left; font: inherit;
+}
+.r28-poi-open:hover, .r28-poi-open:focus-visible { background: rgba(127, 160, 190, .14); outline: none; }
+.r28-poi-ico { width: 26px; height: 26px; flex: 0 0 26px; display: grid; place-items: center; overflow: hidden; border-radius: 7px; }
+.r28-poi-ico > * { max-width: 26px !important; max-height: 26px !important; }
+.r28-poi-ico img { width: 26px !important; height: 26px !important; object-fit: contain; }
+.r28-poi-emoji { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 14px; }
+.r28-poi-name { flex: 1; min-width: 0; font-size: .85rem; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r28-poi-dist { flex: 0 0 auto; font-size: .78rem; font-weight: 800; color: #6cc8ff; text-align: right; line-height: 1.05; }
+html body.light-mode .r28-poi-dist { color: #0b67c2; }
+.r28-poi-dist small { display: block; font-size: .62rem; font-weight: 600; opacity: .75; color: inherit; text-transform: none; }
+.r28-poi-add {
+  width: 28px; height: 28px; flex: 0 0 28px; border-radius: 50%;
+  border: 1px solid rgba(127, 160, 190, .4); background: transparent; color: inherit;
+  font: 700 1rem/1 var(--font-ui, sans-serif); cursor: pointer;
+}
+.r28-poi-add:hover { border-color: var(--signal, #4d9bff); color: var(--signal, #4d9bff); }
+.r28-poi-empty { padding: 10px 12px; font-size: .8rem; opacity: .8; }
+/* the right-hand rail steps aside while the list is open */
+html body.navigating.r28-poi-open #wlRightRail { visibility: hidden !important; }
+
+/* ---------- 10  my car ---------- */
+.r28-locator .locator-rotor svg.r28-topcar { width: 30px; height: 46px; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .45)); }
+.r28-modal .wl-modal-inner { width: min(94vw, 460px); }
+.r28-mt { display: flex; align-items: center; gap: 8px; }
+.r28-mt .icon-act { margin-left: auto; }
+.r28-car-prev { display: grid; place-items: center; min-height: 128px; border-radius: 14px; margin-top: 6px;
+  background: radial-gradient(120% 90% at 50% 100%, rgba(var(--signal-rgb, 77, 155, 255), .16), transparent 70%), rgba(127, 140, 150, .08); }
+.r28-car-prev svg { max-width: 100%; height: auto; }
+.r28-car-name { text-align: center; font-weight: 800; font-size: 1.05rem; margin-top: 6px; color: var(--text-bright); }
+.r28-select { width: 100%; box-sizing: border-box; height: 44px; border-radius: 10px; border: 1px solid var(--line-soft); background: var(--field-bg, transparent); color: var(--text); padding: 0 10px; font: 600 .95rem var(--font-ui); }
+.r28-select option, .r28-select optgroup { color: #111; }
+.r28-paints { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.r28-paints button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .5); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); cursor: pointer; padding: 0; }
+.r28-paints button.on { box-shadow: 0 0 0 3px var(--signal, #4d9bff); }
+.r28-paint-custom { width: 30px; height: 30px; border-radius: 50%; overflow: hidden; display: inline-grid; place-items: center; margin: 0 !important;
+  background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); box-shadow: 0 0 0 1px rgba(0, 0, 0, .35); cursor: pointer; }
+.r28-paint-custom input { opacity: 0; width: 30px; height: 30px; cursor: pointer; border: 0; padding: 0; }
+.r28-profile-car { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 10px; border: 1px solid var(--line-soft); border-radius: 12px; }
+.r28-pc-car { flex: 0 0 auto; display: grid; place-items: center; }
+.r28-pc-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.r28-pc-txt small { font-size: .7rem; color: var(--text-faint); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.r28-pc-txt b { font-size: .95rem; color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r28-profile-car button { border: 1px solid var(--line-soft); background: transparent; color: var(--text); border-radius: 999px; padding: 6px 11px; font: 700 .8rem var(--font-ui); cursor: pointer; white-space: nowrap; }
+
+/* ---------- 11  family ---------- */
+.r28-sec { margin: 16px 0 8px; font-size: .72rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: var(--text-faint); }
+.r28-crew { display: flex; flex-wrap: wrap; gap: 8px; }
+.r28-mem { display: flex; align-items: center; gap: 7px; padding: 4px 6px 4px 4px; border: 1px solid var(--line-soft); border-radius: 999px; font-weight: 700; font-size: .88rem; color: var(--text-bright); }
+.r28-x { width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(127, 140, 150, .18); color: var(--text); cursor: pointer; font-size: .7rem; }
+.r28-empty { font-size: .84rem; color: var(--text-faint); padding: 4px 0; }
+.r28-addmem { margin-top: 10px; border: 1px dashed var(--line-soft); border-radius: 12px; padding: 8px 10px; }
+.r28-addmem summary { cursor: pointer; font-weight: 700; color: var(--signal); font-size: .9rem; }
+.r28-avgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; margin-top: 10px; }
+.r28-avgrid button { border: 2px solid transparent; background: transparent; border-radius: 50%; padding: 1px; cursor: pointer; display: grid; place-items: center; }
+.r28-avgrid button.on { border-color: var(--signal, #4d9bff); }
+.r28-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.r28-row input { flex: 1 1 160px; min-width: 0; height: 40px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line-soft); background: var(--field-bg, transparent); color: var(--text); padding: 0 10px; font: 500 .95rem var(--font-ui); }
+.r28-row > button { height: 40px; border-radius: 10px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); padding: 0 14px; font: 700 .88rem var(--font-ui); cursor: pointer; }
+.r28-rings { display: flex; gap: 6px; }
+.r28-rings button { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.r28-rings button.on { border-color: #fff; box-shadow: 0 0 0 2px var(--signal, #4d9bff); }
+.r28-primary { margin-top: 10px; width: 100%; height: 42px; border: 0; border-radius: 999px; background: var(--signal, #4d9bff); color: var(--signal-ink, #04121f); font: 800 .95rem var(--font-ui); cursor: pointer; }
+.r28-place-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.r28-place-btns button { height: 42px; border-radius: 10px; border: 1px solid var(--line-soft); background: rgba(var(--signal-rgb, 77, 155, 255), .08); color: var(--text); font: 700 .88rem var(--font-ui); cursor: pointer; }
+.r28-place-res { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.r28-place-res button { text-align: left; border: 1px solid var(--line-soft); background: transparent; color: var(--text); border-radius: 10px; padding: 7px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.r28-place-res button b { font-size: .88rem; color: var(--text-bright); }
+.r28-place-res button span { font-size: .74rem; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.r28-pinlist { display: flex; flex-direction: column; gap: 6px; }
+.r28-pinrow { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 1px solid var(--line-soft); border-radius: 12px; }
+.r28-pr-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; font-size: .84rem; color: var(--text); }
+.r28-pr-txt b { font-size: .88rem; color: var(--text-bright); }
+.r28-pr-txt small { font-size: .68rem; color: var(--text-faint); }
+.r28-pinrow > button:not(.r28-x) { border: 0; background: transparent; cursor: pointer; font-size: 1rem; }
+/* avatars on the map */
+.r28-pin { position: relative; width: 40px; height: 40px; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .4)); cursor: default; }
+.r28-pin-av { display: block; width: 40px; height: 40px; }
+.r28-pin-av svg { display: block; }
+.r28-pin::after { content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #fff; border-bottom: 0; }
+.r28-pin.road .r28-pin-av svg circle:first-child { stroke: #ffe05a; stroke-width: 3; }
+.r28-pin-lbl {
+  position: absolute; left: 44px; top: 4px; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(10, 16, 23, .86); color: #fff; border-radius: 8px; padding: 3px 8px; font: 600 11.5px/1.25 var(--font-ui, sans-serif);
+  display: flex; flex-direction: column;
+}
+.r28-pin-lbl b { font-size: 12px; font-weight: 800; }
+.r28-pin.r28-hi { animation: r28Hop 1.2s ease 2; }
+@keyframes r28Hop { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-10px) scale(1.12); } 60% { transform: translateY(0); } }
+#r28Banner {
+  position: fixed; left: 50%; top: 14px; transform: translate(-50%, -140%); z-index: 9800;
+  display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 10px; border-radius: 999px;
+  background: rgba(10, 16, 23, .94); color: #fff; box-shadow: 0 10px 28px rgba(0, 0, 0, .4); font: 600 .9rem var(--font-ui, sans-serif);
+  transition: transform .25s ease; max-width: calc(100vw - 24px);
+}
+#r28Banner.show { transform: translate(-50%, 0); }
+#r28Banner button { border: 0; border-radius: 999px; background: #fff; color: #111; padding: 7px 13px; font-weight: 800; cursor: pointer; }
+.r28-bn-av { flex: 0 0 auto; display: grid; }
+html body.r28-placing #map, html body.r28-placing #map3d canvas { cursor: crosshair !important; }
+#r28PinSheet {
+  position: fixed; left: 50%; bottom: 18px; transform: translate(-50%, 140%); z-index: 9810;
+  width: min(420px, calc(100vw - 20px)); box-sizing: border-box; padding: 12px; border-radius: 16px;
+  background: var(--surface-solid, #111b24); color: var(--text, #e6eef3); border: 1px solid var(--line-soft, rgba(255, 255, 255, .12));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .45); transition: transform .25s ease;
+}
+#r28PinSheet.show { transform: translate(-50%, 0); }
+.r28-ps-top { display: flex; gap: 10px; align-items: flex-start; }
+.r28-ps-av { flex: 0 0 auto; display: grid; }
+.r28-ps-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.r28-ps-main input { height: 40px; box-sizing: border-box; border-radius: 10px; border: 1px solid var(--line-soft); background: var(--field-bg, transparent); color: var(--text); padding: 0 10px; font: 600 .95rem var(--font-ui); width: 100%; }
+.r28-ps-kind { display: flex; gap: 6px; }
+.r28-ps-kind button { flex: 1; height: 34px; border-radius: 999px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); font: 700 .8rem var(--font-ui); cursor: pointer; }
+.r28-ps-kind button.on { background: var(--signal, #4d9bff); border-color: var(--signal, #4d9bff); color: var(--signal-ink, #04121f); }
+.r28-ps-sub { font-size: .76rem; color: var(--text-faint); }
+.r28-ps-btns { display: flex; gap: 8px; margin-top: 10px; }
+.r28-ps-btns button { flex: 1; height: 40px; border-radius: 999px; border: 1px solid var(--line-soft); background: transparent; color: var(--text); font: 800 .9rem var(--font-ui); cursor: pointer; }
+.r28-ps-btns button.primary { background: var(--signal, #4d9bff); border-color: var(--signal, #4d9bff); color: var(--signal-ink, #04121f); }
+#r28FamToast {
+  position: fixed; left: 50%; top: 16px; transform: translate(-50%, -160%); z-index: 9790;
+  display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 8px; border-radius: 999px;
+  background: rgba(10, 16, 23, .94); color: #fff; box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+  transition: transform .3s cubic-bezier(.22, 1, .36, 1); max-width: calc(100vw - 24px);
+}
+#r28FamToast.show { transform: translate(-50%, 0); }
+.r28-ft-txt { display: flex; flex-direction: column; font: 600 .92rem/1.3 var(--font-ui, sans-serif); min-width: 0; }
+.r28-ft-txt b { font-size: 1rem; }
+html body.navigating #r28FamToast { top: auto; bottom: calc(var(--wl27-bar-h, 64px) + 24px); transform: translate(-50%, 180%); }
+html body.navigating #r28FamToast.show { transform: translate(-50%, 0); }
+
+/* ---------- tidy-ups found while testing ---------- */
+/* a developer read-out from an earlier round sat on top of the speed dial */
+#wlBuildingDebug { display: none !important; }
+/* the directions panel's "Copy directions" label overflowed its button and
+   peeked in from the left edge while driving */
+#tpCopySteps { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; min-width: 0 !important; }
+html body.navigating #tripPanel, html body.navigating #tpToggle { visibility: hidden !important; }
+/* a logo that fails to load shows nothing rather than its alt text */
+.r28-poi-ico img { color: transparent !important; font-size: 0 !important; }
+html body.navigating #tripSheet .ts-instr { font-size: .92rem !important; line-height: 1.3 !important; }
+html body.navigating #tripSheet .ts-dist { font-size: 1.05rem !important; }
+html body.navigating #tripSheet .ts-eta { font-size: .76rem !important; }
+html body.navigating #tripSheet .ts-ico { font-size: 1.15rem !important; }
+html body.navigating #tripSheet #tsMore { font-size: .82rem !important; }
+</style>
 
 </body>
 </html>
