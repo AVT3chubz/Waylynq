@@ -6349,8 +6349,8 @@ body.navigating.light-mode #placeCard.wl-poi-detail-panel{background:rgba(242,24
 
 
 
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+
+
 
 
 
@@ -21447,7 +21447,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
        6  Blue route ahead never flickers or vanishes while driving
        7  Real 3D: vector 3D + terrain, and Google Photorealistic 3D Tiles
        8  3D is the default map; 2D stays one tap away
-       9  POIs: the 10 closest, in a small box right above Recenter
+       9  POIs: every result, closest first, in a small box above Recenter
       10  My car: pick the car you drive, shown in 3D and on the 2D map
       11  Family: avatars placed on roads and landmarks, announced on the way
      ====================================================================== */
@@ -21905,7 +21905,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       return (items || []).map((el) => {
         const m = at ? haversine(at, el) : (el.metersFromMe || 0);
         return { el: el, m: m };
-      }).sort((a, b) => a.m - b.m).slice(0, 10);
+      }).sort((a, b) => a.m - b.m);
     }
     function brandIcon(key, place) {
       const B = window.WayLynRound27 && window.WayLynRound27.Brand;
@@ -21935,7 +21935,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const at = here();
       panel.innerHTML =
         '<div class="r28-poi-head"><span class="r28-poi-title">' + (cfg.emoji || '') + ' ' + esc(cfg.label) + '</span>' +
-          '<span class="r28-poi-count">' + (top.length ? top.length + ' closest' : 'none') + '</span>' +
+          '<span class="r28-poi-count">' + (top.length ? top.length + ' nearby \u00b7 closest first' : 'none') + '</span>' +
           '<button class="icon-act" id="poiHide" type="button" title="Close" aria-label="Close">✕</button></div>' +
         '<div class="r28-poi-list">' +
         (top.length ? top.map((t, i) => {
@@ -21979,7 +21979,26 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
     const priorDrawPoi = drawPoi;
     drawPoi = function r28DrawPoi(key, items) {
-      return priorDrawPoi(key, closest10(items).map((t) => t.el));
+      const all = closest10(items).map((t) => t.el);
+      const out = priorDrawPoi(key, all);
+      /* the drawing underneath stops at 60 markers; the rest are added here */
+      if (all.length > 60) guard('extra poi markers', () => {
+        const cfg = POI[key] || { emoji: '\u2022', color: '--signal' };
+        const col = cssVar(cfg.color, '#4d9bff');
+        const layer = poiLayers[key];
+        all.slice(60).forEach((el) => {
+          const place = poiToPlace(key, el);
+          if (layer) L.marker([el.lat, el.lng], { icon: poiIcon(cfg.emoji, col) }).addTo(layer).on('click', () => showPlaceCard(place));
+          add3dPoi(key, el.lat, el.lng, cfg.emoji, col, '<div class="pp-name">' + esc(place.name) + '</div>');
+        });
+      });
+      return out;
+    };
+    /* Ask the map-data service for up to 300 places per category instead of 100. */
+    const priorOverpassFast = overpassFast;
+    overpassFast = function r29OverpassFast(query) {
+      if (typeof query === 'string') query = query.replace(/out center (\d+);/, (m, n) => (+n >= 60 && +n < 300 ? 'out center 300;' : m));
+      return priorOverpassFast.apply(this, [query].concat([].slice.call(arguments, 1)));
     };
 
     const priorClosePoi = closePoi;
@@ -22498,11 +22517,12 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
     const extra3d = { origin: null, held: null, user: null };
     let sceneSig = '', fitSig = '';
-    function marker3d(slot, ll, html, anchor) {
+    function marker3d(slot, ll, html, anchor, onDrag) {
       if (!ll) { if (extra3d[slot]) { extra3d[slot].remove(); extra3d[slot] = null; } return; }
       if (!extra3d[slot]) {
         const el = d.createElement('div'); el.innerHTML = html;
-        extra3d[slot] = new maplibregl.Marker({ element: el, anchor: anchor || 'center' }).setLngLat([ll.lng, ll.lat]).addTo(map3d);
+        extra3d[slot] = new maplibregl.Marker({ element: el, anchor: anchor || 'center', draggable: !!onDrag }).setLngLat([ll.lng, ll.lat]).addTo(map3d);
+        if (onDrag) extra3d[slot].on('dragend', () => { const p = extra3d[slot].getLngLat(); onDrag(p.lat, p.lng); });
       } else extra3d[slot].setLngLat([ll.lng, ll.lat]);
     }
     function alternates3d() {
@@ -22533,7 +22553,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           map3dMarkers.forEach((mk) => mk.remove()); map3dMarkers = [];
         }
         alternates3d();
-        marker3d('origin', r && originPlace && !/your location/i.test(originPlace.name || '') ? originPlace : null, '<div class="wl-pin origin"></div>');
+        marker3d('origin', r && originPlace ? originPlace : null, '<div class="wl-pin origin r29-drag" title="Drag to your exact start"></div>', 'center', (lat, lng) => R28.moveStart && R28.moveStart(lat, lng));
         marker3d('held', hp, '<div class="wl-pin"></div>');
       });
       let fitted = false;
@@ -22688,6 +22708,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       let viewer = null, tileset = null, starting = null, active = false;
       let routeEnt = null, destEnt = null, carBody = null, carCab = null, routeSig = '';
       let groundH = null, groundAt = null, groundBusy = false, lastCar = null, pinEnts = [];
+      let followTarget = null, followRange = 170, followPitch = -0.42;
       const key = () => { const k = String(window.WAYLYN_GOOGLE_MAPS_KEY || '').trim(); return k && !/PASTE_YOUR/i.test(k) ? k : ''; };
       const C = () => window.Cesium;
       function available() { return !!key() && !!window.Cesium; }
@@ -22710,12 +22731,21 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
             viewer = new Ce.Viewer(photoEl(), {
               animation: false, timeline: false, baseLayerPicker: false, geocoder: false, homeButton: false,
               sceneModePicker: false, navigationHelpButton: false, fullscreenButton: false, infoBox: false,
-              selectionIndicator: false, baseLayer: false, skyBox: false, requestRenderMode: false
+              selectionIndicator: false, baseLayer: false, skyBox: false, requestRenderMode: false,
+              useBrowserRecommendedResolution: false
             });
+            /* Sharp on a phone's high-density screen, and a scroll or pinch
+               zooms in properly instead of creeping. */
+            viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2);
+            try { viewer.scene.postProcessStages.fxaa.enabled = true; } catch (e) {}
+            const scc = viewer.scene.screenSpaceCameraController;
+            scc.zoomFactor = 12; scc.minimumZoomDistance = 12; scc.maximumZoomDistance = 2.2e7;
+            scc.inertiaZoom = 0.55; scc.enableCollisionDetection = true;
+            viewer.scene.canvas.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
             viewer.scene.globe.show = false;
             try { viewer.scene.skyAtmosphere.show = true; } catch (e) {}
             viewer.scene.backgroundColor = Ce.Color.fromCssColorString('#9cc9ec');
-            tileset = await Ce.Cesium3DTileset.fromUrl('https://tile.googleapis.com/v1/3dtiles/root.json?key=' + encodeURIComponent(key()), { showCreditsOnScreen: true, maximumScreenSpaceError: 12 });
+            tileset = await Ce.Cesium3DTileset.fromUrl('https://tile.googleapis.com/v1/3dtiles/root.json?key=' + encodeURIComponent(key()), { showCreditsOnScreen: true, maximumScreenSpaceError: 4, dynamicScreenSpaceError: false, foveatedScreenSpaceError: false, cacheBytes: 1536 * 1024 * 1024, maximumCacheOverflowBytes: 1024 * 1024 * 1024 });
             viewer.scene.primitives.add(tileset);
             wireClicks();
             after(true);
@@ -22738,7 +22768,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       function stop() {
         active = false;
         if (!viewer) return;
-        guard('photo release', () => { viewer.camera.lookAtTransform(C().Matrix4.IDENTITY); viewer.useDefaultRenderLoop = false; });
+        guard('photo release', () => { viewer.camera.lookAtTransform(C().Matrix4.IDENTITY); viewer.useDefaultRenderLoop = false; followTarget = null; });
       }
       function after(first) {
         if (!viewer || !active) return;
@@ -22748,7 +22778,9 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (!isNav()) {
           const c = map.getCenter();
           const mpp = 156543.034 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, map.getZoom());
-          flyTo(c.lat, c.lng, clamp(mpp * innerHeight * 0.9, 260, 2.5e6), first ? 0 : 1.2);
+          const range = mpp * innerHeight * 0.9;
+          /* open close enough to read houses; zoom out from there if wanted */
+          flyTo(c.lat, c.lng, map.getZoom() >= 11 ? clamp(range, 160, 650) : clamp(range, 650, 2.5e6), first ? 0 : 1.2);
         }
       }
       function flyTo(lat, lng, range, dur) {
@@ -22757,7 +22789,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         const doFly = (h) => guard('photo fly', () => {
           viewer.camera.lookAtTransform(Ce.Matrix4.IDENTITY);
           viewer.camera.flyToBoundingSphere(new Ce.BoundingSphere(Ce.Cartesian3.fromDegrees(lng, lat, h), 1), {
-            offset: new Ce.HeadingPitchRange(0, Ce.Math.toRadians(range > 20000 ? -80 : -42), range),
+            offset: new Ce.HeadingPitchRange(0, Ce.Math.toRadians(range > 20000 ? -80 : range > 1500 ? -50 : -34), range),
             duration: dur == null ? 1.2 : dur
           });
         });
@@ -22816,7 +22848,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
             destEnt = viewer.entities.add({
               position: Ce.Cartesian3.fromDegrees(destPlace.lng, destPlace.lat),
               billboard: { image: svgUrl(pinSVG()), verticalOrigin: Ce.VerticalOrigin.BOTTOM, heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-              label: { text: String(destPlace.name || destPlace.label || '').split(',')[0], font: '600 15px Inter, sans-serif', fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -46), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+              label: { text: String(destPlace.name || destPlace.label || '').split(',')[0], font: '600 15px system-ui, -apple-system, Segoe UI, Roboto, sans-serif', scaleByDistance: new Ce.NearFarScalar(120, 1.6, 6000, 0.7), fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -46), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
             });
           }
         });
@@ -22853,7 +22885,14 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           }
           sampleGround(lat, lng);
           if (isNav() && navFollow) {
-            viewer.camera.lookAt(Ce.Cartesian3.fromDegrees(lng, lat, gh + 2), new Ce.HeadingPitchRange(Ce.Math.toRadians(hdg), Ce.Math.toRadians(-24), 170));
+            /* keep whatever zoom and tilt the driver scrolled or pinched to */
+            if (followTarget) {
+              const dist = Ce.Cartesian3.distance(viewer.camera.positionWC, followTarget);
+              if (isFinite(dist) && dist > 5) followRange = clamp(dist, 18, 4000);
+              if (isFinite(viewer.camera.pitch)) followPitch = clamp(viewer.camera.pitch, Ce.Math.toRadians(-89), Ce.Math.toRadians(-8));
+            }
+            followTarget = Ce.Cartesian3.fromDegrees(lng, lat, gh + 2);
+            viewer.camera.lookAt(followTarget, new Ce.HeadingPitchRange(Ce.Math.toRadians(hdg), followPitch, followRange));
           }
         });
       }
@@ -22866,7 +22905,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           pinEnts.push(viewer.entities.add({
             position: Ce.Cartesian3.fromDegrees(it.pin.lng, it.pin.lat),
             billboard: { image: svgUrl(avatarSVG(it.member.avatar, it.member.ring, 56)), width: 48, height: 48, verticalOrigin: Ce.VerticalOrigin.BOTTOM, heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-            label: { text: it.member.name + ' · ' + it.pin.label, font: '600 14px Inter, sans-serif', fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -54), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
+            label: { text: it.member.name + ' · ' + it.pin.label, font: '600 14px system-ui, -apple-system, Segoe UI, Roboto, sans-serif', scaleByDistance: new Ce.NearFarScalar(120, 1.6, 6000, 0.7), fillColor: Ce.Color.WHITE, outlineColor: Ce.Color.BLACK, outlineWidth: 3, style: Ce.LabelStyle.FILL_AND_OUTLINE, verticalOrigin: Ce.VerticalOrigin.BOTTOM, pixelOffset: new Ce.Cartesian2(0, -54), heightReference: Ce.HeightReference.CLAMP_TO_GROUND, disableDepthTestDistance: Number.POSITIVE_INFINITY }
           }));
         }));
       }
@@ -23440,6 +23479,177 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
     function onLeafletClickPlacing(e) { if (FAM.placing && e && e.latlng) FAM.placeAt(e.latlng.lat, e.latlng.lng); }
 
+
+    /* ====================================================================
+       ROUND 29
+         a  Your exact position, not a guess. The app's own location watch
+            took every fix it was given, so a coarse Wi-Fi or cell fix
+            (hundreds of metres out) replaced a precise GPS one and routes
+            started a street or two away. Now a separate high-accuracy watch
+            keeps the best recent fix, repairs the live position when a
+            coarse one overwrites it, and a route waits up to a few seconds
+            for a fix within 20 m. The start pin can be dragged to the exact
+            spot on both maps, and the route re-plans from there.
+         b  Place names grow as you zoom in, on the 2D and 3D maps and on
+            WayLynq's own markers.
+         c  One fixed colour scheme for every menu, panel and button — the
+            same by day and by night — in the device's own system font.
+    ==================================================================== */
+    const GPS = { best: null, waiters: [], watch: null };
+    R28.gps = GPS;
+    function gpsAccept(p) {
+      if (!p || !p.coords) return;
+      const f = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy || 9999, at: Date.now() };
+      const b = GPS.best;
+      const age = b ? Date.now() - b.at : Infinity;
+      /* A fix is taken if it is at least nearly as good as the one held, or
+         the held one has gone stale. A coarse network fix arriving while a
+         precise GPS fix is fresh is ignored. */
+      const take = !b || f.acc <= Math.max(30, b.acc * 1.5) || age > 15000 || (f.acc < 120 && haversine(b, f) > b.acc * 4 + 150);
+      if (!take) return;
+      GPS.best = f;
+      repairLive();
+      for (let i = GPS.waiters.length - 1; i >= 0; i--) {
+        const w = GPS.waiters[i];
+        if (f.acc <= w.want) { GPS.waiters.splice(i, 1); w.res(f); }
+      }
+    }
+    function repairLive() {
+      const b = GPS.best;
+      if (!b || Date.now() - b.at > 15000 || navActive()) return;
+      const worse = lastAccuracy == null || lastAccuracy > b.acc * 1.5 || !livePosition;
+      if (!worse) return;
+      if (livePosition && haversine(livePosition, b) <= Math.max(8, b.acc * 0.5)) return;
+      livePosition = { lat: b.lat, lng: b.lng };
+      lastAccuracy = b.acc; lastFixAt = Date.now();
+      guard('live marker', () => {
+        if (liveMarker) liveMarker.setLatLng([b.lat, b.lng]);
+        else liveMarker = L.marker([b.lat, b.lng], { icon: locatorIcon(headingDeg || 0) }).addTo(map);
+      });
+    }
+    function startGps() {
+      if (!navigator.geolocation || GPS.watch != null) return;
+      GPS.watch = navigator.geolocation.watchPosition(gpsAccept, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      navigator.geolocation.getCurrentPosition(gpsAccept, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
+    }
+    function preciseFix(maxMs, want) {
+      want = want || 20;
+      const b = GPS.best;
+      if (b && Date.now() - b.at < 20000 && b.acc <= want) return Promise.resolve(b);
+      return new Promise((res) => {
+        const w = { want: want, res: res };
+        GPS.waiters.push(w);
+        guard('one-shot fix', () => navigator.geolocation.getCurrentPosition(gpsAccept, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: maxMs }));
+        setTimeout(() => {
+          const i = GPS.waiters.indexOf(w);
+          if (i < 0) return;
+          GPS.waiters.splice(i, 1);
+          const best = GPS.best;
+          res(best && Date.now() - best.at < 60000 ? best : null);
+        }, maxMs);
+      });
+    }
+    R28.preciseFix = preciseFix;
+
+    const priorResolveOrigin = resolveOrigin;
+    resolveOrigin = async function r29ResolveOrigin() {
+      if (!navigator.geolocation) return priorResolveOrigin();
+      startGps();
+      const ready = GPS.best && Date.now() - GPS.best.at < 20000 && GPS.best.acc <= 20;
+      if (!ready) showBubble('Getting your exact location…');
+      const f = await preciseFix(6500, 20);
+      if (!f) return priorResolveOrigin();
+      livePosition = { lat: f.lat, lng: f.lng };
+      lastAccuracy = f.acc; lastFixAt = Date.now();
+      guard('live marker', () => { if (liveMarker) liveMarker.setLatLng([f.lat, f.lng]); });
+      return { lat: f.lat, lng: f.lng, label: 'Your location', name: 'Your location', accuracy: f.acc };
+    };
+
+    let startNoteFor = '';
+    async function moveStart(lat, lng) {
+      if (!destPlace) return;
+      const from = { lat: lat, lng: lng, label: 'Your location', name: 'Your location', accuracy: 0, setByHand: true };
+      livePosition = { lat: lat, lng: lng }; lastAccuracy = 5; lastFixAt = Date.now();
+      GPS.best = { lat: lat, lng: lng, acc: 5, at: Date.now() };
+      guard('live marker', () => { if (liveMarker) liveMarker.setLatLng([lat, lng]); });
+      try { await planRoute(from, destPlace, modeSelect.value, 'adjust'); }
+      catch (e) { showBubble('No road route from that spot. Try a point on a street.'); }
+    }
+    R28.moveStart = moveStart;
+
+    const priorPlanRoute = planRoute;
+    planRoute = async function r29PlanRoute(from, to, mode, src) {
+      const out = await priorPlanRoute.apply(this, arguments);
+      guard('start pin', () => {
+        if (!startMarker) return;
+        if (startMarker.dragging) startMarker.dragging.enable();
+        startMarker.setZIndexOffset(900);
+        startMarker.on('dragend', () => { const ll = startMarker.getLatLng(); moveStart(ll.lat, ll.lng); });
+      });
+      if (from && /your location/i.test(from.name || from.label || '')) {
+        const key = from.lat.toFixed(5) + ',' + from.lng.toFixed(5);
+        if (key !== startNoteFor) {
+          startNoteFor = key;
+          reverseGeocode(from.lat, from.lng).then((g) => {
+            const where = g && g.label && !/^-?\d/.test(g.label) ? g.label.split(',').slice(0, 2).join(',') : 'your position';
+            const acc = from.setByHand ? 'set by you' : (from.accuracy ? '±' + Math.round(from.accuracy) + ' m' : '');
+            showBubble('Starting at ' + where + (acc ? ' (' + acc + ')' : '') + '. Not right? Drag the start pin to the exact spot.');
+          }).catch(() => {});
+        }
+      }
+      return out;
+    };
+
+    /* ---- b: names grow with zoom ---- */
+    const Z_POI = ['interpolate', ['linear'], ['zoom'], 12, 10.5, 14, 11.5, 15, 12.5, 16, 13.5, 17, 15, 18, 17, 19, 19.5, 20, 22];
+    const Z_ROAD = ['interpolate', ['linear'], ['zoom'], 11, 9.5, 14, 10.5, 16, 11.5, 17, 12.5, 18, 14, 19, 16, 20, 18];
+    const Z_PLACE = ['interpolate', ['linear'], ['zoom'], 3, 11, 6, 12.5, 9, 13.5, 11, 14.5, 13, 15.5, 15, 16.5, 17, 18.5, 19, 21];
+    function scaleLabels(m) {
+      if (!m || !m.getStyle) return;
+      const st = guard('style', () => m.getStyle(), null);
+      if (!st || !st.layers) return;
+      const sig = st.layers.length + ':' + (st.layers[0] && st.layers[0].id);
+      if (m.__r29lbl === sig) return;
+      let done = 0;
+      st.layers.forEach((l) => {
+        if (l.type !== 'symbol' || !l.layout || !l.layout['text-field']) return;
+        const idl = (l.id + ' ' + (l['source-layer'] || '')).toLowerCase();
+        if (/^(wl-|r2\d|r1\d)/.test(l.id) && l.id !== 'wl-pill-labels') return;
+        const v = /transportation|road|street|highway|pill|motorway|shield/.test(idl) ? Z_ROAD
+          : /place|city|town|village|suburb|neighbo|country|state|continent/.test(idl) ? Z_PLACE : Z_POI;
+        try { m.setLayoutProperty(l.id, 'text-size', v); done++; } catch (e) {}
+      });
+      m.__r29lbl = sig;
+      return done;
+    }
+    function labelTick() {
+      if (map3d && map3dReady) scaleLabels(map3d);
+      const inner = tileLayer && (tileLayer.getMaplibreMap ? guard('inner', () => tileLayer.getMaplibreMap(), null) : (tileLayer.getMapboxMap ? guard('inner', () => tileLayer.getMapboxMap(), null) : null));
+      if (inner && inner.isStyleLoaded && guard('loaded', () => inner.isStyleLoaded(), false)) scaleLabels(inner);
+    }
+    let zsRaf = 0;
+    function zoomScale() {
+      if (zsRaf) return;
+      zsRaf = requestAnimationFrame(() => {
+        zsRaf = 0;
+        const z = (R28.view === '3d' && map3d && !isNav()) ? map3d.getZoom() + 1 : map.getZoom();
+        d.documentElement.style.setProperty('--r29-zs', String(Math.round(clamp(0.85 + (z - 14) * 0.15, 0.85, 1.75) * 100) / 100));
+      });
+    }
+
+    /* ---- c: one fixed look ---- */
+    function fixedUi() { if (!d.body.classList.contains('light-mode')) d.body.classList.add('light-mode'); }
+
+    function r29Boot() {
+      startGps();
+      fixedUi();
+      new MutationObserver(fixedUi).observe(d.body, { attributes: true, attributeFilter: ['class'] });
+      map.on('zoomend', zoomScale);
+      map.on('zoom', zoomScale);
+      setInterval(() => { guard('labels', labelTick); repairLive(); if (map3d && !map3d.__r29z) { map3d.__r29z = true; map3d.on('zoom', zoomScale); map3d.on('style.load', () => { map3d.__r29lbl = ''; }); } }, 900);
+      zoomScale();
+    }
+
     function boot() {
       guard('ai dock', tidyAiDock);
       guard('poi home', poiHome);
@@ -23447,6 +23657,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       guard('dialogs', buildModals);
       guard('old google', neutralizeOldGoogle);
       guard('pins', FAM.render);
+      guard('round 29', r29Boot);
       new MutationObserver(onBodyClass).observe(d.body, { attributes: true, attributeFilter: ['class'] });
       addEventListener('resize', scheduleLayout, { passive: true });
       if (window.visualViewport) visualViewport.addEventListener('resize', scheduleLayout, { passive: true });
@@ -29426,6 +29637,122 @@ html body.navigating #tripSheet .ts-dist { font-size: 1.05rem !important; }
 html body.navigating #tripSheet .ts-eta { font-size: .76rem !important; }
 html body.navigating #tripSheet .ts-ico { font-size: 1.15rem !important; }
 html body.navigating #tripSheet #tsMore { font-size: .82rem !important; }
+
+/* ======================================================================
+   ROUND 29 — one fixed look, the device's own font, labels that grow
+   ====================================================================== */
+:root, html body, html body.light-mode {
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  --font-num: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  --font-semi: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  /* the same palette day and night */
+  --surface: #ffffff !important; --surface-2: #f6f8fa !important; --surface-solid: #ffffff !important; --sheet-bg: #ffffff !important;
+  --text: #1f2328 !important; --text-bright: #0d1117 !important; --text-dim: #4b5563 !important; --text-faint: #6b7280 !important;
+  --line: rgba(26, 115, 232, .35) !important; --line-soft: #d0d7de !important; --field-bg: #f6f8fa !important;
+  --signal: #1a73e8 !important; --signal-rgb: 26, 115, 232 !important; --signal-ink: #ffffff !important;
+  --glass-blur: 0px !important;
+  --shadow: 0 4px 16px rgba(0, 0, 0, .22) !important;
+}
+html body, html body *:not(.cesium-credit-text):not(.cesium-credit-textContainer) {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+  letter-spacing: normal;
+}
+html body .num, html body #turnDistance, html body .nb-stat b, html body .speed-dial b { font-variant-numeric: tabular-nums; }
+
+/* menus, buttons and panels: solid white, dark text, a clear edge — so
+   they read on a dark map, a light map, satellite and photoreal alike */
+html body #navMenu, html body #wlMenu, html body #controls .ctl, html body #navTopRight .nav-btn,
+html body #navMenuToggle, html body #wlExitRef, html body #r28NavView, html body #navBar,
+html body .speed-dial, html body #fabStack .fab:not(.warn), html body #r28ViewCtl,
+html body #dock .dock-card, html body #quick-rail, html body.navigating #dock, html body.navigating #dock.nav-shift,
+html body #wl27DockToggle, html body .dock-arrow, html body #poiPanel.r28-poi, html body .wl-panel,
+html body #placeCard, html body .wl-modal-inner, html body #aiDock, html body #aiOpen, html body #stopSheet,
+html body #bubble .bubble-inner, html body #musicDock, html body #tripSheet .ts-inner, html body #tripSheet .ts-head,
+html body #r28PinSheet, html body #suggestions, html body #consoleInner, html body #moodToast, html body #resumeBar {
+  background: #ffffff !important; background-image: none !important;
+  color: #1f2328 !important;
+  border-color: #d0d7de !important;
+  backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+html body #navMenu, html body #wlMenu, html body #controls .ctl, html body #navTopRight .nav-btn, html body #navMenuToggle,
+html body #wlExitRef, html body #navBar, html body .speed-dial, html body #fabStack .fab:not(.warn), html body #r28ViewCtl,
+html body #dock .dock-card, html body.navigating #dock, html body #wl27DockToggle, html body #poiPanel.r28-poi {
+  border: 1px solid #d0d7de !important; box-shadow: 0 4px 16px rgba(0, 0, 0, .24) !important;
+}
+html body #navMenu button, html body #wlMenu a, html body #wlMenu button, html body #quick-rail .qr-btn,
+html body #quick-rail .qr-label, html body #navTopRight .nav-btn *, html body #controls .ctl *, html body #navBar .nb-stat span,
+html body #wl27DockToggle *, html body .dock-arrow { color: #1f2328 !important; }
+html body #navMenu button:hover, html body #quick-rail .qr-btn:hover, html body #wlMenu a:hover { background: #eef4fd !important; color: #1a73e8 !important; }
+html body #navMenu button.on, html body #quick-rail .qr-btn.active, html body #navMenu #navExit { color: #1a73e8 !important; }
+html body #navMenu #navExit { color: #c62828 !important; }
+html body #navMenu .menu-sep, html body #quick-rail .qr-divider { background: #d0d7de !important; }
+html body #navBar .nb-stat b { color: #0d1117 !important; }
+html body #navBar .nb-stat.nb-wide b, html body #remainMin { color: #137333 !important; }
+html body .speed-dial b { color: #0d1117 !important; }
+html body .speed-dial small { color: #4b5563 !important; }
+html body .speed-dial.over { background: #fdecea !important; border-color: #c62828 !important; }
+html body #r28ViewCtl button { color: #1f2328 !important; }
+html body #r28ViewCtl button.on { background: #1a73e8 !important; color: #ffffff !important; }
+html body #poiPanel.r28-poi .r28-poi-dist { color: #1a73e8 !important; }
+html body #poiPanel.r28-poi .r28-poi-head { border-bottom-color: #d0d7de !important; }
+html body #aiInput, html body #searchInput, html body .r28-select, html body .r28-row input, html body .r28-ps-main input {
+  background: #f6f8fa !important; color: #1f2328 !important; border-color: #d0d7de !important;
+}
+html body .ai-go, html body .r28-primary, html body .ai-foot button.go, html body #tpGo:not(:disabled) { background: #1a73e8 !important; color: #ffffff !important; }
+html body #bubble .bubble-inner, html body #bubble #bubbleText { color: #1f2328 !important; }
+/* the pins' name tags and the family toast keep a solid dark tag for contrast on any map */
+html body .r28-pin-lbl, html body #r28FamToast, html body #r28Banner { background: #1f2328 !important; color: #ffffff !important; }
+/* start pin can be dragged to the exact spot */
+.wl-pin.r29-drag { cursor: grab; box-shadow: 0 0 0 4px rgba(26, 115, 232, .25); }
+
+/* names on WayLynq's own markers grow as you zoom in */
+html body .wl-nav-poi-caption b { font-size: calc(12.5px * var(--r29-zs, 1)) !important; }
+html body .wl-nav-poi-caption span { font-size: calc(11px * var(--r29-zs, 1)) !important; }
+html body .r28-pin-lbl { font-size: calc(11.5px * var(--r29-zs, 1)) !important; max-width: calc(180px * var(--r29-zs, 1)) !important; }
+html body .r28-pin-lbl b { font-size: calc(12px * var(--r29-zs, 1)) !important; }
+html body .leaflet-tooltip, html body .stop-pin { font-size: calc(12px * var(--r29-zs, 1)); }
+
+/* Round 29b: older rounds pinned dark backgrounds on these with stronger
+   selectors, which left the new dark text on black. These win outright. */
+html body #navMenu#navMenu#navMenu,
+html body #navMenuToggle#navMenuToggle#navMenuToggle,
+html body #wlExitRef#wlExitRef#wlExitRef,
+html body #r28NavView#r28NavView#r28NavView,
+html body #navBar#navBar#navBar,
+html body #speedDial#speedDial#speedDial,
+html body #wl27DockToggle#wl27DockToggle#wl27DockToggle,
+html body #poiPanel#poiPanel#poiPanel,
+html body #r28ViewCtl#r28ViewCtl#r28ViewCtl,
+html body #dock#dock#dock,
+html body #navAlertsBtn#navAlertsBtn#navAlertsBtn,
+html body #navVoiceBtn#navVoiceBtn#navVoiceBtn,
+html body #navNorthBtn#navNorthBtn#navNorthBtn,
+html body #navTopRight#navTopRight#navTopRight .nav-btn,
+html body #fabStack#fabStack#fabStack .fab:not(.warn),
+html body #quick-rail#quick-rail#quick-rail {
+  background: #ffffff !important; background-color: #ffffff !important; background-image: none !important;
+  color: #1f2328 !important; opacity: 1 !important; filter: none !important;
+  border-color: #d0d7de !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+html body #navMenu#navMenu#navMenu *,
+html body #navBar#navBar#navBar *,
+html body #speedDial#speedDial#speedDial *,
+html body #navTopRight#navTopRight#navTopRight *,
+html body #wl27DockToggle#wl27DockToggle#wl27DockToggle *,
+html body #r28NavView#r28NavView#r28NavView *,
+html body #navAlertsBtn#navAlertsBtn#navAlertsBtn *,
+html body #navVoiceBtn#navVoiceBtn#navVoiceBtn *,
+html body #navNorthBtn#navNorthBtn#navNorthBtn *,
+html body #quick-rail#quick-rail#quick-rail * { color: #1f2328 !important; opacity: 1 !important; }
+html body #navMenu#navMenu#navMenu button:hover { background: #eef4fd !important; }
+html body #navMenu#navMenu#navMenu #navExit, html body #navMenu#navMenu#navMenu #navExit * { color: #c62828 !important; }
+html body #navMenu#navMenu#navMenu button.on, html body #navMenu#navMenu#navMenu button.on * { color: #1a73e8 !important; }
+html body #navMenu#navMenu#navMenu .menu-sep { background: #d0d7de !important; }
+html body #navBar#navBar#navBar #remainMin { color: #137333 !important; }
+html body #navBar#navBar#navBar .nb-stat span, html body #navBar#navBar#navBar .nb-stat span * { color: #4b5563 !important; }
+html body #r28ViewCtl#r28ViewCtl#r28ViewCtl button.on { background: #1a73e8 !important; color: #ffffff !important; }
+html body #navAlertsBtn#navAlertsBtn#navAlertsBtn .nav-btn-label { color: #b3261e !important; }
 </style>
 
 </body>
