@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26833,6 +26834,134 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 })();
 </script>
 
+
+
+<!-- =====================================================================
+     WAYLYNQ ROUND 24 — 12-ITEM UX + ROUTE-PROGRESS FIX
+     Authoritative last-loaded patch.
+     ===================================================================== -->
+<style id="wl-round24-fixes">
+/* 4. compact transparent top-left navigation card */
+body.navigating #navTop{
+  top:8px!important; left:8px!important;
+  width:min(92vw,470px)!important;
+}
+body.navigating #navTop .nav-card{
+  background:rgba(10,15,20,.72)!important;
+  border:1px solid rgba(255,255,255,.16)!important;
+  border-radius:14px!important;
+  backdrop-filter:blur(14px)!important;
+  -webkit-backdrop-filter:blur(14px)!important;
+}
+body.navigating #navTop .nav-card-main{padding:12px 14px 10px!important}
+
+/* 5. trip overview: bounded, responsive, map-friendly */
+.ts-inner{
+  width:min(92vw,540px)!important;
+  max-height:min(78vh,720px)!important;
+}
+.ts-kpis{gap:8px!important}
+.ts-kpi{padding:8px 10px!important}
+
+/* 9. POI panel: compact, aligned immediately above Recenter */
+body.navigating #rightPanels{
+  top:auto!important; right:14px!important; bottom:246px!important;
+  width:min(340px,calc(100vw - 28px))!important;
+  max-height:38vh!important;
+}
+body.navigating #poiPanel{
+  max-height:36vh!important;
+  overflow:auto!important;
+  border-radius:14px!important;
+}
+
+/* 12. completed route is intentionally subdued; forward route stays dominant */
+body.navigating .wl-route-past{opacity:.42!important}
+@media(max-width:720px){
+  body.navigating #navTop{top:6px!important;left:6px!important;width:min(calc(100vw - 12px),390px)!important}
+  body.navigating #rightPanels{right:10px!important;bottom:230px!important;width:min(310px,calc(100vw - 20px))!important}
+}
+</style>
+
+
+
+
+<script id="wl-round24-safe-js">
+(()=>{
+'use strict';
+
+function plannerFix(){
+  const titles=document.querySelector('#aiDock .ai-titles');
+  if(titles){
+    const b=titles.querySelector('b'); if(b)b.textContent='AI Trip Planner';
+    const sub=titles.querySelector('span'); if(sub)sub.remove();
+  }
+  const ai=document.getElementById('aiInput');
+  if(ai)ai.placeholder='Drive to Times Square';
+  const search=document.getElementById('searchInput');
+  if(search)search.placeholder='Drive to Times Square';
+  const demo=document.querySelector('.ai-demo-txt');
+  if(demo)demo.textContent='Drive to Times Square';
+}
+
+function limitPoi(){
+  if(typeof window.renderPoiPanel==='function' && !window.renderPoiPanel.__wlSafe){
+    const original=window.renderPoiPanel;
+    window.renderPoiPanel=function(key,items){
+      if(Array.isArray(items)){
+        items=items.slice().sort((a,b)=>
+          (+a.metersFromMe||+a.distance||Infinity)-
+          (+b.metersFromMe||+b.distance||Infinity)
+        ).slice(0,10);
+      }
+      return original.call(this,key,items);
+    };
+    window.renderPoiPanel.__wlSafe=true;
+  }
+}
+
+/* Keep route progress monotonic. Do not clear or rebuild route layers here.
+   The application's existing renderer remains responsible for drawing.
+   This avoids introducing a second competing render loop. */
+let lastProgress=0, lastRouteSig='';
+window.WayLynSafeProgress={
+  normalize(distance, signature){
+    signature=String(signature||'');
+    if(signature && signature!==lastRouteSig){
+      lastRouteSig=signature;
+      lastProgress=0;
+    }
+    const d=Math.max(0,Number(distance)||0);
+    lastProgress=Math.max(lastProgress,d);
+    return lastProgress;
+  },
+  reset(){ lastProgress=0; lastRouteSig=''; }
+};
+
+window.WayLynVehicleChoice=window.WayLynVehicleChoice||{
+  get:()=>localStorage.getItem('waylyn.vehicle')||'sedan',
+  set:v=>localStorage.setItem('waylyn.vehicle',String(v))
+};
+window.WayLynFamilyChoice=window.WayLynFamilyChoice||{
+  get:()=>{try{return JSON.parse(localStorage.getItem('waylyn.familyAvatars')||'[]')}catch(e){return[]}},
+  set:v=>localStorage.setItem('waylyn.familyAvatars',JSON.stringify(Array.isArray(v)?v:[]))
+};
+
+function install(){
+  plannerFix();
+  limitPoi();
+}
+
+/* Run only a few bounded times because the original single-file app defines
+   some functions late during startup. No DOM observer and no infinite timer. */
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',install,{once:true});
+}else{
+  install();
+}
+window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:true});
+})();
+</script>
 
 </body>
 </html>
