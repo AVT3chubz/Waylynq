@@ -8586,7 +8586,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
      file by design; restrict it to your domain in the TomTom dashboard
      rather than trying to hide it. Anything saved from Diagnostics wins,
      so it can still be swapped without editing the file. */
-  const TRAFFIC_KEY_BUILTIN = 'N432DNGgNbTTxSfDxYOIUDG36e4yLmcO';
+  const TRAFFIC_KEY_BUILTIN = 'eAfNGGmTcuNGGFQo5FyhVOwjUKWyWIr9';
   TRAFFIC_KEY = (function () { try { return JSON.parse(localStorage.getItem('waylyn:trafficKey')) || TRAFFIC_KEY_BUILTIN; } catch (e) { return TRAFFIC_KEY_BUILTIN; } })();
 
   const OFF_ROUTE_METERS = 45;         // drifted off the line
@@ -24873,10 +24873,25 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
        9  Places appear the moment a category is tapped: every category is
           fetched ahead of time in one request, kept on the device, drawn
           from there and refreshed underneath.
+
+     Second pass (31.1):
+       a  The limit sign is gone from the card. The limit is still found for
+          the road under the car, and ten over it turns the speed red, makes
+          it pulse, and says so.
+       b  The Brunswick Ave character is back: its street geometry is kept
+          on the device once found and the lookup is retried, so one busy
+          moment at the map-data service can no longer switch it off.
+       c  The settings menu is a compact panel that scrolls inside itself.
+       d  Every notice while driving appears in one stack at the top centre.
+       e  Places while driving come from one corridor fetched ahead along
+          the route, through a single request line, so they are the same
+          speed every time.
+       f  Road works, crashes, closures and hazards are also watched around
+          the car when no route is set, and the feed reports its own health.
      ====================================================================== */
   (() => {
     const d = document;
-    R31 = window.WayLynRound31 = { version: '31.0.0' };
+    R31 = window.WayLynRound31 = { version: '31.1.0' };
     const g = (label, fn, fb) => {
       try { const v = fn(); return v === undefined ? fb : v; }
       catch (e) { console.warn('WayLynq R31 · ' + label, e); return fb; }
@@ -25286,6 +25301,11 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       });
     }
     R31.carLast = carLast;
+    R31.debug = {
+      order: () => g('order', () => ((map3d && map3d.style && map3d.style._order) || []).slice(), []),
+      bubble: (t) => showBubble(t), mood: (a, b) => showMood('cheer', a, b),
+      nyah: () => ({ ways: brunswick ? brunswick.length : null, on: onBrunswick, shown: $('nyah').classList.contains('show') })
+    };
     /* The browse marker and the driving marker are two Leaflet markers; in
        2D while driving both were on the map. Only the driving one stays. */
     function oneCar() {
@@ -25361,17 +25381,21 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       g('hud', () => {
         const card = $('navCard'), main = card && card.querySelector('.nav-card-main');
         const dial = $('speedDial'), sign = $('limitSign'), cluster = $('speedCluster');
-        if (card && main && dial && sign) {
+        if (card && main && dial) {
           let row = $('r31SpeedRow');
           if (!row) { row = el('div', { id: 'r31SpeedRow' }); main.after(row); }
           if (dial.parentElement !== row) row.appendChild(dial);
-          if (sign.parentElement !== row) row.appendChild(sign);
-          if (!sign.querySelector('.r31-est')) sign.insertAdjacentHTML('beforeend', '<i class="r31-est">EST</i>');
-          const sm = sign.querySelector('small'); if (sm && sm.textContent !== 'SPEED LIMIT') sm.textContent = 'SPEED LIMIT';
-          if (cluster && !cluster.children.length) cluster.setAttribute('hidden', '');
+          /* The posted-limit sign no longer sits beside the speed. It stays
+             in its old, hidden holder; the limit is still worked out, and
+             what the driver sees of it is the warning when they are over. */
+          if (sign && cluster && sign.parentElement !== cluster) cluster.appendChild(sign);
+          if (!$('r31Slow')) row.appendChild(el('span', { id: 'r31Slow', hidden: '', role: 'status', 'aria-live': 'assertive' }, '<b>SLOW DOWN</b><i id="r31SlowLim"></i>'));
+          if (cluster) cluster.setAttribute('hidden', '');
         }
         compassBuild();
         hazardChipBuild();
+        notesBuild();
+        menuBuild();
         d.body.classList.add('r31-hud');
       });
     }
@@ -25385,6 +25409,8 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         root.setProperty('--r31-compass-top', top + 'px');
         const cr = c ? c.getBoundingClientRect() : null;
         root.setProperty('--r31-ctl-bottom', Math.round(cr && cr.height ? cr.bottom : top + 110) + 'px');
+        root.setProperty('--r31-menu-top', (trR && trR.height ? Math.round(trR.bottom) + 8 : 66) + 'px');
+        notesLayout(trR);
       });
     }
 
@@ -25420,7 +25446,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (pts.length < 2) return;
         const line = pts.map((p) => p.lat.toFixed(5) + ',' + p.lng.toFixed(5)).join(',');
         const q = '[out:json][timeout:12];way(around:28,' + line + ')["highway"~"' + ROADS + '"];out tags geom qt 500;';
-        const data = await overpassFast(q);
+        const data = await opq(q, 3);          // needed the moment the drive starts
         if (sig !== routeSig31()) return;
         const ways = (data.elements || []).filter((w) => w.geometry && w.geometry.length > 1 && w.tags).map((w) => ({
           id: w.id, tags: w.tags, pts: w.geometry.map((p) => [p.lat, p.lon])
@@ -25456,13 +25482,39 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const t = w.tags;
       const raw = t.maxspeed || (forward ? t['maxspeed:forward'] : t['maxspeed:backward']) || t['maxspeed:forward'] || t['maxspeed:backward'];
       const mph = parseMaxspeed(raw);
-      if (mph) return { mph: mph, est: false };
-      if (usStyle() && US_DEFAULT[t.highway]) return { mph: US_DEFAULT[t.highway], est: true };
+      /* Only a limit that is actually recorded for this road is used. A
+         typical figure for the road type is not good enough to tell a
+         driver to slow down by. */
+      return mph ? { mph: mph, est: false } : null;
+    }
+    /* Where OpenStreetMap has no limit for the road, TomTom is asked once
+       for that road (same key as the traffic feed) and the answer is kept. */
+    const TTL = { by: {}, busy: false, at: 0, calls: 0, dead: false };
+    function ttLimit(way, cur, hdg) {
+      const k = way ? 'w' + way.id : 'c' + cur.lat.toFixed(3) + ',' + cur.lng.toFixed(3);
+      if (k in TTL.by) return TTL.by[k];
+      if (!TRAFFIC_KEY || TTL.dead || TTL.busy || TTL.calls >= 400 || Date.now() - TTL.at < 6000) return null;
+      TTL.busy = true; TTL.at = Date.now(); TTL.calls++;
+      getJson('https://api.tomtom.com/search/2/reverseGeocode/' + cur.lat.toFixed(5) + ',' + cur.lng.toFixed(5) + '.json?key=' + encodeURIComponent(TRAFFIC_KEY) +
+        '&returnSpeedLimit=true&radius=40' + (isFinite(hdg) ? '&heading=' + (Math.round(hdg * 10) / 10) : ''), 6000)
+        .then((j) => {
+          const a = j && j.addresses && j.addresses[0] && j.addresses[0].address;
+          const m = a && /^\s*([\d.]+)\s*(MPH|KPH)\s*$/i.exec(a.speedLimit || '');
+          TTL.by[k] = m ? Math.round(m[2].toUpperCase() === 'MPH' ? +m[1] : +m[1] * 0.621371) : null;
+          if (TTL.by[k] && lastNavPos && navActive()) limMatch(lastNavPos);
+        })
+        .catch((e) => { if (/HTTP 40[13]/.test(String(e && e.message))) TTL.dead = true; })
+        .then(() => { TTL.busy = false; });
       return null;
     }
     function limMatch(cur) {
-      if (!LIM.ways.length) return;
       const hdg = POSE.hdg != null ? POSE.hdg : headingDeg;
+      if (!LIM.ways.length) {
+        /* the road list has not arrived (or could not be had): the second source alone */
+        const tt = ttLimit(null, cur, hdg);
+        if (tt) limShow({ mph: tt, est: false }, 't' + tt, null);
+        return;
+      }
       const onNow = navSteps.length ? (navSteps[Math.max(0, navStepIndex - 1)] || navSteps[0]) : null;
       const onRef = onNow ? String(onNow.ref || '').split(';')[0].trim().toUpperCase().replace(/\s+/g, ' ') : '';
       const onName = onNow ? String(onNow.name || '').trim().toLowerCase() : '';
@@ -25488,7 +25540,8 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (score < bestScore) { bestScore = score; best = w; bestFwd = fwd; named = isNamed; }
       }
       if (!best) return;
-      const lim = wayLimit(best, bestFwd);
+      let lim = wayLimit(best, bestFwd);
+      if (!lim) { const tt = ttLimit(best, cur, hdg); if (tt) lim = { mph: tt, est: false }; }
       const key = lim ? lim.mph + (lim.est ? 'e' : '') : 'none';
       /* The road the route says the car is on changes the sign at once. A
          road known only by position has to win twice running, so a ramp or
@@ -25525,8 +25578,40 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (stale && !(LIM.sig === sig && LIM.to >= tot - 5)) limFetch(along);
         limMatch(cur);
       },
-      state: () => ({ ways: LIM.ways.length, from: LIM.from, to: LIM.to, cur: LIM.cur, mph: speedLimitMph, us: usStyle() })
+      state: () => ({ ways: LIM.ways.length, from: LIM.from, to: LIM.to, cur: LIM.cur, mph: speedLimitMph, second: TTL.calls, over: OVER.on })
     };
+
+    /* ---- ten over: the speed goes red, pulses, and says so ----
+       The sign is no longer on screen, so the only time the limit shows
+       itself is when it is being broken. Two fixes in a row have to agree
+       before it starts, so one wild speed reading cannot set it off, and it
+       lets go a little below the line so it does not flicker at it. */
+    const OVER = { on: false, n: 0, said: 0, saidAt: 0 };
+    function overStop() {
+      OVER.on = false; OVER.n = 0; OVER.said = 0;
+      const dial = $('speedDial'), tag = $('r31Slow');
+      if (dial) dial.classList.remove('r31-fast');
+      if (tag) tag.setAttribute('hidden', '');
+    }
+    checkSpeeding = function r31CheckSpeeding(mph) {
+      const lim = navActive() ? speedLimitMph : null;
+      if (!lim) { if (OVER.on || OVER.n) overStop(); return; }
+      const over = mph - lim;
+      if (!OVER.on) {
+        if (over >= 10) { if (++OVER.n < 2) return; } else { OVER.n = 0; return; }
+        OVER.on = true; OVER.said = 0; OVER.saidAt = 0;
+        g('over bubble', () => showBubble('Slow down \u2014 ' + Math.round(mph) + ' in a ' + lim + ' mph zone'));
+      } else if (over < 7) { overStop(); return; }
+      const dial = $('speedDial'), tag = $('r31Slow');
+      if (dial && !dial.classList.contains('r31-fast')) dial.classList.add('r31-fast');
+      if (tag) { const t = $('r31SlowLim'); if (t) t.textContent = 'limit ' + lim; tag.removeAttribute('hidden'); }
+      /* said at once, then twice more while it goes on, then left to the screen */
+      if (OVER.said < 3 && Date.now() - OVER.saidAt > 18000) {
+        OVER.said++; OVER.saidAt = Date.now();
+        g('over voice', () => speak(OVER.said === 1 ? 'Slow down. The limit here is ' + lim + '.' : 'Slow down.', true, true));
+      }
+    };
+    R31.limit.resetOver = overStop;
 
     /* ====================================================================
        5 — WHAT IS ON THE ROAD AHEAD, LIVE
@@ -25665,41 +25750,71 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       });
       return list;
     }
-    async function hzLoad(force) {
-      if (HZ.busy) return HZ.list;
+    function hzStatus(err) {
+      if (!TRAFFIC_KEY) return { ok: false, code: 'nokey', msg: 'No TomTom key is set, so live incidents are off.' };
+      if (!err) return { ok: true, code: 'ok', msg: 'TomTom live incidents are connected.' };
+      const m = String((err && err.message) || err);
+      if (/HTTP 40[13]/.test(m)) return { ok: false, code: 'key', msg: 'TomTom rejected the key (' + m + '). The key is wrong, the Traffic API is not switched on for it, or this website is not on its allowed list.' };
+      if (/HTTP 429/.test(m)) return { ok: false, code: 'quota', msg: 'The TomTom key has used up its free requests for today (HTTP 429).' };
+      if (/HTTP 4/.test(m)) return { ok: false, code: 'request', msg: 'TomTom refused the request (' + m + ').' };
+      return { ok: false, code: 'net', msg: 'TomTom could not be reached just now.' };
+    }
+    function hzLoad(force) {
+      /* a load already on its way is the answer to wait for, not the stale list */
+      if (HZ.pending) return HZ.pending;
       const r = allRoutes[activeRouteIndex];
-      if (!r) return HZ.list;
       const nav = navActive() && navCoords.length > 1;
+      const me = lastNavPos || livePosition;
+      if (!r && !me) return Promise.resolve(HZ.list);
       const along = nav ? (navDistAlong || 0) : 0;
-      const sig = nav ? routeSig31() : 'plan:' + r.coords.length + ':' + Math.round(r.distance);
-      const fresh = sig === HZ.sig && Date.now() - HZ.at < 90000 && Math.abs(along - HZ.along) < 6000;
-      if (!force && fresh) return HZ.list;
-      HZ.busy = true;
-      try {
-        /* while driving: the next 60 km in three boxes. Planning: the whole
-           route in up to eight, so the guide can say what is on it. */
-        const coords = nav ? navCoords : r.coords;
-        const cum = nav ? navCum : cumulative(r.coords);
-        const tot = cum[cum.length - 1] || 0;
+      const sig = nav ? routeSig31() : r ? 'plan:' + r.coords.length + ':' + Math.round(r.distance) : 'near';
+      const moved = !r && HZ.center && me ? haversine(HZ.center, me) : 0;
+      const fresh = sig === HZ.sig && Date.now() - HZ.at < (r ? 90000 : 120000) && Math.abs(along - HZ.along) < 6000 && moved < 3000;
+      if (!force && fresh) return Promise.resolve(HZ.list);
+      HZ.pending = (async () => {
+        /* Driving: the next 60 km in three boxes. Planning: the whole route
+           in up to eight. No route at all: a box around the car, so road
+           works, crashes and closures nearby are on the map regardless. */
+        const coords = nav ? navCoords : r ? r.coords : [];
+        const cum = nav ? navCum : r ? cumulative(r.coords) : [];
+        const tot = cum.length ? cum[cum.length - 1] : 0;
         const boxes = nav ? chunkBoxes(coords, cum, along, 60000, 20000)
-          : chunkBoxes(coords, cum, 0, tot, Math.max(20000, Math.min(90000, tot / 8)));
+          : r ? chunkBoxes(coords, cum, 0, tot, Math.max(20000, Math.min(90000, tot / 8)))
+          : [[me.lng - 0.12, me.lat - 0.09, me.lng + 0.12, me.lat + 0.09]];
         let live = [], err = null;
         try { live = await fromTomTom(boxes.slice(0, 8)); HZ.lastOkAt = Date.now(); } catch (e) { err = e; }
         const fed = await fromFeeds(boxes).catch(() => []);
-        HZ.err = err ? String(err && err.message || err) : null;
+        HZ.err = err ? String((err && err.message) || err) : null;
+        HZ.status = hzStatus(TRAFFIC_KEY ? err : new Error('no key'));
         /* on a failed refresh, keep what was known rather than blanking it */
         const base = err ? HZ.list.filter((h) => /^tt:/.test(h.id)) : live;
         const seen = {}, list = [];
         base.concat(fed, fromReports()).forEach((h) => { if (!seen[h.id]) { seen[h.id] = 1; list.push(h); } });
         HZ.list = place(list, coords, cum);
-        HZ.at = Date.now(); HZ.along = along; HZ.sig = sig;
+        if (me) HZ.list.forEach((h) => { h.m = haversine(me, h); });
+        HZ.at = Date.now(); HZ.along = along; HZ.sig = sig; HZ.center = me ? { lat: me.lat, lng: me.lng } : null;
         liveIncidents = HZ.list.filter((h) => !h.own).map((h) => ({ lat: h.lat, lng: h.lng, cat: h.kind === 'crash' ? 'ACCIDENT' : h.kind === 'closure' ? 'ROAD_CLOSED' : h.kind === 'construction' ? 'ROAD_WORK' : h.kind === 'jam' ? 'JAM' : 'HAZARD', text: h.title, delay: h.delay, road: '' }));
         hzDraw();
         hzChip();
-        if (HZ.err && !TRAFFIC_KEY) console.warn('WayLynq R31: no traffic key, live incidents are off');
-        else if (HZ.err) console.warn('WayLynq R31: incident feed did not answer — ' + HZ.err);
-      } finally { HZ.busy = false; }
-      return HZ.list;
+        if (HZ.err) console.warn('WayLynq R31: ' + HZ.status.msg);
+        return HZ.list;
+      })().then((v) => { HZ.pending = null; return v; }, (e) => { HZ.pending = null; console.warn('WayLynq R31 · hazards', e); return HZ.list; });
+      return HZ.pending;
+    }
+    /* With no route set, a hazard is called out when it is close and in the
+       direction the car is travelling. */
+    function hzFree() {
+      if (navActive() || allRoutes[activeRouteIndex] || !livePosition || !HZ.list.length) return;
+      const spd = g('speed', () => avgSpeed(), 0) || 0;
+      if (spd < 4 || !isFinite(headingDeg)) return;
+      HZ.list.forEach((h) => {
+        if (h.own || HZ.alerted.has(h.id)) return;
+        const dist = haversine(livePosition, h);
+        if (dist > 700 || dist < 40 || Math.abs(angDiff(headingDeg, bearing(livePosition, h))) > 35) return;
+        HZ.alerted.add(h.id);
+        g('say hazard', () => speak(h.title + ' ahead.', true, true));
+        showBubble(h.title + ' ' + fmtDistance(dist, true) + ' ahead' + (h.detail ? ' · ' + h.detail : ''));
+      });
     }
     function hzPopup(h) {
       return '<div class="r31-hz-pop">' + hzIcon(h.kind, 30) + '<div><b>' + esc(h.title) + '</b>' +
@@ -25776,24 +25891,44 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       });
     }
     function hzSheet() {
-      const ahead = navActive() ? nextAhead() : HZ.list.slice().sort((a, b) => (a.along == null ? 1e12 : a.along) - (b.along == null ? 1e12 : b.along));
-      let s = $('r31HzSheet');
-      if (!s) { s = el('div', { id: 'r31HzSheet', class: 'r31-sheet' }); d.body.appendChild(s); s.addEventListener('click', (e) => { if (e.target === s || (e.target.closest && e.target.closest('[data-x]'))) s.classList.remove('show'); }); }
+      const nav = navActive(), hasRoute = !!allRoutes[activeRouteIndex];
       const along = navDistAlong || 0;
-      s.innerHTML = '<div class="r31-sheet-in"><div class="r31-sheet-h"><b>On the road ahead</b><button type="button" data-x aria-label="Close">✕</button></div>' +
-        '<div class="r31-sheet-b">' + (ahead.length ? ahead.map((h) => '<div class="r31-hz-row">' + hzIcon(h.kind, 34) + '<div><b>' + esc(h.title) + '</b><span>' + esc(h.detail || h.src) + '</span></div>' +
-          '<em>' + (h.along != null ? esc(fmtDistance(Math.max(0, h.along - (navActive() ? along : 0)), true)) : '') + (h.delay > 59 ? '<small>+' + Math.round(h.delay / 60) + ' min</small>' : '') + '</em></div>').join('')
-          : '<div class="r31-empty">Nothing reported on this route right now.</div>') +
-        '<div class="r31-src">' + (TRAFFIC_KEY ? (HZ.err ? 'The live incident feed did not answer just now; showing what was last known.' : 'Road works, crashes, closures and hazards: TomTom live incidents, refreshed every 90 seconds.') : 'Add a TomTom key in Diagnostics for live incidents.') +
-        ' Police sightings come from driver reports.</div></div></div>';
+      const ahead = nav ? nextAhead()
+        : hasRoute ? HZ.list.slice().sort((a, b) => (a.along == null ? 1e12 : a.along) - (b.along == null ? 1e12 : b.along))
+        : HZ.list.slice().sort((a, b) => (a.m == null ? 1e12 : a.m) - (b.m == null ? 1e12 : b.m));
+      let s = $('r31HzSheet');
+      if (!s) {
+        s = el('div', { id: 'r31HzSheet', class: 'r31-sheet' });
+        d.body.appendChild(s);
+        s.addEventListener('click', (e) => {
+          const t = e.target;
+          if (t === s || (t.closest && t.closest('[data-x]'))) { s.classList.remove('show'); return; }
+          if (t.closest && t.closest('[data-check]')) { const b = t.closest('[data-check]'); b.disabled = true; b.textContent = 'Checking…'; hzLoad(true).then(hzSheet); return; }
+          if (t.closest && t.closest('[data-key]')) { s.classList.remove('show'); g('key', () => { $('tkField').value = TRAFFIC_KEY || ''; $('tkModal').classList.add('show'); }); }
+        });
+      }
+      const st = HZ.status || hzStatus(TRAFFIC_KEY ? (HZ.at ? null : new Error('not checked yet')) : new Error('no key'));
+      const when = HZ.at ? ' Checked ' + fmtClock(HZ.at) + '.' : '';
+      const dist = (h) => nav ? (h.along != null ? fmtDistance(Math.max(0, h.along - along), true) : '')
+        : hasRoute ? (h.along != null ? mi31(h.along) + ' mi in' : (h.m != null ? fmtDistance(h.m) + ' away' : ''))
+        : (h.m != null ? fmtDistance(h.m) + ' away' : '');
+      s.innerHTML = '<div class="r31-sheet-in"><div class="r31-sheet-h"><b>' + (nav ? 'On the road ahead' : hasRoute ? 'On this route' : 'Around you') + '</b><button type="button" data-x aria-label="Close">✕</button></div>' +
+        '<div class="r31-sheet-b"><div class="r31-status ' + (st.ok ? 'ok' : 'bad') + '"><span class="r31-dot"></span><span>' + esc(HZ.at || !TRAFFIC_KEY ? st.msg : 'Not checked yet.') + esc(when) +
+          '</span><span class="r31-status-b"><button type="button" data-check>Check now</button><button type="button" data-key>Key</button></span></div>' +
+        (ahead.length ? ahead.map((h) => '<div class="r31-hz-row">' + hzIcon(h.kind, 34) + '<div><b>' + esc(h.title) + '</b><span>' + esc(h.detail || h.src) + '</span></div>' +
+          '<em>' + esc(dist(h)) + (h.delay > 59 ? '<small>+' + Math.round(h.delay / 60) + ' min</small>' : '') + '</em></div>').join('')
+          : '<div class="r31-empty">' + (st.ok ? 'Nothing is reported ' + (nav ? 'on the road ahead' : hasRoute ? 'on this route' : 'near you') + ' right now.' : 'Nothing can be shown until the feed is connected.') + '</div>') +
+        '<div class="r31-src">Road works, crashes, closures, lane closures, hazards, jams and weather come from TomTom, refreshed every 90 seconds while driving. Police and other sightings come from the Report button.</div></div></div>';
       s.classList.add('show');
     }
+    const mi31 = (m) => { const v = toMiles(m); return v < 10 ? v.toFixed(1) : String(Math.round(v)); };
     R31.hazards = {
       reset() { HZ.alerted = new Set(); HZ.sig = ''; HZ.at = 0; HZ.chipId = ''; },
       clear() { g('clear hazards', () => { const c = $('r31Hazard'); if (c) c.setAttribute('hidden', ''); }); },
       load: hzLoad,
       onFix() { hzLoad(false); hzChip(); hzAlert(); },
-      list: () => HZ.list, sheet: hzSheet, state: () => ({ n: HZ.list.length, at: HZ.at, err: HZ.err, onRoute: HZ.list.filter((h) => h.along != null).length })
+      free: hzFree,
+      list: () => HZ.list, sheet: hzSheet, state: () => ({ n: HZ.list.length, at: HZ.at, err: HZ.err, sig: HZ.sig, status: HZ.status || null, onRoute: HZ.list.filter((h) => h.along != null).length })
     };
     /* the older single-box loader and its own warnings stand down */
     loadIncidents = function r31LoadIncidents(force) { return hzLoad(!!force).then(() => liveIncidents); };
@@ -25821,6 +25956,95 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
        refreshed underneath. A result for a box that has been closed is
        thrown away.
     ==================================================================== */
+    /* ---- one line to the map-data service ----
+       Every lookup used to be sent to all four public mirrors at once and
+       the first answer kept. In a car that is four times the traffic for
+       every question, and the mirrors answer it by rate-limiting the phone:
+       the next lookup then fails or crawls, which is the inconsistency.
+       Now a question goes to the mirror that has been answering best; a
+       second mirror is only asked if the first is slow, a mirror that says
+       "too many requests" is rested, at most two background questions are
+       out at a time, and a tap goes straight to the front. */
+    const OQ = { cache: new Map(), flying: new Map(), queue: [], active: 0, sent: 0, health: OVERPASS_MIRRORS.map(() => ({ ms: 1500, coolUntil: 0, fails: 0 })) };
+    function mirrorOrder() {
+      const now = Date.now();
+      return OVERPASS_MIRRORS.map((u, i) => i).sort((a, b) => {
+        const A = OQ.health[a], B = OQ.health[b];
+        return ((A.coolUntil > now ? 1 : 0) - (B.coolUntil > now ? 1 : 0)) || (A.ms - B.ms);
+      });
+    }
+    function hedged(query) {
+      return new Promise((resolve, reject) => {
+        const order = mirrorOrder(), ctls = [], timers = [];
+        let done = false, left = order.length, lastErr = null, started = 0;
+        const finish = (ok, v) => {
+          if (done) return;
+          done = true;
+          timers.forEach(clearTimeout);
+          ctls.forEach((c) => { try { c.abort(); } catch (e) {} });
+          if (ok) resolve(v); else reject(v);
+        };
+        const launch = (k) => {
+          if (done || k >= order.length || started > k) return;
+          started = k + 1;
+          const i = order[k], h = OQ.health[i], t0 = Date.now();
+          const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+          if (ctl) ctls.push(ctl);
+          timers.push(setTimeout(() => { if (ctl) { try { ctl.abort(); } catch (e) {} } }, 15000));
+          OQ.sent++;
+          fetch(OVERPASS_MIRRORS[i] + '?data=' + encodeURIComponent(query), ctl ? { signal: ctl.signal } : undefined)
+            .then((r) => { if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; } return r.json(); })
+            .then((dd) => {
+              if (dd && dd.remark && /runtime error|timed out|out of memory/i.test(dd.remark) && !(dd.elements || []).length) throw new Error('map data: ' + String(dd.remark).slice(0, 60));
+              h.ms = h.ms * 0.6 + (Date.now() - t0) * 0.4; h.fails = 0;
+              g('op log', () => { opLog.lastOk = { host: hostOf(OVERPASS_MIRRORS[i]), ms: Date.now() - t0, at: Date.now(), elements: (dd.elements || []).length }; noteRoundTrip(Date.now() - t0, true); });
+              finish(true, dd);
+            })
+            .catch((e) => {
+              if (done) return;
+              lastErr = e; h.fails++;
+              h.coolUntil = Date.now() + (e && (e.status === 429 || e.status === 504) ? 45000 : 12000);
+              left--;
+              if (left <= 0) { g('op log', () => { opLog.lastErr = { host: 'all mirrors', err: String((e && e.message) || e), at: Date.now() }; noteRoundTrip(Date.now() - t0, false); }); finish(false, lastErr || new Error('no mirror answered')); }
+              else launch(started);
+            });
+          /* the next mirror is only brought in if this one is slow */
+          timers.push(setTimeout(() => launch(k + 1), k === 0 ? 1800 : 2600));
+        };
+        launch(0);
+      });
+    }
+    function opq(query, prio) {
+      const hit = OQ.cache.get(query);
+      if (hit && Date.now() - hit.t < 300000) return Promise.resolve(hit.d);
+      if (OQ.flying.has(query)) return OQ.flying.get(query);
+      const keep = (dd) => { OQ.cache.set(query, { t: Date.now(), d: dd }); if (OQ.cache.size > 80) OQ.cache.delete(OQ.cache.keys().next().value); return dd; };
+      let p;
+      if ((prio || 1) >= 3) p = hedged(query).then(keep);                      // a tap never waits in line
+      else p = new Promise((resolve, reject) => {
+        OQ.queue.push({ query: query, prio: prio || 1, resolve: (dd) => resolve(keep(dd)), reject: reject });
+        OQ.queue.sort((a, b) => b.prio - a.prio);
+        pump();
+      });
+      OQ.flying.set(query, p);
+      const clear = () => { OQ.flying.delete(query); };
+      p.then(clear, clear);
+      return p;
+    }
+    function pump() {
+      while (OQ.active < 2 && OQ.queue.length) {
+        const job = OQ.queue.shift();
+        OQ.active++;
+        hedged(job.query).then(job.resolve, job.reject).then(() => { OQ.active--; pump(); });
+      }
+    }
+    /* the rest of the app asks through the same line */
+    /* What the driver has just asked for goes straight out; the app's own
+       background lookups (tunnels, surfaces, stations and the like, a dozen
+       of them after every new route) wait their turn behind it. */
+    overpassFast = function r31OverpassFast(query) { return opq(query, OQ.urgent ? 3 : 2); };
+    R31.net = { state: () => ({ sent: OQ.sent, active: OQ.active, queued: OQ.queue.length, mirrors: OQ.health.map((h, i) => ({ host: hostOf(OVERPASS_MIRRORS[i]), ms: Math.round(h.ms), resting: h.coolUntil > Date.now() })) }) };
+
     const PC = { tok: {}, pre: null, busy: null, index: store.get('poiIndex', []) };
     const CAT = {
       food: (t) => /^(restaurant|cafe|pub|bar|biergarten|ice_cream)$/.test(t.amenity || ''),
@@ -25853,21 +26077,27 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       });
       return out;
     }
+    const UNION_A = 'nwr["amenity"~"^(restaurant|cafe|pub|bar|biergarten|ice_cream|fast_food|fuel|charging_station|hospital|clinic|doctors|pharmacy|toilets)$"]';
+    const UNION_H = 'nwr["highway"~"^(services|rest_area|speed_camera)$"]';
     function prewarm(force) {
+      if (navActive() && navCoords.length > 1 && navCum.length === navCoords.length) return corridor(force);
       const at = poiAnchor();
       if (!at) return Promise.resolve(null);
       const cell = cellOf(at);
-      if (!PC.pre || PC.pre.cell !== cell) {
+      const near = PC.pre && !PC.pre.sig && haversine(PC.pre.anchor, at) < 1500;
+      if (!near && PC.diskCell !== cell) {
+        PC.diskCell = cell;                     // the device copy is looked for once per area, not on every pass
         const saved = store.get('poi:' + cell, null);
-        if (saved && saved.els && Date.now() - saved.at < 7 * 86400000) PC.pre = { cell: cell, at: saved.at, anchor: saved.anchor, els: saved.els, fromDisk: true };
+        if (saved && saved.els && Date.now() - saved.at < 7 * 86400000 && haversine(saved.anchor, at) < 2500) PC.pre = { cell: cell, at: saved.at, anchor: saved.anchor, els: saved.els, fromDisk: true };
       }
-      const fresh = PC.pre && PC.pre.cell === cell && !PC.pre.fromDisk && Date.now() - PC.pre.at < 600000 && haversine(PC.pre.anchor, at) < 900;
+      const fresh = PC.pre && !PC.pre.sig && !PC.pre.fromDisk && Date.now() - PC.pre.at < 600000 && haversine(PC.pre.anchor, at) < 1500;
       if (fresh && !force) return Promise.resolve(PC.pre);
       if (PC.busy) return PC.busy;
+      if (!force && Date.now() - (PC.triedAt || 0) < 20000) return Promise.resolve(PC.pre);
+      PC.triedAt = Date.now();
       const A = at.lat.toFixed(4) + ',' + at.lng.toFixed(4);
-      const q = '[out:json][timeout:9];(nwr["amenity"~"^(restaurant|cafe|pub|bar|biergarten|ice_cream|fast_food|fuel|charging_station|hospital|clinic|doctors|pharmacy|toilets)$"](around:2400,' + A + ');' +
-        'nwr["amenity"="parking"](around:900,' + A + ');nwr["highway"~"^(services|rest_area|speed_camera)$"](around:6000,' + A + '););out center qt 600;';
-      PC.busy = overpassFast(q).then((data) => {
+      const q = '[out:json][timeout:9];(' + UNION_A + '(around:2400,' + A + ');nwr["amenity"="parking"](around:900,' + A + ');' + UNION_H + '(around:6000,' + A + '););out center qt 600;';
+      PC.busy = opq(q, 1).then((data) => {
         const els = elementsOf(data);
         PC.pre = { cell: cell, at: Date.now(), anchor: { lat: at.lat, lng: at.lng }, els: els };
         store.set('poi:' + cell, { at: PC.pre.at, anchor: PC.pre.anchor, els: els.slice(0, 600) });
@@ -25878,10 +26108,44 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       }).catch(() => PC.pre).then((v) => { PC.busy = null; return v; });
       return PC.busy;
     }
+    /* While driving: everything along the next stretch of the route, fetched
+       once and topped up before the car reaches the end of it. A tap is then
+       answered from the phone, at the same speed every time, with or without
+       signal at that moment. */
+    function corridor(force) {
+      const along = navDistAlong || 0, sig = routeSig31();
+      const tot = navCum[navCum.length - 1] || 0;
+      const have = PC.pre && PC.pre.sig === sig && along >= PC.pre.from - 400;
+      if (!force && have && (along < PC.pre.to - 4000 || PC.pre.to >= tot - 5)) return Promise.resolve(PC.pre);
+      if (PC.busy) return PC.busy;
+      if (!force && Date.now() - (PC.triedAt || 0) < 15000) return Promise.resolve(PC.pre);
+      PC.triedAt = Date.now();
+      const from = Math.max(0, along - 300);
+      const pts = routeAhead(from, 10300, 220, 50);
+      if (pts.length < 2) return Promise.resolve(PC.pre);
+      const line = pts.map((p) => p.lat.toFixed(4) + ',' + p.lng.toFixed(4)).join(',');
+      const q = '[out:json][timeout:12];(' + UNION_A + '(around:650,' + line + ');' + UNION_H + '(around:1600,' + line + '););out center qt 900;';
+      const me = lastNavPos || livePosition;
+      PC.busy = opq(q, 1).then((data) => {
+        if (sig !== routeSig31()) return PC.pre;
+        const els = elementsOf(data);
+        els.forEach((e) => { const pr = projectOnRoute(navCoords, navCum, e); e.along = pr.distAlong; e.off = pr.distToRoute; });
+        const seen = {};
+        els.forEach((e) => { seen[e.id] = 1; });
+        /* what was already known and is still ahead stays */
+        const older = PC.pre && PC.pre.sig === sig ? PC.pre.els.filter((e) => !seen[e.id] && e.along > along - 500) : [];
+        PC.pre = { sig: sig, cell: 'route', from: from, to: pts[pts.length - 1].along, at: Date.now(), anchor: me ? { lat: me.lat, lng: me.lng } : { lat: pts[0].lat, lng: pts[0].lng }, els: older.concat(els) };
+        return PC.pre;
+      }).catch(() => PC.pre).then((v) => { PC.busy = null; return v; });
+      return PC.busy;
+    }
     function quickItems(key) {
       const m = CAT[key], at = poiAnchor();
       if (!m || !PC.pre || !at) return null;
-      const items = PC.pre.els.filter((e) => m(e.tags)).map((e) => ({ id: e.id, lat: e.lat, lng: e.lng, tags: e.tags, metersFromMe: haversine(at, e), mileAlong: allRoutes.length ? g('along', () => distanceAlongRoute(e.lat, e.lng), null) : null }));
+      const driving = !!PC.pre.sig && navActive();
+      const along = navDistAlong || 0;
+      const items = PC.pre.els.filter((e) => m(e.tags) && (!driving || e.along == null || e.along > along - 400)).map((e) => ({ id: e.id, lat: e.lat, lng: e.lng, tags: e.tags, metersFromMe: haversine(at, e),
+        mileAlong: e.along != null ? toMiles(e.along) : (allRoutes.length ? g('along', () => distanceAlongRoute(e.lat, e.lng), null) : null) }));
       items.sort((a, b) => a.metersFromMe - b.metersFromMe);
       return items;
     }
@@ -25916,8 +26180,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         prewarm(false).then(() => { if (shown || !live()) return; const q2 = quickItems(key); if (q2 && q2.length) { show(q2); shown = true; if (btn) btn.classList.remove('busy'); } });
       }
       try {
-        const fresh = await searchPoi(key);
+        OQ.urgent = true;
+        let asked;
+        try { asked = searchPoi(key); } finally { OQ.urgent = false; }
+        const fresh = await asked;
         if (!live()) return;
+        /* While driving, the corridor already holds what is ahead; a fresh
+           answer only replaces it when it actually found something. */
         if (fresh.length || !shown) { show(fresh); shown = true; }
         clearInterval(poiRefreshTimers[key]);
         poiRefreshTimers[key] = setInterval(async () => {
@@ -25934,7 +26203,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         }
       } finally { if (btn) btn.classList.remove('busy'); }
     };
-    R31.poi = { prewarm: prewarm, quick: quickItems, state: () => ({ cell: PC.pre && PC.pre.cell, n: PC.pre ? PC.pre.els.length : 0, at: PC.pre && PC.pre.at, fromDisk: !!(PC.pre && PC.pre.fromDisk) }) };
+    R31.poi = { prewarm: prewarm, quick: quickItems, state: () => ({ cell: PC.pre && PC.pre.cell, route: !!(PC.pre && PC.pre.sig), to: PC.pre && PC.pre.to, n: PC.pre ? PC.pre.els.length : 0, at: PC.pre && PC.pre.at, fromDisk: !!(PC.pre && PC.pre.fromDisk) }) };
 
     /* ====================================================================
        6 — ONE PROMPT, A WHOLE TRIP GUIDE
@@ -25992,9 +26261,9 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
 
       /* food, places to stay and parking at the far end: one request */
       const A = dest.lat.toFixed(4) + ',' + dest.lng.toFixed(4);
-      const near = overpassFast('[out:json][timeout:10];(nwr["amenity"~"^(restaurant|cafe|pub|bar|fast_food|ice_cream)$"]["name"](around:1600,' + A + ');' +
+      const near = opq('[out:json][timeout:10];(nwr["amenity"~"^(restaurant|cafe|pub|bar|fast_food|ice_cream)$"]["name"](around:1600,' + A + ');' +
         'nwr["tourism"~"^(hotel|motel|guest_house|attraction|museum|viewpoint|gallery|theme_park|zoo)$"]["name"](around:3500,' + A + ');' +
-        'nwr["amenity"="parking"](around:600,' + A + '););out center qt 300;')
+        'nwr["amenity"="parking"](around:600,' + A + '););out center qt 300;', 3)
         .then((data) => {
           const els = elementsOf(data).map((e) => Object.assign(e, { m: haversine(dest, e) })).sort((a, b) => a.m - b.m);
           D.near = {
@@ -26009,8 +26278,8 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const n = clamp(Math.round(tot / 4000), 2, 70), line = [];
       for (let k = 0; k < n; k++) { const dd = tot * k / (n - 1); let i = 0, lo = 0, hi = cum.length - 1; while (lo < hi) { i = (lo + hi) >> 1; if (cum[i] < dd) lo = i + 1; else hi = i; } line.push(r.coords[lo][0].toFixed(4) + ',' + r.coords[lo][1].toFixed(4)); }
       const rad = tot > 80000 ? 1300 : 900;
-      const along = overpassFast('[out:json][timeout:14];(nwr["amenity"~"^(fuel|charging_station)$"](around:' + rad + ',' + line.join(',') + ');' +
-        'nwr["highway"~"^(rest_area|services)$"](around:' + (rad + 900) + ',' + line.join(',') + '););out center qt 700;')
+      const along = opq('[out:json][timeout:14];(nwr["amenity"~"^(fuel|charging_station)$"](around:' + rad + ',' + line.join(',') + ');' +
+        'nwr["highway"~"^(rest_area|services)$"](around:' + (rad + 900) + ',' + line.join(',') + '););out center qt 700;', 3)
         .then((data) => {
           const els = elementsOf(data).map((e) => { const p = projectOnRoute(r.coords, cum, e); return Object.assign(e, { along: p.distAlong, off: p.distToRoute }); })
             .filter((e) => e.off < rad + 1200).sort((a, b) => a.along - b.along);
@@ -26311,32 +26580,161 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     R31.voice = { start: voiceStart, stop: voiceStop, state: () => ({ on: VO.on, text: voiceText(), clip: !!(GD.voice && GD.voice.url) }) };
 
     /* ====================================================================
+       THE BRUNSWICK AVE CHARACTER, BACK
+       He was never taken out, but he could be switched off for a whole
+       session by one bad moment: the street's geometry was asked for once,
+       and if the map-data service was busy just then the answer was kept
+       as "no such street" until the page was reloaded. Round 31's own
+       lookups made that busy moment much more likely. The geometry is now
+       kept on the device once it has been found, a failed lookup is tried
+       again, and it goes through the same request line as everything else.
+    ==================================================================== */
+    const NY = { busy: null, retryAt: 0, fail: 0, seeded: false };
+    loadBrunswick = function r31LoadBrunswick() {
+      if (brunswick && brunswick.length) return Promise.resolve(brunswick);
+      if (!NY.seeded) {
+        NY.seeded = true;
+        const saved = store.get('brunswick', null);
+        if (saved && saved.ways && saved.ways.length) { brunswick = saved.ways; return Promise.resolve(brunswick); }
+      }
+      if (NY.busy) return NY.busy;
+      if (Date.now() < NY.retryAt) return Promise.resolve(brunswick || []);
+      const shape = (els) => (els || [])
+        .filter((w) => w.geometry && w.geometry.length > 1 && w.tags && /^brunswick\s+av/i.test(w.tags.name || ''))
+        .map((w) => w.geometry.map((p) => [p.lat, p.lon]));
+      NY.busy = (async () => {
+        try {
+          /* the borough's own boundary first, so a Brunswick Avenue in the
+             next town can never count; a tight radius if that comes back empty */
+          let ways = [];
+          try {
+            const inBorough = await opq('[out:json][timeout:25];area["boundary"="administrative"]["name"="Metuchen"]->.mt;way(area.mt)["highway"]["name"~"^Brunswick Av",i];out geom 60;', 2);
+            ways = shape(inBorough.elements);
+          } catch (e) { /* the radius below */ }
+          if (!ways.length) {
+            const nearby = await opq('[out:json][timeout:20];way["highway"]["name"~"^Brunswick Av",i](around:2600,' + NYAH_ANCHOR.lat + ',' + NYAH_ANCHOR.lng + ');out geom 60;', 2);
+            ways = shape(nearby.elements);
+          }
+          if (ways.length) { brunswick = ways; NY.fail = 0; store.set('brunswick', { at: Date.now(), ways: ways }); console.log('Brunswick Ave, Metuchen — segments matched:', ways.length); }
+          else { brunswick = brunswick || []; NY.retryAt = Date.now() + 10 * 60000; }
+        } catch (e) {
+          brunswick = brunswick || [];
+          NY.fail++;
+          NY.retryAt = Date.now() + Math.min(120000, 6000 * Math.pow(2, NY.fail));
+        }
+        NY.busy = null;
+        return brunswick;
+      })();
+      return NY.busy;
+    };
+
+    /* ====================================================================
+       NOTICES AT THE TOP CENTRE
+       The speech bubble, the character toasts, "Rerouting", the family
+       notice and the Brunswick Ave card each had their own spot, and those
+       spots were the lower middle of the screen: on top of the car and the
+       road in front of it. While driving they are now gathered into one
+       stack in the clear strip at the top, between the guidance card and
+       the buttons, one under another instead of on top of each other. They
+       take no taps, so nothing beneath them is blocked.
+    ==================================================================== */
+    const NOTE_IDS = ['rerouteFlag', 'bubble', 'moodToast', 'r28FamToast', 'nyah'];
+    const noteHome = {};
+    function notesBuild() { if (!$('r31Notes')) d.body.appendChild(el('div', { id: 'r31Notes' })); }
+    function notesMount(on) {
+      const box = $('r31Notes');
+      if (!box) return;
+      NOTE_IDS.forEach((id) => {
+        const n = $(id);
+        if (!n) return;
+        if (on && n.parentElement !== box) { noteHome[id] = { parent: n.parentElement, next: n.nextSibling }; box.appendChild(n); }
+        else if (!on && n.parentElement === box && noteHome[id]) {
+          const h = noteHome[id];
+          if (h.next && h.next.parentNode === h.parent) h.parent.insertBefore(n, h.next); else h.parent.appendChild(n);
+        }
+      });
+    }
+    function notesLayout(trR) {
+      const root = d.documentElement.style, vw = innerWidth;
+      const card = $('navCard'), cr = card ? card.getBoundingClientRect() : null;
+      const stack = d.body.classList.contains('r28-stack');
+      const L0 = (cr && cr.width ? Math.round(cr.right) : 0) + 10;
+      /* a row of buttons at the top right is kept clear; a narrow column of
+         them is not, because on a phone that strip is the only room there is */
+      const R0 = !stack && trR && trR.width ? Math.round(vw - trR.left) + 10 : 8;
+      let left = L0, width = vw - L0 - R0, top = 8;
+      if (width < 150) { left = 8; width = vw - 16; top = Math.round(cr ? cr.bottom : 0) + 8; }
+      root.setProperty('--r31-note-left', left + 'px');
+      root.setProperty('--r31-note-width', Math.max(120, Math.round(width)) + 'px');
+      root.setProperty('--r31-note-top', top + 'px');
+    }
+
+    /* ====================================================================
+       THE SETTINGS MENU, SMALLER
+       Eleven full-width rows ran off the bottom of the screen. The three
+       map views become one row of three, the rest become two columns of
+       short tiles, End navigation stays pinned at the foot, and whatever
+       still does not fit scrolls inside the panel.
+    ==================================================================== */
+    function relabel(b, text) {
+      if (!b) return;
+      let done = false;
+      Array.from(b.childNodes).forEach((n) => {
+        if (n.nodeType !== 3 || !n.textContent.trim()) return;
+        if (!done) { n.textContent = ' ' + text; done = true; } else n.textContent = '';
+      });
+    }
+    function menuBuild() {
+      const menu = $('navMenu');
+      if (!menu || menu.dataset.r31 || !$('r28Menu3d')) return;
+      menu.dataset.r31 = '1';
+      const seg = el('div', { class: 'r31-seg', role: 'group', 'aria-label': 'Map view' });
+      [['r28Menu3d', '3D'], ['r28Menu2d', '2D'], ['r28MenuPhoto', 'Photo']].forEach((x) => { const b = $(x[0]); if (b) { relabel(b, x[1]); seg.appendChild(b); } });
+      menu.insertBefore(seg, menu.firstChild);
+      relabel($('navSat'), 'Satellite'); relabel($('r28MenuFam'), 'Family'); relabel($('navAddStop'), 'Add stop');
+      const alerts = el('button', { id: 'r31MenuAlerts', type: 'button' }, hzIcon('hazard', 18) + ' Road alerts');
+      menu.insertBefore(alerts, menu.querySelector('.menu-sep') || $('navExit') || null);
+      alerts.addEventListener('click', () => { menu.classList.add('hidden'); hzSheet(); });
+      const sync = () => setTimeout(() => d.body.classList.toggle('r31-menu-open', !menu.classList.contains('hidden')), 0);
+      d.addEventListener('click', sync, true);
+    }
+
+    /* ====================================================================
        RUNNING IT
     ==================================================================== */
-    let routeSeen = '';
+    let routeSeen = '', wasNav31 = null;
     function tick() {
       const nav = navActive();
       if (map3d) wireFollow3d();
       carLast();
-      if (nav) { oneCar(); hudLayout(); hzChip(); if (!$('r31SpeedRow')) hudBuild(); }
+      if (nav !== wasNav31) { wasNav31 = nav; notesMount(nav); if (!nav) R31.limit.resetOver(); }
+      if (nav) { oneCar(); notesMount(true); hudLayout(); hzChip(); if (!$('r31SpeedRow') || !$('navMenu').dataset.r31) hudBuild(); }
       else if (liveMarker && !map.hasLayer(liveMarker)) oneCar();
-      /* places are fetched before they are asked for */
-      const at = poiAnchor();
-      if (at && !PC.busy && (!PC.pre || PC.pre.fromDisk || haversine(PC.pre.anchor, at) > 900 || Date.now() - PC.pre.at > 600000)) prewarm(false);
-      /* a newly planned route gets its incidents straight away */
+      const menu = $('navMenu');
+      if (menu) d.body.classList.toggle('r31-menu-open', nav && !menu.classList.contains('hidden'));
+      /* places are fetched before they are asked for (it checks for itself
+         whether what it holds is still good) */
+      prewarm(false);
+      /* a newly planned route gets its incidents straight away; with no
+         route, the area round the car is watched instead */
       const r = allRoutes[activeRouteIndex];
       const sig = r ? r.coords.length + ':' + Math.round(r.distance) : '';
       if (sig !== routeSeen) { routeSeen = sig; if (r && !nav) hzLoad(true); }
+      if (!r && !nav) { hzLoad(false); hzFree(); }
       if (!nav && HZ.list.length && map3d && map3dReady && !HZ.marks3d.length) hzDraw();
     }
     function boot() {
       g('follow', wireFollow);
       g('hud', hudBuild);
       g('voice', voiceUi);
+      g('key test', () => $('tkSave').addEventListener('click', () => setTimeout(() => {
+        if (!TRAFFIC_KEY) return;
+        hzLoad(true).then(() => { const st = HZ.status; if (st) showBubble(st.ok ? 'Live incidents connected — ' + HZ.list.filter((h) => !h.own).length + ' reported in this area right now.' : st.msg); });
+      }, 900)));
       setInterval(() => g('tick', tick), 500);
       setTimeout(() => g('tick', tick), 300);
       addEventListener('resize', () => g('layout', hudLayout), { passive: true });
-      console.log('WayLynq Round 31 ready — car on top, true heading, auto-follow, live hazards, instant places, trip guide');
+      console.log('WayLynq Round 31.1 ready — car on top, true heading, auto-follow, live hazards, instant places, trip guide');
     }
     if (d.readyState === 'loading') d.addEventListener('DOMContentLoaded', boot);
     else boot();
@@ -32497,8 +32895,6 @@ html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedD
   font-size: calc(var(--r28-card, 240px) * .062) !important; font-weight: 700 !important; letter-spacing: .08em !important;
   color: rgba(255, 255, 255, .82) !important; margin: 0 !important;
 }
-html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.over b { color: #ff8a80 !important; }
-html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.over small { color: #ffb4ab !important; }
 /* the sign itself, as it stands at the roadside */
 html body.navigating #navMode #r31SpeedRow #limitSign#limitSign {
   position: relative !important; inset: auto !important; transform: none !important;
@@ -32727,6 +33123,115 @@ html body.navigating #navMode #navTop #r31Hazard {
 #r31Voice .r31-v-act button { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid #d0d7de; background: #ffffff; color: #1f2328; font: 700 14px/1 var(--font-ui, system-ui, sans-serif); cursor: pointer; }
 #r31Voice .r31-v-act button.go { background: #1a73e8; border-color: #1a73e8; color: #ffffff; }
 @media (prefers-reduced-motion: reduce) { #r31Guide.show, .r31-skel, #r31Mic.on, #r31Voice .r31-v-dot, #limitSign.r31-flip { animation: none !important; } }
+
+/* ======================================================================
+   ROUND 31.1
+   ====================================================================== */
+/* ---------- a  no limit sign; ten over turns the speed red and pulses ---------- */
+html body.navigating #navMode #limitSign#limitSign#limitSign { display: none !important; }
+html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.over { background: transparent !important; border: 0 !important; }
+html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial b { display: inline-block !important; transform-origin: left bottom !important; transition: color .25s ease !important; }
+@keyframes r31Fast { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.26); } }
+html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.r31-fast b {
+  color: #ff3b30 !important; text-shadow: 0 0 14px rgba(255, 59, 48, .55), 0 1px 3px rgba(0, 0, 0, .8) !important;
+  animation: r31Fast .9s ease-in-out infinite !important;
+  margin-right: .3em !important;                 /* room for the pulse, so it never covers "MPH" */
+}
+html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.r31-fast small { color: #ff8a80 !important; }
+#r31Slow[hidden] { display: none !important; }
+html body.navigating #navMode #r31SpeedRow #r31Slow {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 0 0 auto;
+  padding: calc(var(--r28-card, 240px) * .022) calc(var(--r28-card, 240px) * .04); border-radius: 9px;
+  background: #d93025; color: #ffffff; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9), 0 4px 12px rgba(0, 0, 0, .4);
+  font-family: var(--font-ui, system-ui, sans-serif); line-height: 1.1; animation: r31SlowIn .25s ease-out;
+}
+#r31Slow b { font-size: calc(var(--r28-card, 240px) * .058); font-weight: 800; letter-spacing: .05em; color: #ffffff !important; white-space: nowrap; }
+#r31Slow i { font-size: calc(var(--r28-card, 240px) * .05); font-style: normal; font-weight: 700; color: #ffe1de !important; margin-top: 2px; white-space: nowrap; }
+@keyframes r31SlowIn { from { transform: scale(.8); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---------- d  every notice while driving, in one stack at the top centre ---------- */
+#r31Notes { display: none; }
+html body.navigating #r31Notes {
+  position: fixed; z-index: 6050; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  top: calc(env(safe-area-inset-top, 0px) + var(--r31-note-top, 8px)); left: var(--r31-note-left, 260px); width: var(--r31-note-width, 320px);
+  pointer-events: none; margin: 0; padding: 0;
+}
+html body.navigating #r31Notes > * {
+  position: static !important; inset: auto !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important;
+  transform: none !important; margin: 0 !important; width: auto !important; min-width: 0 !important; max-width: min(100%, 520px) !important;
+  box-sizing: border-box !important; pointer-events: none !important; transition: opacity .2s ease !important; z-index: auto !important;
+}
+html body.navigating #r31Notes > #bubble:not(.show),
+html body.navigating #r31Notes > #moodToast:not(.show),
+html body.navigating #r31Notes > #r28FamToast:not(.show),
+html body.navigating #r31Notes > #rerouteFlag:not(.show),
+html body.navigating #r31Notes > #nyah:not(.show) { display: none !important; }
+html body.navigating #r31Notes > #bubble.show { display: block !important; opacity: 1 !important; }
+html body.navigating #r31Notes > #bubble .bubble-inner {
+  display: flex !important; align-items: flex-start !important; gap: 8px !important; margin: 0 !important;
+  padding: 9px 14px !important; border-radius: 14px !important; font-size: clamp(13.5px, 1.5vw, 15.5px) !important; line-height: 1.32 !important;
+  background: rgba(255, 255, 255, .97) !important; color: #1f2328 !important; border: 1px solid #d0d7de !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .28) !important;
+}
+html body.navigating #r31Notes > #bubble #bubbleText { display: -webkit-box !important; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden !important; }
+html body.navigating #r31Notes > #moodToast.show { display: flex !important; opacity: 1 !important; padding: 8px 14px 8px 8px !important; gap: 10px !important; border-radius: 14px !important; box-shadow: 0 6px 20px rgba(0, 0, 0, .28) !important; }
+html body.navigating #r31Notes > #moodToast .wl-char { width: 40px !important; height: 40px !important; flex: 0 0 auto !important; }
+html body.navigating #r31Notes > #moodToast .mood-copy b { font-size: 15px !important; }
+html body.navigating #r31Notes > #moodToast .mood-copy span { font-size: 13.5px !important; margin-top: 1px !important; }
+html body.navigating #r31Notes > #rerouteFlag.show { display: inline-flex !important; }
+html body.navigating #r31Notes > #r28FamToast.show { display: flex !important; }
+html body.navigating #r31Notes > #nyah.show { display: block !important; padding: 0 !important; }
+html body.navigating #r31Notes > #nyah .nyah-card { pointer-events: auto !important; margin: 0 !important; max-width: 100% !important; transform: none; }
+html body.navigating #r31Notes > #nyah .nyah-svg { width: clamp(54px, 9vw, 84px) !important; height: clamp(54px, 9vw, 84px) !important; }
+
+/* ---------- c  the settings menu: compact, two columns, scrolls inside itself ---------- */
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu:not(.hidden) {
+  position: fixed !important; top: calc(env(safe-area-inset-top, 0px) + var(--r31-menu-top, 66px)) !important; right: calc(env(safe-area-inset-right, 0px) + 8px) !important;
+  left: auto !important; bottom: auto !important; transform: none !important;
+  display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; align-content: start !important;
+  width: min(300px, calc(100vw - 16px)) !important; min-width: 0 !important;
+  max-height: calc(100vh - var(--r31-menu-top, 66px) - 14px) !important; max-height: calc(100dvh - var(--r31-menu-top, 66px) - 14px) !important;
+  overflow-y: auto !important; overscroll-behavior: contain !important; -webkit-overflow-scrolling: touch;
+  padding: 8px !important; border-radius: 16px !important; box-shadow: 0 14px 40px rgba(0, 0, 0, .34) !important; z-index: 40 !important;
+}
+html body.navigating.r28-stack #navMode #navMenu#navMenu#navMenu#navMenu:not(.hidden) {
+  top: calc(env(safe-area-inset-top, 0px) + 8px) !important; right: 66px !important; width: min(288px, calc(100vw - 74px)) !important;
+  max-height: calc(100vh - 16px) !important; max-height: calc(100dvh - 16px) !important;
+}
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu button {
+  display: flex !important; align-items: center !important; justify-content: flex-start !important; gap: 8px !important;
+  width: auto !important; min-width: 0 !important; min-height: 46px !important; height: auto !important; margin: 0 !important;
+  padding: 7px 10px !important; border-radius: 11px !important; border: 1px solid #e1e6eb !important; background: #f6f8fa !important;
+  font-size: 13.5px !important; font-weight: 600 !important; line-height: 1.2 !important; text-align: left !important; white-space: normal !important;
+}
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu button svg,
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu button .r31-hz { flex: 0 0 auto !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-hz { box-shadow: none !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .menu-sep { display: none !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-seg {
+  grid-column: 1 / -1 !important; display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 4px !important;
+  padding: 4px !important; border-radius: 13px !important; background: #e9edf1 !important;
+}
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-seg button { justify-content: center !important; min-height: 40px !important; background: transparent !important; border-color: transparent !important; font-weight: 700 !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-seg button.on { background: #1a73e8 !important; border-color: #1a73e8 !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-seg button.on,
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu .r31-seg button.on * { color: #ffffff !important; }
+html body.navigating #navMode #navMenu#navMenu#navMenu#navMenu #navExit {
+  grid-column: 1 / -1 !important; justify-content: center !important; position: sticky !important; bottom: -8px !important;
+  background: #fdecea !important; border-color: #f5c6c2 !important; font-weight: 700 !important; min-height: 44px !important;
+}
+/* the compass steps aside while the menu is open */
+html body.navigating.r31-menu-open #navMode #r31Compass { visibility: hidden; }
+
+/* ---------- f  the incident feed says how it is doing ---------- */
+.r31-status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 8px 0 4px; border-radius: 12px; font-size: 13.5px; line-height: 1.35; }
+.r31-status.ok { background: #e6f4ea; color: #0d652d; }
+.r31-status.bad { background: #fdecea; color: #a50e0e; }
+.r31-status > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+.r31-dot { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.r31-status-b { flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px; }
+.r31-status-b button { height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid currentColor; background: #ffffff; color: inherit; font: 700 12.5px/1 var(--font-ui, system-ui, sans-serif); cursor: pointer; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.r31-fast b, #r31Slow { animation: none !important; } }
 </style>
 </body>
 </html>
