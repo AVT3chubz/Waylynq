@@ -17,7 +17,7 @@ window.WAYLYN_GOOGLE_MAPS_KEY =
 <!-- WayLynQ split build: HTML structure here; CSS in waylynq.css; JavaScript in waylynq.js. -->
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>WayLynq — The First AI-Powered Navigation App</title>
+<title>WayLynQ — The First AI-Powered Navigation App</title>
 <!-- Performance-safe single-file build: style-event recursion fixed. -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
@@ -1595,6 +1595,9 @@ body.shell-open { overflow:hidden; }
 #wlShell .auth-logo .logo-mark svg { width:25px; height:25px; }
 #wlShell .auth-logo b { font-size:1.55rem; font-weight:600; color:var(--ink); letter-spacing:-.02em; }
 #wlShell .auth-logo b i { font-style:normal; color:var(--p); }
+/* Brand wordmark: the final capital "Q" in WayLynQ is grass green */
+#wlShell .logo b i .wl-q,
+#wlShell .auth-logo b i .wl-q { font-style:normal; color:#3F9B0B; }
 #wlShell .auth-tag { text-align:center; color:var(--mute); margin:0 0 26px; font-size:1rem; }
 #wlShell .seg { display:flex; background:#f1f3f4; border-radius:var(--r); padding:4px; margin-bottom:24px; }
 #wlShell .seg button {
@@ -7530,7 +7533,7 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
         <div class="hero-copy">
           <span class="badge">&#9889; Works in your vehicle&rsquo;s browser</span>
           <h1>The First AI Navigation App</h1>
-          <p>Describe the whole trip in one line and WayLynq sets itself up &mdash; route, stops, layers, and voice.</p>
+          <p>Describe the whole trip in one line and WayLynQ sets itself up &mdash; route, stops, layers, and voice.</p>
           <div class="modes">
             <span class="mode-chip">&#128663; Car</span>
             <span class="mode-chip">&#128652; Bus</span>
@@ -7546,7 +7549,7 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
         <div class="auth-box">
           <div class="auth-logo">
             <span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg></span>
-            <b>Way<i>Lynq</i></b>
+            <b>Way<i>Lyn<span class="wl-q">Q</span></i></b>
           </div>
           <p class="auth-tag" id="aTag">Create your account to get started</p>
 
@@ -8694,7 +8697,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (!$('favPanel').classList.contains('hidden')) renderFavPanel();
         if (!$('historyPanel').classList.contains('hidden')) renderHistoryPanel();
       } catch (e) {}
-      console.log('WayLynq: restored ' + changed + ' saved item groups from your account');
+      console.log('WayLynQ: restored ' + changed + ' saved item groups from your account');
     }
   }
 
@@ -27017,7 +27020,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     var u = Auth.current(), el = document.getElementById('wlTop');
     if (!el) return;
     el.innerHTML = '<div class="top-in">' +
-      '<span class="logo" data-go="maps">' + MARK + '<b>Way<i>Lynq</i></b></span>' +
+      '<span class="logo" data-go="maps">' + MARK + '<b>Way<i>Lyn<span class="wl-q">Q</span></i></b></span>' +
       '<button class="burger" id="wlBurger" aria-label="Menu">&#9776;</button>' +
       '<nav class="top-nav" id="wlNav">' + VIEWS.map(function (v) {
         /* No data-go, so the global click router cannot navigate to a page
@@ -27065,7 +27068,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     var initials = user.name.trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0).toUpperCase(); }).join('');
     side.innerHTML =
       '<div class="auth-box signed-in">' +
-        '<div class="auth-logo">' + MARK_BIG + '<b>Way<i>Lynq</i></b></div>' +
+        '<div class="auth-logo">' + MARK_BIG + '<b>Way<i>Lyn<span class="wl-q">Q</span></i></b></div>' +
         '<span class="si-greet">' + greet + '</span>' +
         '<div class="si-card">' +
           '<span class="si-ava">' + esc(initials) + '</span>' +
