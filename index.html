@@ -17055,10 +17055,11 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     (function wlAiTypeahead() {
       var ai = $('aiInput'); if (!ai) return;
       var style = document.createElement('style');
-      style.textContent = '.ai-ac{z-index:40;margin-top:6px;background:#fff;border:1px solid rgba(0,0,0,.12);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.18);overflow:hidden;display:none}.ai-ac.show{display:block}.ai-ac-item{padding:9px 12px;cursor:pointer;display:flex;flex-direction:column;gap:1px;border-bottom:1px solid rgba(0,0,0,.05)}.ai-ac-item:last-child{border-bottom:0}.ai-ac-item b{font-size:14px;color:#12233b}.ai-ac-item span{font-size:11px;color:#6b7686}.ai-ac-item.hl,.ai-ac-item:hover{background:#eef4ff}';
+      style.textContent = '.ai-ac{position:fixed;z-index:99999;background:#fff;border:1px solid rgba(0,0,0,.12);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.28);overflow:hidden;display:none}.ai-ac.show{display:block}.ai-ac-item{padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:1px;border-bottom:1px solid rgba(0,0,0,.05)}.ai-ac-item:last-child{border-bottom:0}.ai-ac-item b{font-size:14px;color:#12233b}.ai-ac-item span{font-size:11px;color:#6b7686}.ai-ac-item.hl,.ai-ac-item:hover{background:#eef4ff}';
       document.head.appendChild(style);
       var dd = $('aiAc');
-      if (!dd) { dd = document.createElement('div'); dd.className = 'ai-ac'; dd.id = 'aiAc'; var f = ai.closest('.ai-field') || ai.parentElement; f.insertAdjacentElement('afterend', dd); }
+      if (!dd) { dd = document.createElement('div'); dd.className = 'ai-ac'; dd.id = 'aiAc'; document.body.appendChild(dd); }
+      function placeDd() { var r = ai.getBoundingClientRect(); dd.style.left = r.left + 'px'; dd.style.top = (r.bottom + 6) + 'px'; dd.style.width = r.width + 'px'; }
       var items = [], hl = -1;
       function hide() { dd.classList.remove('show'); dd.innerHTML = ''; items = []; hl = -1; }
       function fragOf(s) { return String(s || '').replace(/\s+/g, ' ').replace(/^\s*(please\s+)?(can you\s+)?(take me to|drive me to|get me to|navigate me to|navigate to|directions to|head to|go to|take me|drive to|drive|route to|way to|to)\s+/i, '').trim(); }
@@ -17067,7 +17068,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         items = list || []; hl = -1;
         if (!items.length) { hide(); return; }
         dd.innerHTML = items.map(function (it, i) { return '<div class="ai-ac-item" data-i="' + i + '"><b>' + esc(it.name || it.label || '') + '</b><span>' + esc(it.label || titleCase(it.category || '')) + '</span></div>'; }).join('');
-        dd.classList.add('show');
+        placeDd(); dd.classList.add('show');
         dd.querySelectorAll('[data-i]').forEach(function (el) { el.addEventListener('mousedown', function (e) { e.preventDefault(); }); el.addEventListener('click', function () { choose(items[parseInt(el.dataset.i, 10)]); }); });
       }
       var run = debounce(function (frag) { fetchSuggestions(frag).then(function (list) { draw((list || []).slice(0, 6)); }).catch(function () { hide(); }); }, 240);
@@ -32305,6 +32306,50 @@ if(document.readyState==='loading'){
   install();
 }
 window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:true});
+})();
+
+/* ==== WayLynQ UI fixes (runs last, override-proof) =====================
+   1) Speed limit sign shown at all times during navigation.
+   2) Speed dial turns red when 5+ mph over the posted limit.
+   3) Top trip-progress bar shows a car/arrow marker instead of a blue line.
+====================================================================== */
+(function wlUiFixes(){
+  var css=document.createElement('style');
+  css.textContent=
+    '#navProgress{background:transparent !important}'+
+    '#navProgressWrap{overflow:visible !important}'+
+    '#wlProgCar{position:absolute;top:3px;left:0;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;background:var(--signal,#4d9bff);box-shadow:0 1px 6px rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:14;transition:left .45s linear;pointer-events:none}'+
+    '#wlProgCar::after{content:"";border-left:6px solid #fff;border-top:4px solid transparent;border-bottom:4px solid transparent;margin-left:2px}';
+  document.head.appendChild(css);
+  function num(s){var m=String(s==null?'':s).replace(/[^0-9.]/g,'');return m?parseFloat(m):NaN;}
+  function tick(){
+    var nav=document.body.classList.contains('navigating');
+    var wrap=document.getElementById('navProgressWrap'),fill=document.getElementById('navProgress');
+    if(wrap&&fill){
+      var car=document.getElementById('wlProgCar');
+      if(!car){car=document.createElement('div');car.id='wlProgCar';wrap.appendChild(car);}
+      var pct=parseFloat(fill.style.width)||0;
+      car.style.left=pct+'%';
+      car.style.display=nav?'flex':'none';
+    }
+    if(!nav)return;
+    var sign=document.getElementById('limitSign'),row=document.getElementById('r31SpeedRow'),
+        limVal=document.getElementById('limitVal'),spd=document.getElementById('speedVal'),
+        dial=document.getElementById('speedDial'),cluster=document.getElementById('speedCluster');
+    if(sign){
+      sign.classList.remove('hidden');sign.removeAttribute('hidden');sign.style.display='grid';
+      if(row&&sign.parentElement!==row)row.insertBefore(sign,row.firstChild);
+      else if(!row&&cluster)cluster.removeAttribute('hidden');
+    }
+    var lim=num(limVal&&limVal.textContent),mph=num(spd&&spd.textContent);
+    var over=(isFinite(lim)&&lim>0&&isFinite(mph))?(mph-lim):-99;
+    var red=over>=5;
+    if(dial){dial.classList.toggle('over',red);dial.classList.toggle('r31-fast',red);}
+    if(cluster)cluster.classList.toggle('over',red);
+  }
+  setInterval(tick,400);
+  if(document.readyState!=='loading')tick();
+  else document.addEventListener('DOMContentLoaded',tick,{once:true});
 })();
 </script>
 
