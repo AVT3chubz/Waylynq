@@ -14108,6 +14108,20 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       return { along: p.distAlong, off: p.distToRoute, total: cum[cum.length - 1] };
     },
     addStopPlace: (place, dwell) => addStop(place, dwell || 0),
+    /* The maneuver AFTER the current one — used to show a Tesla-style
+       "next turn" signal on the trip row so the driver sees what follows. */
+    nextTurn: () => {
+      try {
+        if (!navActive() || !navSteps || !navSteps.length) return null;
+        const s = navSteps[navStepIndex + 1];
+        if (!s || !s.maneuver) return null;
+        const t = s.maneuver.type || '';
+        if (t === 'arrive' || isJustCarryOn(s)) return null;
+        const mod = s.maneuver.modifier || '';
+        return { type: t, modifier: mod, name: s.name || s.ref || '', distance: s.distance || 0,
+          svg: arrowSVG(mod, t, 'wl-nt-svg') };
+      } catch (e) { return null; }
+    },
     pullAccountData: () => pullAccountData(),
     // Called when someone signs in or out. Everything the app holds in memory
     // is scoped to an account, so the honest way to switch is a clean reload
@@ -22774,7 +22788,10 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const stack = vw - trW - 24 < S + 12;
       if (stack) S = Math.round(clamp(Math.min(S, vw - 78), 168, 300));
       d.body.classList.toggle('r28-stack', stack);
-      root.setProperty('--r28-card', S + 'px');
+      /* One size smaller: the whole maneuver card scales off --r28-card, so a
+         single factor shrinks every font and padding together, less distracting
+         for the driver while still clearly legible. */
+      root.setProperty('--r28-card', Math.round(S * 0.86) + 'px');
       const trR = tr ? tr.getBoundingClientRect() : null;
       const trBottom = trR && trR.height ? Math.round(trR.bottom) : 64;
       root.setProperty('--r28-tr-bottom', trBottom + 'px');
@@ -27550,8 +27567,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
        stops the sentence is planned exactly as if it had been typed. The
        recording itself is kept for this session and can be played back
        from the guide. */
-    const VO = { rec: null, stream: null, media: null, chunks: [], ctx: null, raf: 0, on: false, finalText: '', interim: '', t0: 0, timer: 0 };
+    const VO = { rec: null, stream: null, media: null, chunks: [], ctx: null, raf: 0, on: false, finalText: '', interim: '', t0: 0, timer: 0, armed: false };
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    /* Wake word, like Siri/Alexa: the microphone stays open but nothing is
+       captured as the trip until the driver says "Whaly". Common mishears
+       are accepted so it triggers reliably. */
+    const WAKE = /\b(whaly|whaley|whaley|whale|wailey|waylee|waylyn|waylynq|wally)\b/i;
+    function stripWake(s) { const m = String(s || '').match(WAKE); return m ? s.slice(m.index + m[0].length).trim() : null; }
     function voiceUi() {
       const field = d.querySelector('#aiDock .ai-field');
       if (!field || $('r31Mic')) return;
@@ -27568,10 +27590,10 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     async function voiceStart() {
       if (VO.on) return;
       if (!SR && !(navigator.mediaDevices && window.MediaRecorder)) { showBubble('This browser has no microphone input. Type the trip instead.'); return; }
-      VO.on = true; VO.finalText = ''; VO.interim = ''; VO.chunks = []; VO.t0 = Date.now();
+      VO.on = true; VO.finalText = ''; VO.interim = ''; VO.chunks = []; VO.t0 = Date.now(); VO.armed = false;
       const panel = $('r31Voice'), mic = $('r31Mic');
-      panel.removeAttribute('hidden'); mic.classList.add('on'); mic.innerHTML = ICON.stop;
-      $('r31VText').textContent = 'Listening… say the whole trip, for example “Drive to Boston with a coffee stop, avoid tolls”.';
+      panel.removeAttribute('hidden'); mic.classList.add('on'); mic.classList.remove('armed'); mic.innerHTML = ICON.stop;
+      $('r31VText').textContent = 'Say “Whaly” to start…';
       g('quiet', () => window.speechSynthesis && window.speechSynthesis.cancel());
       VO.timer = setInterval(() => { const s = Math.floor((Date.now() - VO.t0) / 1000); $('r31VTime').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (s >= 90) voiceStop(true); }, 250);
       /* the words */
@@ -27580,11 +27602,23 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           const r = VO.rec = new SR();
           r.lang = navigator.language || 'en-US'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
           r.onresult = (ev) => {
-            let fin = '', inter = '';
-            for (let i = 0; i < ev.results.length; i++) { const t = ev.results[i][0].transcript; if (ev.results[i].isFinal) fin += t + ' '; else inter += t; }
-            VO.finalText = fin; VO.interim = inter;
-            const txt = voiceText();
-            if (txt) { $('r31VText').textContent = txt; $('aiInput').value = txt; }
+            let all = '';
+            for (let i = 0; i < ev.results.length; i++) { all += ev.results[i][0].transcript + ' '; }
+            all = all.replace(/\s+/g, ' ').trim();
+            if (!VO.armed) {
+              if (WAKE.test(all)) {
+                VO.armed = true;
+                const mic = $('r31Mic'); if (mic) mic.classList.add('armed');
+              } else {
+                $('r31VText').textContent = 'Say “Whaly” to start…';
+                return;
+              }
+            }
+            /* armed: the trip is everything said after the wake word */
+            const cmd = (stripWake(all) || '').trim();
+            VO.finalText = cmd; VO.interim = '';
+            $('r31VText').textContent = cmd || 'Listening… where to?';
+            $('aiInput').value = cmd;
           };
           r.onerror = (ev) => { if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') { showBubble('Microphone access is blocked for this site. Allow it, then tap the microphone again.'); voiceStop(false); } };
           r.onend = () => { if (VO.on && VO.rec === r) g('restart', () => r.start()); };
@@ -33343,9 +33377,12 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
 })();
 
 /* ==== WayLynQ UI fixes (runs last, override-proof) =====================
-   1) Speed limit sign shown at all times during navigation.
-   2) Speed dial turns red when 5+ mph over the posted limit.
+   1) Speed limit sign shown at all times during navigation, in a small box
+      to the RIGHT of the speed, next to MPH.
+   2) Speed dial turns red + beeps when 5+ over local / 10+ over highway.
    3) Top trip-progress bar shows a car/arrow marker instead of a blue line.
+   4) Compact HUD — every font one size smaller so it is less distracting.
+   5) Tesla-style NEXT-TURN signal on the trip row (the road after this one).
 ====================================================================== */
 (function wlUiFixes(){
   var css=document.createElement('style');
@@ -33355,7 +33392,64 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
     '#wlProgCar{position:absolute;top:3px;left:0;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;background:var(--signal,#4d9bff);box-shadow:0 1px 6px rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:14;transition:left .45s linear;pointer-events:none}'+
     '#wlProgCar::after{content:"";border-left:6px solid #fff;border-top:4px solid transparent;border-bottom:4px solid transparent;margin-left:2px}';
   document.head.appendChild(css);
+
+  /* ---- Compact HUD + limit box + next-turn signal (appended to <body> so it
+         wins over the earlier high-specificity nav styles) ---- */
+  var polish=document.createElement('style'); polish.id='wlHudPolish';
+  polish.textContent=
+    /* speed row spacing; the card itself is shrunk via --r28-card in navLayout */
+    'html body.navigating #navMode #r31SpeedRow#r31SpeedRow{gap:10px !important;align-items:center !important}'+
+    /* posted-limit box: always shown, to the RIGHT of the speed, next to MPH.
+       Selectors carry enough IDs to beat the R31 rule that hid the sign. */
+    'html body.navigating #navMode #r31SpeedRow #limitSign#limitSign#limitSign{order:9 !important;position:relative !important;inset:auto !important;transform:none !important;width:54px !important;min-width:54px !important;max-width:54px !important;height:auto !important;min-height:0 !important;display:flex !important;flex-direction:column !important;align-items:center !important;justify-content:center !important;gap:1px !important;background:#ffffff !important;border:3px solid #111111 !important;border-radius:8px !important;padding:3px 2px !important;box-shadow:0 2px 8px rgba(0,0,0,.4) !important;text-shadow:none !important}'+
+    'html body.navigating #navMode #r31SpeedRow #limitSign#limitSign#limitSign.hidden{display:flex !important}'+
+    'html body.navigating #navMode #r31SpeedRow #limitSign#limitSign#limitSign small{display:block !important;font-size:9px !important;font-weight:800 !important;color:#111111 !important;-webkit-text-fill-color:#111111 !important;letter-spacing:.04em !important;line-height:1.05 !important;max-width:none !important;text-shadow:none !important}'+
+    'html body.navigating #navMode #r31SpeedRow #limitSign#limitSign#limitSign b{font-size:1.5rem !important;font-weight:800 !important;color:#000000 !important;-webkit-text-fill-color:#000000 !important;line-height:1 !important;text-shadow:none !important}'+
+    /* next-turn signal on the trip row */
+    '#wlNextTurn{display:none;align-items:center;justify-content:center;margin-right:7px;flex-shrink:0}'+
+    'html body.navigating #navMode #navTop #tripLine #wlNextTurn .wl-arrow,html body.navigating #navMode #navTop #tripLine #wlNextTurn .wl-arrow *{color:#ffe05a !important;stroke:#ffe05a !important;-webkit-text-fill-color:#ffe05a !important}'+
+    'html body.navigating #navMode #navTop #tripLine #wlNextTurn .wl-arrow{width:calc(var(--r28-card,240px) * .095) !important;height:calc(var(--r28-card,240px) * .095) !important;min-width:16px;min-height:16px}'+
+    'html body.navigating #navCard #tripLine #wlNextTurn{display:inline-flex}'+
+    /* Whaly voice: green ring once the wake word is heard */
+    '#r31Mic.armed{box-shadow:0 0 0 3px rgba(52,199,120,.65) !important}';
+  function addPolish(){ if(document.body && !document.getElementById('wlHudPolish')) document.body.appendChild(polish); }
+  if(document.body) addPolish(); else document.addEventListener('DOMContentLoaded',addPolish,{once:true});
+
   function num(s){var m=String(s==null?'':s).replace(/[^0-9.]/g,'');return m?parseFloat(m):NaN;}
+
+  /* ---- over-speed beep (gentle, respects the Voice Guide mute) ---- */
+  var ac=null,lastRed=false,lastBeep=0;
+  function muted(){ var i=document.getElementById('navVoiceIco'); return !!(i && /🔇/.test(i.textContent||'')); }
+  function beep(){
+    if(muted())return;
+    try{
+      if(!ac) ac=new (window.AudioContext||window.webkitAudioContext)();
+      if(ac.state==='suspended') ac.resume();
+      var o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime;
+      o.type='sine'; o.frequency.setValueAtTime(880,t); o.frequency.setValueAtTime(680,t+0.14);
+      g.gain.setValueAtTime(0.0001,t);
+      g.gain.exponentialRampToValueAtTime(0.22,t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001,t+0.3);
+      o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+0.32);
+    }catch(e){}
+  }
+
+  /* ---- next-turn arrow: a real directional SVG (left / right / slight /
+         sharp / u-turn / roundabout / merge), from the maneuver after this
+         one, so highways show a merge rather than a misleading straight ---- */
+  var lastNtSig='';
+  function nextTurnTick(nav){
+    var line=document.getElementById('tripLine'); if(!line) return;
+    var nt=document.getElementById('wlNextTurn');
+    if(!nt){ nt=document.createElement('span'); nt.id='wlNextTurn'; line.insertBefore(nt,line.firstChild); }
+    var info=null; try{ info=window.WayLyn&&window.WayLyn.nextTurn&&window.WayLyn.nextTurn(); }catch(e){}
+    if(nav&&info&&info.svg){
+      var sig=(info.modifier||'')+'|'+(info.type||'');
+      if(sig!==lastNtSig){ nt.innerHTML=info.svg; lastNtSig=sig; }
+      nt.style.display='inline-flex';
+    } else { nt.style.display='none'; lastNtSig=''; }
+  }
+
   function tick(){
     var nav=document.body.classList.contains('navigating');
     var wrap=document.getElementById('navProgressWrap'),fill=document.getElementById('navProgress');
@@ -33366,20 +33460,25 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
       car.style.left=pct+'%';
       car.style.display=nav?'flex':'none';
     }
-    if(!nav)return;
+    nextTurnTick(nav);
+    if(!nav){lastRed=false;return;}
     var sign=document.getElementById('limitSign'),row=document.getElementById('r31SpeedRow'),
         limVal=document.getElementById('limitVal'),spd=document.getElementById('speedVal'),
         dial=document.getElementById('speedDial'),cluster=document.getElementById('speedCluster');
     if(sign){
       sign.classList.remove('hidden');sign.removeAttribute('hidden');sign.style.display='grid';
-      if(row&&sign.parentElement!==row)row.insertBefore(sign,row.firstChild);
-      else if(!row&&cluster)cluster.removeAttribute('hidden');
+      /* place the limit box to the RIGHT of the speed, next to MPH */
+      if(row){ if(sign.parentElement!==row||sign!==row.lastElementChild) row.appendChild(sign); }
+      else if(cluster)cluster.removeAttribute('hidden');
     }
     var lim=num(limVal&&limVal.textContent),mph=num(spd&&spd.textContent);
     var over=(isFinite(lim)&&lim>0&&isFinite(mph))?(mph-lim):-99;
     var red=over>=((isFinite(lim)&&lim>=55)?10:5); /* highways (limit 55+): +10, local roads: +5 */
     if(dial){dial.classList.toggle('over',red);dial.classList.toggle('r31-fast',red);}
     if(cluster)cluster.classList.toggle('over',red);
+    /* warn: beep on crossing the threshold, then every ~3.5s while still over */
+    if(red){ var now=Date.now(); if(!lastRed||now-lastBeep>3500){ beep(); lastBeep=now; } }
+    lastRed=red;
   }
   setInterval(tick,400);
   if(document.readyState!=='loading')tick();
