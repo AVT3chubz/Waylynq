@@ -14108,6 +14108,16 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       return { along: p.distAlong, off: p.distToRoute, total: cum[cum.length - 1] };
     },
     addStopPlace: (place, dwell) => addStop(place, dwell || 0),
+    /* Re-assert the forward route layer if a style reload (satellite / 3D
+       toggle) has dropped it, so the blue route never blanks mid-drive.
+       setup3dRoute no-ops when nothing is stale, so this is cheap to poll. */
+    ensureRoute: () => {
+      try {
+        if (!navActive() || !allRoutes[activeRouteIndex]) return false;
+        if (map3d && map3dReady && (!map3d.getSource('wl-route') || !map3d.getLayer('wl-route-line'))) { setup3dRoute(); return true; }
+        return false;
+      } catch (e) { return false; }
+    },
     /* The maneuver AFTER the current one — used to show a Tesla-style
        "next turn" signal on the trip row so the driver sees what follows. */
     nextTurn: () => {
@@ -33461,6 +33471,7 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
       car.style.display=nav?'flex':'none';
     }
     nextTurnTick(nav);
+    if(nav){ try{ window.WayLyn&&window.WayLyn.ensureRoute&&window.WayLyn.ensureRoute(); }catch(e){} }
     if(!nav){lastRed=false;return;}
     var sign=document.getElementById('limitSign'),row=document.getElementById('r31SpeedRow'),
         limVal=document.getElementById('limitVal'),spd=document.getElementById('speedVal'),
