@@ -8626,7 +8626,7 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
     <option value="foot">Walk</option>
   </select>
   <button id="themeToggle" class="ctl" type="button" title="Light / dark">&#9789;</button>
-  <button id="wlMenuBtn" class="ctl" type="button" title="Trip Planner and Nearby">&#9776;<span class="ctl-label">Menu</span></button>
+  <button id="wlMenuBtn" class="ctl" type="button" title="Trip Planner and Nearby"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="vertical-align:middle"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="ctl-label">Menu</span></button>
   <button id="clearBtn" class="ctl" type="button">Clear</button>
 </div>
 
@@ -8835,7 +8835,7 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
     <button id="navMenuToggle" class="nav-btn" type="button" title="More">&#8942;</button>
     <div id="navMenu" class="hidden">
       <button id="navSat" type="button">&#127758; Satellite view</button>
-      <button id="navSteps" type="button">&#9776; All directions</button>
+      <button id="navSteps" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="vertical-align:middle;margin-right:5px"><path d="M4 7h16M4 12h16M4 17h16"/></svg>All directions</button>
       <button id="navAddStop" type="button">&#128681; Add a stop</button>
       <button id="navRecalc" type="button">&#8635; Recalculate now</button>
       <button id="navDiag" type="button">&#128295; Diagnostics</button>
@@ -8876,7 +8876,7 @@ body.light-mode .wl27-note { background: rgba(0, 0, 0, .035); }
       <div class="nb-stat nb-x1"><b id="avgMph" class="num">--</b><span>Avg mph</span></div>
       <div class="nb-stat nb-x3" id="dwellStat" style="display:none"><b id="dwellMin" class="num">0</b><span>At stops</span></div>
     </div>
-    <button id="navBarSteps" class="bar-btn" type="button" title="All directions">&#9776;</button>
+    <button id="navBarSteps" class="bar-btn" type="button" title="All directions"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="vertical-align:middle"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
 </div>
 
@@ -12488,7 +12488,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   let navWatchId = null, navDot = null;
   let traveledMeters = 0, tripOdometer = 0, lastNavPos = null, tripStartMs = null;
   let navFollow = true, recenterTimer = null;
-  let offRouteSince = null, rerouting = false;
+  let offRouteSince = null, rerouting = false, navCourse = null;
   let dwellRemainingMs = 0, passedStops = 0;
   let halfwayShown = false, arrivalShown = false;
   let spokenStages = {}, lastSpokenText = null;
@@ -12927,9 +12927,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       // alternatives so there is something to choose from, a bearing lock so
       // none of them start with a U-turn, simplified geometry so the payload
       // comes back fast on a long trip.
+      // Lock to the car's ACTUAL direction of travel (course over ground) when
+      // we have it — not the road-snapped heading, which still points along the
+      // route the driver just left and is exactly what produced the wrong U-turn.
+      const lockBearing = navCourse != null ? navCourse : headingDeg;
       const routes = await fetchRoutes(points, modeSelect.value, 2, {
         timeout: REROUTE_TIMEOUT_MS, polyline: true,
-        bearing: opts.ignoreBearing ? null : headingDeg, bearingTolerance: 80
+        bearing: opts.ignoreBearing ? null : lockBearing, bearingTolerance: 80
       });
       if (token !== rerouteToken) return false;   // superseded by a newer one
 
@@ -12950,7 +12954,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       // Prefer the option that carries you onward: no U-turn, heading closest
       // to the way the car already points, then quickest.
       const scored = pool.map((r) => {
-        const uturn = startsWithUturn(r, headingDeg);
+        const uturn = startsWithUturn(r, lockBearing);
         let align = 0;
         if (r.coords.length > 2) {
           let i = 1, run = 0;
@@ -12959,7 +12963,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
             i++;
           }
           const out = bearing({ lat: r.coords[0][0], lng: r.coords[0][1] }, { lat: r.coords[i][0], lng: r.coords[i][1] });
-          align = Math.abs(((out - headingDeg + 540) % 360) - 180);   // 180 = straight on
+          align = Math.abs(((out - lockBearing + 540) % 360) - 180);   // 180 = straight on
         }
         return { r: r, cost: (uturn ? 1e9 : 0) + (180 - align) * 60 + r.duration };
       }).sort((a, b) => a.cost - b.cost);
@@ -13021,6 +13025,11 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     const cur = snapped;
     const prevPos = lastNavPos;
     lastNavPos = cur;
+    /* The true course over ground (where the car is actually moving), kept
+       separate from the road-snapped heading. When the driver has left the
+       route this is the only honest direction to lock a reroute to, so the
+       new route goes onward instead of demanding a U-turn back to the old line. */
+    if (prevPos && haversine(prevPos, cur) > 4) navCourse = bearing(prevPos, cur);
     checkNyah(prevPos, cur);
     /* Round 31: the heading is the course the car is actually on. It used to
        be read off the route, which is what turned the car before the driver. */
@@ -13047,7 +13056,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     pushSpeed(mps);
     const mph = mps * 2.23694;
     $('speedVal').textContent = mph.toFixed(0);
-    $('speedDial').classList.toggle('over', !!speedLimitMph && mph > speedLimitMph + 4);
+    $('speedDial').classList.toggle('over', !!speedLimitMph && mph > speedLimitMph + (speedLimitMph >= 55 ? 10 : 5));
 
     navSafe('limit', () => { if (R31 && R31.limit) R31.limit.onFix(cur); else refreshSpeedLimit(cur); });
     navSafe('safety', () => checkSafetyAhead(cur));
@@ -22801,7 +22810,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       /* One size smaller: the whole maneuver card scales off --r28-card, so a
          single factor shrinks every font and padding together, less distracting
          for the driver while still clearly legible. */
-      root.setProperty('--r28-card', Math.round(S * 0.86) + 'px');
+      root.setProperty('--r28-card', Math.round(S * 0.80) + 'px');
       const trR = tr ? tr.getBoundingClientRect() : null;
       const trBottom = trR && trR.height ? Math.round(trR.bottom) : 64;
       root.setProperty('--r28-tr-bottom', trBottom + 'px');
@@ -26575,10 +26584,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const t = w.tags;
       const raw = t.maxspeed || (forward ? t['maxspeed:forward'] : t['maxspeed:backward']) || t['maxspeed:forward'] || t['maxspeed:backward'];
       const mph = parseMaxspeed(raw);
-      /* Only a limit that is actually recorded for this road is used. A
-         typical figure for the road type is not good enough to tell a
-         driver to slow down by. */
-      return mph ? { mph: mph, est: false } : null;
+      if (mph) return { mph: mph, est: false };
+      /* No posted limit mapped for this road: fall back to the statutory
+         default for its class so the driver always sees a number (marked EST)
+         instead of "--". This is what makes the sign populate immediately on
+         Tesla and anywhere OpenStreetMap has no maxspeed tag. */
+      const est = US_DEFAULT[String(t.highway || '').replace(/_link$/, '_link')];
+      return est ? { mph: est, est: true } : null;
     }
     /* Where OpenStreetMap has no limit for the road, TomTom is asked once
        for that road (same key as the traffic feed) and the answer is kept. */
@@ -26600,12 +26612,30 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         .then(() => { TTL.busy = false; });
       return null;
     }
+    /* A network-free guess from the road the route says we are on, used only
+       when neither OpenStreetMap nor TomTom could be reached (e.g. the Tesla
+       browser blocked them). Always shown marked EST — a number beats "--". */
+    function stepLimitEstimate() {
+      const onNow = navSteps.length ? (navSteps[Math.max(0, navStepIndex - 1)] || navSteps[0]) : null;
+      if (!onNow) return null;
+      const ref = String(onNow.ref || '').toUpperCase();
+      const name = String(onNow.name || '');
+      if (/\bI[- ]?\d/.test(ref) || /\binterstate\b/i.test(name)) return 65;
+      if (/\bUS[- ]?\d/.test(ref) || /\bus[- ]?(hwy|highway|route)\b/i.test(name)) return 55;
+      if (/\b(fwy|freeway|expressway|expy|turnpike|pkwy|parkway)\b/i.test(name)) return 55;
+      if (/\b[A-Z]{2}[- ]?\d/.test(ref)) return 50;
+      if (/\b(ave|avenue|st|street|rd|road|dr|drive|ln|lane|blvd|boulevard|way|ct|court|pl|place|ter|terrace)\b/i.test(name)) return 30;
+      return onNow.ref ? 50 : 35;
+    }
     function limMatch(cur) {
       const hdg = POSE.hdg != null ? POSE.hdg : headingDeg;
       if (!LIM.ways.length) {
-        /* the road list has not arrived (or could not be had): the second source alone */
+        /* the road list has not arrived (or could not be had): the second source,
+           then a network-free estimate, so the sign is never stuck on "--". */
         const tt = ttLimit(null, cur, hdg);
-        if (tt) limShow({ mph: tt, est: false }, 't' + tt, null);
+        if (tt) { limShow({ mph: tt, est: false }, 't' + tt, null); return; }
+        const se = stepLimitEstimate();
+        if (se) limShow({ mph: se, est: true }, 's' + se, null);
         return;
       }
       const onNow = navSteps.length ? (navSteps[Math.max(0, navStepIndex - 1)] || navSteps[0]) : null;
@@ -26690,11 +26720,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       const lim = navActive() ? speedLimitMph : null;
       if (!lim) { if (OVER.on || OVER.n) overStop(); return; }
       const over = mph - lim;
+      /* +5 over on local roads, +10 over on highways (limit >= 55). */
+      const thresh = lim >= 55 ? 10 : 5;
       if (!OVER.on) {
-        if (over >= 5) { if (++OVER.n < 2) return; } else { OVER.n = 0; return; }
+        if (over >= thresh) { if (++OVER.n < 2) return; } else { OVER.n = 0; return; }
         OVER.on = true; OVER.said = 0; OVER.saidAt = 0;
         g('over bubble', () => showBubble('Slow down \u2014 ' + Math.round(mph) + ' in a ' + lim + ' mph zone'));
-      } else if (over < 3) { overStop(); return; }
+      } else if (over < thresh - 2) { overStop(); return; }
       const dial = $('speedDial'), tag = $('r31Slow');
       if (dial && !dial.classList.contains('r31-fast')) dial.classList.add('r31-fast');
       if (tag) { const t = $('r31SlowLim'); if (t) t.textContent = 'limit ' + lim; tag.removeAttribute('hidden'); }
@@ -28128,7 +28160,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     if (!el) return;
     el.innerHTML = '<div class="top-in">' +
       '<span class="logo" data-go="maps">' + MARK + '<b>Way<i>Lynq</i></b></span>' +
-      '<button class="burger" id="wlBurger" aria-label="Menu">&#9776;</button>' +
+      '<button class="burger" id="wlBurger" aria-label="Menu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
       '<nav class="top-nav" id="wlNav">' + VIEWS.map(function (v) {
         /* No data-go, so the global click router cannot navigate to a page
            that does not exist yet. It is a label, not a destination. */
@@ -34326,6 +34358,306 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   setInterval(inject, 1500);
 })();
 
+
+/* ======================================================================
+   WHALY — conversational voice assistant for WayLynQ
+   Fully client-side (no backend required, so it never throws a server
+   error). If a model endpoint is configured it is used for richer
+   answers, otherwise Whaly reasons locally.
+   - Chats back in a conversation panel
+   - Listens with the "Whaly" wake word and SPEAKS replies in its own voice
+   - Remembers the conversation + a lightweight profile (advanced memory)
+   - Builds whole-trip itineraries from a voice or text prompt
+   - Can actually start navigation through the existing one-prompt engine
+====================================================================== */
+(function WhalyAssistant(){
+  if (window.WLWhaly) return;
+  var doc = document;
+
+  /* ---------------- memory ---------------- */
+  var K_CONV='waylynq:whaly:conv', K_PROF='waylynq:whaly:profile', K_VOICE='waylynq:whaly:voice';
+  function load(k,d){ try{ var v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; }catch(e){ return d; } }
+  function save(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+  var conv = load(K_CONV, []);
+  var profile = load(K_PROF, { name:null, recent:[], prefs:{}, count:0 });
+  var voiceOn = load(K_VOICE, true);
+  function remember(role,text){ conv.push({role:role,text:text,t:Date.now()}); if(conv.length>60) conv=conv.slice(-60); save(K_CONV,conv); }
+  function noteDest(name){ if(!name) return; profile.recent=[name].concat((profile.recent||[]).filter(function(x){return x!==name;})).slice(0,6); save(K_PROF,profile); }
+
+  /* ---------------- voice out (its own voice) ---------------- */
+  var synth = window.speechSynthesis, whalyVoice=null;
+  function pickVoice(){
+    if(!synth) return;
+    var vs=synth.getVoices()||[];
+    whalyVoice = vs.find(function(v){return /samantha|aria|jenny|zira|google us english|female/i.test(v.name);})
+      || vs.find(function(v){return /^en[-_]/i.test(v.lang);}) || vs[0] || null;
+  }
+  if(synth){ pickVoice(); try{ synth.onvoiceschanged=pickVoice; }catch(e){} }
+  function speak(text){
+    if(!voiceOn || !synth || !text) return;
+    try{
+      synth.cancel();
+      var clean=String(text).replace(/[*_#`>]/g,'').replace(/\s+/g,' ').trim();
+      var u=new SpeechSynthesisUtterance(clean);
+      if(whalyVoice) u.voice=whalyVoice;
+      u.rate=1.02; u.pitch=1.06; u.volume=1;
+      synth.speak(u);
+    }catch(e){}
+  }
+
+  /* ---------------- panel UI ---------------- */
+  var panel,log,input,micBtn,vBtn;
+  function build(){
+    if(panel) return;
+    var css=doc.createElement('style'); css.id='wlWhalyCss';
+    css.textContent=[
+      '#wlWhaly{position:fixed;inset:0;z-index:100000;display:none;background:rgba(6,12,24,.55);backdrop-filter:blur(3px)}',
+      '#wlWhaly.show{display:flex;align-items:flex-end;justify-content:center}',
+      '#wlWhalyCard{width:min(560px,100%);max-height:86vh;max-height:86dvh;display:flex;flex-direction:column;background:#0e1626;color:#eaf2ff;border:1px solid #23314a;border-radius:20px 20px 0 0;box-shadow:0 -16px 50px rgba(0,0,0,.5);overflow:hidden}',
+      '@media(min-width:620px){#wlWhaly.show{align-items:center}#wlWhalyCard{border-radius:20px}}',
+      '#wlWhalyHead{display:flex;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #1d2a40;background:linear-gradient(180deg,#13203a 0,#0e1626 100%)}',
+      '#wlWhalyHead .wh-mark{font-size:22px}',
+      '#wlWhalyHead b{font-size:16px}#wlWhalyHead small{color:#8ea6c8;font-weight:600;font-size:11px;display:block;margin-top:1px}',
+      '#wlWhalyHead .wh-sp{flex:1}',
+      '.wh-ico{width:34px;height:34px;border-radius:50%;border:1px solid #2a3b57;background:#16223a;color:#cfe0ff;display:grid;place-items:center;cursor:pointer;font-size:15px}',
+      '.wh-ico.on{background:#1f6feb;border-color:#1f6feb;color:#fff}',
+      '#wlWhalyLog{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}',
+      '.wh-msg{max-width:84%;padding:9px 13px;border-radius:14px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}',
+      '.wh-msg.user{align-self:flex-end;background:#1f6feb;color:#fff;border-bottom-right-radius:4px}',
+      '.wh-msg.whaly{align-self:flex-start;background:#17233a;color:#eaf2ff;border:1px solid #23314a;border-bottom-left-radius:4px}',
+      '.wh-msg .wh-act{display:inline-block;margin-top:8px;background:#0a6b3d;color:#fff;border:0;border-radius:9px;padding:7px 12px;font-weight:700;font-size:12.5px;cursor:pointer}',
+      '#wlWhalyBar{display:flex;align-items:center;gap:8px;padding:11px;border-top:1px solid #1d2a40;background:#0b1322}',
+      '#wlWhalyInput{flex:1;min-width:0;background:#16223a;border:1px solid #2a3b57;color:#eaf2ff;border-radius:999px;padding:11px 15px;font-size:15px;outline:none}',
+      '#wlWhalySend{background:#1f6feb;border:0;color:#fff;border-radius:50%;width:42px;height:42px;cursor:pointer;font-size:17px;flex-shrink:0}',
+      '#wlWhalyMic.live{background:#e5484d;border-color:#e5484d;color:#fff;animation:whpulse 1.1s infinite}',
+      '@keyframes whpulse{0%,100%{box-shadow:0 0 0 0 rgba(229,72,77,.5)}50%{box-shadow:0 0 0 7px rgba(229,72,77,0)}}'
+    ].join('');
+    doc.head.appendChild(css);
+
+    panel=doc.createElement('div'); panel.id='wlWhaly';
+    panel.innerHTML=
+      '<div id="wlWhalyCard">'+
+        '<div id="wlWhalyHead">'+
+          '<span class="wh-mark">🐋</span>'+
+          '<div><b>Whaly</b><small>Your AI drive companion — for the whales 🌊</small></div>'+
+          '<span class="wh-sp"></span>'+
+          '<button class="wh-ico" id="wlWhalyVoice" title="Whaly speaks replies">🔊</button>'+
+          '<button class="wh-ico" id="wlWhalyClose" title="Close">✕</button>'+
+        '</div>'+
+        '<div id="wlWhalyLog"></div>'+
+        '<div id="wlWhalyBar">'+
+          '<button class="wh-ico" id="wlWhalyMic" title="Say “Whaly” then your request">🎙️</button>'+
+          '<input id="wlWhalyInput" placeholder="Ask Whaly or plan a trip…" autocomplete="off"/>'+
+          '<button id="wlWhalySend" title="Send">↑</button>'+
+        '</div>'+
+      '</div>';
+    doc.body.appendChild(panel);
+    log=doc.getElementById('wlWhalyLog');
+    input=doc.getElementById('wlWhalyInput');
+    micBtn=doc.getElementById('wlWhalyMic');
+    vBtn=doc.getElementById('wlWhalyVoice');
+
+    doc.getElementById('wlWhalyClose').addEventListener('click', close);
+    panel.addEventListener('click', function(e){ if(e.target===panel) close(); });
+    doc.getElementById('wlWhalySend').addEventListener('click', sendInput);
+    input.addEventListener('keydown', function(e){ if(e.key==='Enter'){ e.preventDefault(); sendInput(); } });
+    vBtn.addEventListener('click', function(){ voiceOn=!voiceOn; save(K_VOICE,voiceOn); vBtn.classList.toggle('on',voiceOn); vBtn.textContent=voiceOn?'🔊':'🔇'; if(!voiceOn&&synth)synth.cancel(); });
+    vBtn.classList.toggle('on',voiceOn); vBtn.textContent=voiceOn?'🔊':'🔇';
+    micBtn.addEventListener('click', toggleMic);
+
+    // replay recent memory, or greet
+    if(conv.length){ conv.slice(-8).forEach(function(m){ bubble(m.role, m.text, true); }); }
+    else { var g=greet(); bubble('whaly', g); remember('whaly', g); }
+  }
+
+  function bubble(role,text,silent){
+    var b=doc.createElement('div'); b.className='wh-msg '+(role==='user'?'user':'whaly');
+    b.textContent=text; log.appendChild(b); log.scrollTop=log.scrollHeight;
+    return b;
+  }
+  function addAction(afterBubble,label,fn){
+    var btn=doc.createElement('button'); btn.className='wh-act'; btn.textContent=label;
+    btn.addEventListener('click', fn); afterBubble.appendChild(doc.createElement('br')); afterBubble.appendChild(btn);
+    log.scrollTop=log.scrollHeight;
+  }
+
+  function open(){ build(); panel.classList.add('show'); setTimeout(function(){ input&&input.focus(); },60); }
+  function close(){ if(panel) panel.classList.remove('show'); if(synth)synth.cancel(); stopMic(); }
+
+  /* ---------------- voice in (wake word) ---------------- */
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition, rec=null, listening=false, armed=false;
+  var WAKE=/\b(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
+  function toggleMic(){ listening?stopMic():startMic(); }
+  function startMic(){
+    if(!SR){ bubble('whaly','Voice input isn’t supported in this browser, but you can type to me.'); return; }
+    try{
+      rec=new SR(); rec.lang='en-US'; rec.continuous=true; rec.interimResults=true; armed=false;
+      input.placeholder='Say “Whaly” to start…';
+      rec.onresult=function(ev){
+        var all=''; for(var i=0;i<ev.results.length;i++) all+=ev.results[i][0].transcript+' ';
+        all=all.replace(/\s+/g,' ').trim();
+        if(!armed){ if(WAKE.test(all)){ armed=true; micBtn.classList.add('live'); input.placeholder='Listening…'; } else { return; } }
+        var m=all.match(WAKE); var cmd=(m?all.slice(m.index+m[0].length):all).trim();
+        input.value=cmd;
+        if(ev.results[ev.results.length-1].isFinal && cmd){ stopMic(); send(cmd); }
+      };
+      rec.onerror=function(){ stopMic(); };
+      rec.onend=function(){ if(listening){ try{ rec.start(); }catch(e){} } };
+      rec.start(); listening=true; micBtn.classList.add('live');
+    }catch(e){ stopMic(); }
+  }
+  function stopMic(){ listening=false; armed=false; if(micBtn)micBtn.classList.remove('live'); if(input)input.placeholder='Ask Whaly or plan a trip…'; if(rec){ try{ rec.stop(); }catch(e){} rec=null; } }
+
+  /* ---------------- sending ---------------- */
+  function sendInput(){ var t=(input.value||'').trim(); if(!t) return; input.value=''; send(t); }
+  function send(text){
+    bubble('user',text); remember('user',text);
+    profile.count=(profile.count||0)+1; save(K_PROF,profile);
+    var typing=bubble('whaly','…');
+    reply(text).then(function(res){
+      typing.textContent=res.text; remember('whaly',res.text);
+      if(res.action) addAction(typing,res.action.label,res.action.fn);
+      speak(res.speak||res.text);
+      log.scrollTop=log.scrollHeight;
+    }).catch(function(){
+      typing.textContent='Hmm, I lost that one. Try again?'; speak('Try that again?');
+    });
+  }
+
+  /* ---------------- understanding ---------------- */
+  function name(){ try{ var u=window.WLAuth&&window.WLAuth.current&&window.WLAuth.current(); if(u&&u.name){ profile.name=u.name.split(' ')[0]; } }catch(e){} return profile.name; }
+  function greet(){
+    var n=name(); var hi=n?('Hi '+n+'! '):'Hey there! ';
+    return hi+'I’m Whaly 🐋 your drive companion. Tell me where you’re headed, ask me to plan a day out, or ask about your current trip — by voice or text.';
+  }
+
+  function tripSnapshot(){
+    try{
+      var W=window.WayLyn; if(!W||!W.hasRoute||!W.hasRoute()) return null;
+      var i=W.routeInfo&&W.routeInfo(); if(!i) return null;
+      return i; // expected {distance, duration, destName,...}
+    }catch(e){ return null; }
+  }
+  function fmtMi(m){ if(m==null) return null; var mi=m/1609.34; return mi<10?mi.toFixed(1)+' miles':Math.round(mi)+' miles'; }
+  function fmtMin(s){ if(s==null) return null; var m=Math.round(s/60); if(m<60) return m+' min'; var h=Math.floor(m/60); return h+' h '+(m%60)+' min'; }
+
+  /* try a model endpoint if one is configured; silent fallback otherwise */
+  function tryModel(text){
+    var ep = window.WAYLYN_AI_ENDPOINT;
+    if(!ep) return Promise.reject();
+    var sys='You are Whaly, a warm, concise in-car AI navigation companion for WayLynQ (whale/ocean theme). Answer in under 60 words. If the driver wants to go somewhere, say you are routing there.';
+    var msgs=[{role:'system',content:sys}].concat(conv.slice(-8).map(function(m){return {role:m.role==='user'?'user':'assistant',content:m.text};})).concat([{role:'user',content:text}]);
+    return new Promise(function(res,rej){
+      var done=false, to=setTimeout(function(){ if(!done){done=true;rej();} },6000);
+      fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs})})
+        .then(function(r){ return r.ok?r.json():Promise.reject(); })
+        .then(function(j){ if(done)return; done=true; clearTimeout(to);
+          var t=(j&&(j.reply||j.text||(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)))||'';
+          t?res(String(t).trim()):rej();
+        }).catch(function(){ if(!done){done=true;clearTimeout(to);rej();} });
+    });
+  }
+
+  function routeSentence(s){
+    var i=doc.getElementById('aiInput'), g=doc.getElementById('aiGo');
+    if(i&&g){ i.value=s; g.click(); return true; }
+    try{ if(window.WLGo){ window.WLGo('maps'); } }catch(e){}
+    i=doc.getElementById('aiInput'); g=doc.getElementById('aiGo');
+    if(i&&g){ i.value=s; setTimeout(function(){ g.click(); },300); return true; }
+    return false;
+  }
+
+  function titleCase(s){ return String(s||'').replace(/\b\w/g,function(c){return c.toUpperCase();}); }
+  function destOf(text){
+    var m=text.match(/\b(?:to|towards?|for|visit|in|at|around)\s+(.+)$/i);
+    var d=m?m[1]:text;
+    return titleCase(d.replace(/\b(please|now|today|tomorrow|a day|day trip|trip|itinerary|plan|me|us|the|an?)\b/gi,' ').replace(/\s+/g,' ').trim());
+  }
+  function makeItinerary(dest){
+    dest=dest||'your destination';
+    var stops=[
+      ['Morning','☕ Start with coffee and breakfast at a local favorite'],
+      ['Late morning','📸 Visit the top landmark or scenic spot in '+dest],
+      ['Lunch','🍽️ A well-reviewed lunch place nearby'],
+      ['Afternoon','🚶 Explore a park, museum, or main street'],
+      ['Evening','🌅 Dinner and a sunset viewpoint before heading back']
+    ];
+    var body='Here’s a day in '+dest+':\n\n'+stops.map(function(s){return '• '+s[0]+' — '+s[1];}).join('\n')+
+      '\n\nWant me to start navigation to the first stop?';
+    return body;
+  }
+
+  function localReply(text){
+    var t=text.toLowerCase().trim();
+    var snap;
+    // capabilities
+    if(/\b(what can you do|help|who are you|how do you work)\b/.test(t))
+      return { text:'I can route you anywhere ("take me to the airport"), find the nearest gas/coffee/charging, plan a whole day out ("plan a day in Princeton"), and answer about your drive ("how far to go?"). Say "Whaly" then talk, or just type.' };
+    // greeting
+    if(/^(hi|hey|hello|yo|sup|good (morning|afternoon|evening))\b/.test(t)) return { text:greet() };
+    if(/\b(thank|thanks|appreciate)\b/.test(t)) return { text:'Anytime 🐋 happy swimming — I mean driving.' };
+    // trip info
+    if(/\b(how (far|long)|eta|arrive|distance|time left|remaining|next turn|where.*(go|headed))\b/.test(t)){
+      snap=tripSnapshot();
+      if(snap){ var d=fmtMi(snap.distance), m=fmtMin(snap.duration); var nm=snap.destName||snap.destination;
+        return { text:'You’ve got '+(d||'a bit')+' and about '+(m||'a little while')+' left'+(nm?(' to '+nm):'')+'. You’re doing great.' };
+      }
+      return { text:'No active trip right now — tell me where to go and I’ll get you there.' };
+    }
+    // nearest category
+    var cat=t.match(/\b(gas|fuel|coffee|food|lunch|dinner|ev|charger|charging|hospital|parking|restroom|bathroom|atm)\b/);
+    if(cat && /\b(nearest|closest|find|where.*(is|can i)|need|get)\b/.test(t)){
+      var word=cat[1]; var sentence='nearest '+word;
+      return { text:'Finding the closest '+word+' and routing you there now.', speak:'Finding the closest '+word+'.',
+        action:{ label:'Find '+word, fn:function(){ routeSentence(sentence); close(); } }, auto:sentence };
+    }
+    // itinerary
+    if(/\b(itinerary|plan (a|my)?\s*(day|trip|weekend|visit)|day trip|things to do|what should i do|plan a)\b/.test(t)){
+      var dest=destOf(text); var body=makeItinerary(dest);
+      return { text:body, speak:'Here’s a day in '+dest+'. Want me to navigate to the first stop?',
+        action:{ label:'Start navigation', fn:function(){ routeSentence('coffee in '+dest); close(); } } };
+    }
+    // navigate
+    if(/\b(take me|drive|navigate|go to|directions|route|head|get me|bring me)\b/.test(t) || /^to\s+/.test(t)){
+      var where=destOf(text); noteDest(where);
+      return { text:'On it — routing you to '+where+'. Buckle up!', speak:'Routing you to '+where+'.',
+        action:{ label:'Go to '+where, fn:function(){ routeSentence(text); close(); } }, auto:text };
+    }
+    // fallback: treat as a place to go if it looks like one, else chat
+    if(text.split(' ').length<=6 && /^[a-z0-9 ,.'-]+$/i.test(text)){
+      var guess=titleCase(text);
+      return { text:'Want me to navigate to '+guess+'? Tap below, or tell me more.', speak:'Want me to navigate to '+guess+'?',
+        action:{ label:'Go to '+guess, fn:function(){ routeSentence(text); close(); } } };
+    }
+    return { text:'I’m here to help with your drive — try "take me to Newark airport", "find the nearest charger", or "plan a day in Asbury Park".' };
+  }
+
+  function reply(text){
+    // model first (if configured), always fall back to local — never errors out
+    return tryModel(text).then(function(t){
+      // still offer routing if it reads like a destination request
+      var low=text.toLowerCase();
+      if(/\b(take me|drive|navigate|go to|directions|route|head to)\b/.test(low))
+        return { text:t, action:{ label:'Start navigation', fn:function(){ routeSentence(text); close(); } } };
+      return { text:t };
+    }).catch(function(){ return localReply(text); });
+  }
+
+  /* ---------------- public API + launcher ---------------- */
+  window.WLWhaly = { open:open, close:close, ask:function(t){ open(); setTimeout(function(){ send(t); },120); }, speak:speak };
+
+  /* add a Whaly entry to the POI dock rail, next to AR/Forum/etc. */
+  function addRailButton(){
+    var rail=doc.getElementById('quick-rail'); if(!rail) return;
+    if(rail.querySelector('.qr-whaly')) return;
+    var b=doc.createElement('button'); b.className='qr-btn qr-whaly'; b.type='button';
+    b.innerHTML='<span class="qr-ico">🐋</span><span class="qr-label">Whaly</span>';
+    b.addEventListener('click', open); rail.appendChild(b);
+  }
+  if(doc.readyState!=='loading') addRailButton(); else doc.addEventListener('DOMContentLoaded',addRailButton,{once:true});
+  setInterval(addRailButton,1500);
+})();
+
 </script>
 
 
@@ -35285,6 +35617,68 @@ html body.navigating.r31-menu-open #navMode #r31Compass { visibility: hidden; }
 .r31-status-b { flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px; }
 .r31-status-b button { height: 30px; padding: 0 11px; border-radius: 999px; border: 1px solid currentColor; background: #ffffff; color: inherit; font: 700 12.5px/1 var(--font-ui, system-ui, sans-serif); cursor: pointer; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { html body.navigating #navMode #r31SpeedRow #speedDial#speedDial#speedDial#speedDial.r31-fast b, #r31Slow { animation: none !important; } }
+</style>
+
+<!-- ============================================================
+     Tesla / universal responsiveness for the homepage.
+     Loaded last so it wins over the earlier landing media queries.
+     - True 50 / 50 split: banner (left) and sign-in (right).
+     - Nothing in the banner is ever hidden (description + mode chips
+       always show), they wrap and scroll instead.
+     - Fits Tesla's short, shrinking in-car viewport (dvh/svh).
+     - Hamburger is an SVG (set above), identical on every device.
+============================================================ -->
+<style id="wlTeslaFix">
+/* --- 50/50 split, holds across widescreen + Tesla --- */
+#wlShell .hero{
+  display:grid !important;
+  grid-template-columns:1fr 1fr !important;
+  min-height:0 !important;
+  height:100dvh !important; height:100svh !important;
+}
+#wlShell .hero-art{ min-height:0 !important; height:100% !important; overflow:hidden !important; }
+
+/* banner copy: always visible, fits a short screen, scrolls if it must --- */
+#wlShell .hero-copy{
+  position:absolute !important; left:0 !important; right:0 !important; bottom:0 !important; top:auto !important;
+  display:flex !important; flex-direction:column !important; align-items:flex-start !important;
+  gap:8px !important;
+  padding:clamp(12px,2.4vw,40px) clamp(12px,2.8vw,46px) !important;
+  max-height:100% !important; overflow-y:auto !important; -webkit-overflow-scrolling:touch !important;
+  background:linear-gradient(to top, rgba(6,12,24,.92) 0%, rgba(6,12,24,.78) 42%, rgba(6,12,24,0) 100%) !important;
+  z-index:3 !important;
+}
+#wlShell .hero-copy h1{ font-size:clamp(1.15rem,2.7vw,2.6rem) !important; line-height:1.1 !important; margin:0 0 4px !important; }
+#wlShell .hero-copy > p{ font-size:clamp(.8rem,1.25vw,1.12rem) !important; line-height:1.3 !important; max-width:40ch !important; margin:0 0 6px !important; }
+#wlShell .hero-copy .no-login-note{ font-size:clamp(.72rem,1vw,.85rem) !important; }
+#wlShell .badge{ font-size:clamp(.66rem,1vw,.82rem) !important; padding:5px 11px !important; margin:0 !important; }
+#wlShell #heroOpenMap{ font-size:clamp(.78rem,1.1vw,15px) !important; padding:clamp(9px,1.2vw,13px) clamp(13px,1.6vw,20px) !important; }
+
+/* mode chips: ALWAYS shown, wrap to fit, never clipped (Google/Waze style) */
+#wlShell .modes{ display:flex !important; flex-wrap:wrap !important; gap:6px !important; width:100% !important; }
+#wlShell .mode-chip{ display:inline-flex !important; align-items:center !important; gap:4px !important;
+  font-size:clamp(.68rem,1vw,.9rem) !important; padding:5px 10px !important; white-space:nowrap !important; }
+
+/* sign-in half fills its column and scrolls within itself */
+#wlShell .auth-side{ height:100dvh !important; height:100svh !important; overflow-y:auto !important;
+  padding:clamp(14px,3vh,48px) clamp(14px,2.6vw,42px) !important; }
+#wlShell .auth-box{ max-width:460px !important; }
+
+/* Short landscape = Tesla during navigation: stay 50/50 but go compact. */
+@media (max-height:600px){
+  #wlShell .hero-copy{ gap:5px !important; padding:10px 14px !important; }
+  #wlShell .hero-copy h1{ font-size:clamp(1rem,2.4vw,1.5rem) !important; }
+  #wlShell .hero-copy > p{ font-size:clamp(.74rem,1.1vw,.95rem) !important; margin-bottom:4px !important; }
+  #wlShell .badge{ display:inline-flex !important; }
+  #wlShell .auth-side{ padding:12px 16px !important; }
+  #wlShell .auth-tag{ margin-bottom:12px !important; }
+}
+/* Narrow portrait phones: stacking the two halves is the only usable layout. */
+@media (max-width:600px){
+  #wlShell .hero{ grid-template-columns:1fr !important; height:auto !important; min-height:100svh !important; }
+  #wlShell .hero-art{ min-height:42svh !important; height:42svh !important; }
+  #wlShell .auth-side{ height:auto !important; }
+}
 </style>
 </body>
 </html>
