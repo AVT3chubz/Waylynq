@@ -26662,9 +26662,17 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         if (/_link$/.test(w.tags.highway) && !isNamed) score += 18;
         if (score < bestScore) { bestScore = score; best = w; bestFwd = fwd; named = isNamed; }
       }
-      if (!best) return;
+      if (!best) {
+        /* No road matched near us (e.g. standing still with no heading, or the
+           corridor came back thin): still show the route-based estimate so the
+           sign is never stuck on "--". */
+        const se = stepLimitEstimate();
+        if (se) limShow({ mph: se, est: true }, 's' + se, null);
+        return;
+      }
       let lim = wayLimit(best, bestFwd);
       if (!lim) { const tt = ttLimit(best, cur, hdg); if (tt) lim = { mph: tt, est: false }; }
+      if (!lim) { const se = stepLimitEstimate(); if (se) lim = { mph: se, est: true }; }  // last resort — always a number
       const key = lim ? lim.mph + (lim.est ? 'e' : '') : 'none';
       /* The road the route says the car is on changes the sign at once. A
          road known only by position has to win twice running, so a ramp or
@@ -34339,8 +34347,7 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
     ['📷','AR', function(){ if(window.WLPack&&WLPack.ar) WLPack.ar(); else trig('wlpAR'); }],
     ['💬','Forum', function(){ if(window.WLPack&&WLPack.forum) WLPack.forum(); else trig('wlpForum'); }],
     ['⚙️','More', function(){ if(window.WLPack&&WLPack.enhance) WLPack.enhance(); else trig('wlpEnh'); }],
-    ['🧰','Tools', function(){ trig('wttFab'); }],
-    ['✨','AI', function(){ trig('wlmFab'); }]
+    ['🧰','Tools', function(){ trig('wttFab'); }]
   ];
   var st=document.createElement('style');
   st.textContent='#wlpAR,#wlpForum,#wlpEnh,#wttFab,#wlmFab{display:none !important}';
@@ -34587,49 +34594,102 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
     return body;
   }
 
+  /* a few things Whaly just knows, so it feels like a partner offline */
+  var RECIPES={
+    'scrambled eggs':'Scrambled eggs: whisk 3 eggs with a splash of milk, salt and pepper. Melt butter in a non-stick pan on low, pour in, and stir slowly until just set but still soft. ~4 min.',
+    'pancakes':'Pancakes: mix 1 cup flour, 1 tbsp sugar, 1 tsp baking powder, a pinch of salt. Add 1 egg, 3/4 cup milk, 2 tbsp melted butter. Cook spoonfuls on a medium griddle, flip when bubbles form.',
+    'omelette':'Omelette: beat 3 eggs with salt. Pour into a buttered pan on medium, let it set, add fillings (cheese, veg, ham) to one half, fold over, slide out. ~3 min.',
+    'oatmeal':'Oatmeal: simmer 1/2 cup rolled oats in 1 cup milk or water for ~5 min, stirring. Top with fruit, honey, or cinnamon.',
+    'avocado toast':'Avocado toast: toast good bread, mash half an avocado with lemon, salt and chili flakes, spread on top. Add a poached egg if you like.',
+    'french toast':'French toast: whisk 2 eggs, 1/2 cup milk, cinnamon, vanilla. Dip bread, fry in butter ~2 min a side until golden. Dust with sugar or syrup.',
+    'smoothie':'Breakfast smoothie: blend 1 banana, 1/2 cup berries, 1/2 cup yogurt, 1/2 cup milk, and a handful of ice. Add spinach or oats if you want.'
+  };
+  function recipeReply(t){
+    for(var k in RECIPES){ if(t.indexOf(k)>=0) return RECIPES[k]; }
+    if(/\bbreakfast\b/.test(t)) return 'Quick breakfast ideas: scrambled eggs, avocado toast, oatmeal, a smoothie, or pancakes. Ask me for any one and I’ll give you the recipe — e.g. "how to make pancakes".';
+    return null;
+  }
+  function mathReply(t){
+    var m=t.match(/(?:what(?:'s| is)|calculate|compute)?\s*([0-9][0-9+\-*/×÷().,\s%]*[0-9%)])\s*\??$/);
+    if(!m) return null;
+    var expr=m[1].replace(/×/g,'*').replace(/÷/g,'/').replace(/,/g,'').replace(/%/g,'/100');
+    if(!/^[0-9+\-*/().\s]+$/.test(expr)) return null;
+    try{ var v=Function('"use strict";return ('+expr+')')(); if(typeof v==='number'&&isFinite(v)) return 'That’s '+(Math.round(v*1e6)/1e6)+'.'; }catch(e){}
+    return null;
+  }
+  function timeReply(t){
+    if(/\b(what('?s| is)? the )?(time|clock)\b/.test(t)) return 'It’s '+new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})+'.';
+    if(/\b(what('?s| is)? )?(the )?(date|day)( is it)?( today)?\b/.test(t)) return 'Today is '+new Date().toLocaleDateString([], {weekday:'long', month:'long', day:'numeric', year:'numeric'})+'.';
+    return null;
+  }
+
   function localReply(text){
     var t=text.toLowerCase().trim();
-    var snap;
-    // capabilities
-    if(/\b(what can you do|help|who are you|how do you work)\b/.test(t))
-      return { text:'I can route you anywhere ("take me to the airport"), find the nearest gas/coffee/charging, plan a whole day out ("plan a day in Princeton"), and answer about your drive ("how far to go?"). Say "Whaly" then talk, or just type.' };
-    // greeting
-    if(/^(hi|hey|hello|yo|sup|good (morning|afternoon|evening))\b/.test(t)) return { text:greet() };
-    if(/\b(thank|thanks|appreciate)\b/.test(t)) return { text:'Anytime 🐋 happy swimming — I mean driving.' };
+    var snap, r;
+    // --- trip control: cancel / end the drive (never navigate to it) ---
+    if(/\b(cancel|end|stop|exit|quit|clear|abort|kill)\b.*\b(trip|nav|navigation|route|drive|driving|directions|journey)\b/.test(t)
+       || /\b(cancel|end|stop)\b$/.test(t) || /\bstop navigat/.test(t)){
+      var had=false; try{ had=!!(window.WayLyn&&window.WayLyn.hasRoute&&window.WayLyn.hasRoute()); if(window.WayLyn&&window.WayLyn.endNav) window.WayLyn.endNav(); }catch(e){}
+      return { text: had?'Done — I’ve ended the trip. Where to next?':'There’s no active trip to cancel right now.' };
+    }
+    // --- close / dismiss the assistant (never navigate) ---
+    if(/\b(close|exit|dismiss|go away|leave me|never ?mind|that'?s all|bye|goodbye|shut (up|down)|close yourself)\b/.test(t)){
+      setTimeout(close,250);
+      return { text:'Okay, closing — just tap 🐋 whenever you need me.', speak:'Okay, closing.' };
+    }
+    // thanks / greeting / small talk
+    if(/\b(thank|thanks|appreciate|thx)\b/.test(t)) return { text:'Anytime 🐋 drive safe out there.' };
+    if(/^(hi|hey|hello|yo|sup|howdy|good (morning|afternoon|evening))\b/.test(t)) return { text:greet() };
+    if(/\bhow are you\b/.test(t)) return { text:'Swimming along nicely, thanks! Ready to get you where you’re going. What’s the plan?' };
+    if(/\b(your name|who are you|what are you)\b/.test(t)) return { text:'I’m Whaly 🐋 WayLynQ’s AI drive companion — named for the whales we help protect. I handle your navigation and can chat about pretty much anything.' };
+    if(/\b(tell me a joke|make me laugh)\b/.test(t)) return { text:'Why don’t whales use the internet? They’re afraid of the net. 🐋 Okay — where are we headed?' };
+    if(/\b(what can you do|help|how do you work|capabilities)\b/.test(t))
+      return { text:'I can navigate you anywhere ("take me to the airport"), find the nearest gas/coffee/charger, plan a whole day out, cancel a trip, and answer questions — recipes, quick math, the time, and more. Say "Whaly" then talk, or just type.' };
     // trip info
-    if(/\b(how (far|long)|eta|arrive|distance|time left|remaining|next turn|where.*(go|headed))\b/.test(t)){
+    if(/\b(how (far|long)|eta|arrive|distance|time left|remaining|next turn|where.*(go|headed)|am i close)\b/.test(t)){
       snap=tripSnapshot();
       if(snap){ var d=fmtMi(snap.distance), m=fmtMin(snap.duration); var nm=snap.destName||snap.destination;
         return { text:'You’ve got '+(d||'a bit')+' and about '+(m||'a little while')+' left'+(nm?(' to '+nm):'')+'. You’re doing great.' };
       }
       return { text:'No active trip right now — tell me where to go and I’ll get you there.' };
     }
+    // quick knowledge: recipe / math / time — answer like a partner
+    r=timeReply(t); if(r) return { text:r };
+    r=mathReply(t); if(r) return { text:r };
+    if(/\b(recipe|how (to|do i) (make|cook|bake)|how is .* made)\b/.test(t) || /\bbreakfast\b/.test(t)){
+      r=recipeReply(t);
+      if(r) return { text:r };
+    }
     // nearest category
-    var cat=t.match(/\b(gas|fuel|coffee|food|lunch|dinner|ev|charger|charging|hospital|parking|restroom|bathroom|atm)\b/);
-    if(cat && /\b(nearest|closest|find|where.*(is|can i)|need|get)\b/.test(t)){
+    var cat=t.match(/\b(gas|fuel|coffee|food|lunch|dinner|ev|charger|charging|hospital|parking|restroom|bathroom|atm|pharmacy|hotel)\b/);
+    if(cat && /\b(nearest|closest|find|where|need|get|some|any)\b/.test(t)){
       var word=cat[1]; var sentence='nearest '+word;
-      return { text:'Finding the closest '+word+' and routing you there now.', speak:'Finding the closest '+word+'.',
-        action:{ label:'Find '+word, fn:function(){ routeSentence(sentence); close(); } }, auto:sentence };
+      return { text:'Finding the closest '+word+' and routing you there.', speak:'Finding the closest '+word+'.',
+        action:{ label:'Find '+word, fn:function(){ routeSentence(sentence); close(); } } };
     }
     // itinerary
-    if(/\b(itinerary|plan (a|my)?\s*(day|trip|weekend|visit)|day trip|things to do|what should i do|plan a)\b/.test(t)){
+    if(/\b(itinerary|plan (a|my)?\s*(day|trip|weekend|visit)|day trip|things to do|what should i do)\b/.test(t)){
       var dest=destOf(text); var body=makeItinerary(dest);
       return { text:body, speak:'Here’s a day in '+dest+'. Want me to navigate to the first stop?',
         action:{ label:'Start navigation', fn:function(){ routeSentence('coffee in '+dest); close(); } } };
     }
-    // navigate
-    if(/\b(take me|drive|navigate|go to|directions|route|head|get me|bring me)\b/.test(t) || /^to\s+/.test(t)){
+    // navigate — only on an explicit go-intent, never on command/question words
+    if(/\b(take me|drive me|drive to|navigate|go to|directions to|route to|head to|get me to|bring me to|let'?s go to)\b/.test(t) || /^to\s+[a-z]/.test(t)){
       var where=destOf(text); noteDest(where);
       return { text:'On it — routing you to '+where+'. Buckle up!', speak:'Routing you to '+where+'.',
-        action:{ label:'Go to '+where, fn:function(){ routeSentence(text); close(); } }, auto:text };
+        action:{ label:'Go to '+where, fn:function(){ routeSentence(text); close(); } } };
     }
-    // fallback: treat as a place to go if it looks like one, else chat
-    if(text.split(' ').length<=6 && /^[a-z0-9 ,.'-]+$/i.test(text)){
+    // open question → answer conversationally, offer the AI brain for the deep stuff
+    if(/^(what|who|when|where|why|how|is|are|can|does|do|should|could|would|explain|tell me|define)\b/.test(t) || /\?$/.test(t)){
+      return { text:'Good question. My built-in brain covers navigation, trips, recipes, quick math and the time. For anything deeper, connect my AI brain (the WayLynQ AI endpoint) and I’ll answer it fully. In the meantime — want me to help with your drive?' };
+    }
+    // final fallback: a place name? OFFER it (don’t auto-navigate), else chat
+    if(text.split(' ').length<=6 && /^[a-z0-9 ,.'-]+$/i.test(text) && !/\b(cancel|close|stop|no|yes|ok|okay)\b/.test(t)){
       var guess=titleCase(text);
       return { text:'Want me to navigate to '+guess+'? Tap below, or tell me more.', speak:'Want me to navigate to '+guess+'?',
         action:{ label:'Go to '+guess, fn:function(){ routeSentence(text); close(); } } };
     }
-    return { text:'I’m here to help with your drive — try "take me to Newark airport", "find the nearest charger", or "plan a day in Asbury Park".' };
+    return { text:'I’m here for your drive and happy to chat — try "take me to Newark airport", "find the nearest charger", "plan a day in Asbury Park", or ask me for a recipe.' };
   }
 
   function reply(text){
@@ -35649,8 +35709,10 @@ html body.navigating.r31-menu-open #navMode #r31Compass { visibility: hidden; }
   z-index:3 !important;
 }
 #wlShell .hero-copy h1{ font-size:clamp(1.15rem,2.7vw,2.6rem) !important; line-height:1.1 !important; margin:0 0 4px !important; }
-#wlShell .hero-copy > p{ font-size:clamp(.8rem,1.25vw,1.12rem) !important; line-height:1.3 !important; max-width:40ch !important; margin:0 0 6px !important; }
-#wlShell .hero-copy .no-login-note{ font-size:clamp(.72rem,1vw,.85rem) !important; }
+/* Description + "free to use" note: ALWAYS visible, every screen size
+   (the earlier layout hid both <p>s on small screens). */
+#wlShell .hero-copy > p{ display:block !important; font-size:clamp(.8rem,1.25vw,1.12rem) !important; line-height:1.3 !important; max-width:40ch !important; margin:0 0 6px !important; }
+#wlShell .hero-copy .no-login-note{ display:block !important; font-size:clamp(.72rem,1vw,.85rem) !important; }
 #wlShell .badge{ font-size:clamp(.66rem,1vw,.82rem) !important; padding:5px 11px !important; margin:0 !important; }
 #wlShell #heroOpenMap{ font-size:clamp(.78rem,1.1vw,15px) !important; padding:clamp(9px,1.2vw,13px) clamp(13px,1.6vw,20px) !important; }
 
