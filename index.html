@@ -12965,9 +12965,22 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           const out = bearing({ lat: r.coords[0][0], lng: r.coords[0][1] }, { lat: r.coords[i][0], lng: r.coords[i][1] });
           align = Math.abs(((out - lockBearing + 540) % 360) - 180);   // 180 = straight on
         }
-        return { r: r, cost: (uturn ? 1e9 : 0) + (180 - align) * 60 + r.duration };
+        // align: 0 = continues straight on in the travel direction (best),
+        // 180 = points back the way we came (worst). Penalise misalignment
+        // gently so the SHORTER road still wins — duration leads, alignment
+        // only breaks ties and keeps a start-of-route U-turn from being chosen.
+        return { r: r, cost: (uturn ? 1e9 : 0) + align * 10 + r.duration };
       }).sort((a, b) => a.cost - b.cost);
       let pick = scored[0].r;
+      /* Plausibility guard: a GPS wobble or a momentary off-route must never
+         swap in a wildly longer route and make the arrival time leap (the
+         "25 min becomes 1 h 30" bug). If the best option is far longer than the
+         time we already had left, keep the current route and just re-snap. */
+      if (navRemainDur > 60 && pick.duration > navRemainDur * 1.8 + 240 && !opts.force) {
+        console.log('reroute rejected (' + Math.round(pick.duration / 60) + ' min vs ' + Math.round(navRemainDur / 60) + ' min left) — keeping current route');
+        resyncNavToActiveRoute();
+        return false;
+      }
       const ordered = [pick].concat(routes.filter((r) => r !== pick));
 
       originPlace = from;
@@ -17204,6 +17217,30 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         }
       });
     } catch (e) { console.warn('3D signals failed', e); }
+    /* TRUE 3D traffic lights: actual extruded posts + a red head box that stand
+       upright in the tilted 3D view, so the driver sees a real traffic light at
+       each junction, not just a flat icon. */
+    try {
+      const mLat = 111320;
+      const sq = (lng, lat, m) => {
+        const dLat = m / mLat, dLng = m / (mLat * (Math.cos(lat * Math.PI / 180) || 1));
+        return [[[lng - dLng, lat - dLat], [lng + dLng, lat - dLat], [lng + dLng, lat + dLat], [lng - dLng, lat + dLat], [lng - dLng, lat - dLat]]];
+      };
+      const postFC = { type: 'FeatureCollection', features: routeSignals.map((s) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: sq(s.lng, s.lat, 0.9) } })) };
+      const headFC = { type: 'FeatureCollection', features: routeSignals.map((s) => ({ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: sq(s.lng, s.lat, 1.9) } })) };
+      if (map3d.getSource('wl-signal-post')) { map3d.getSource('wl-signal-post').setData(postFC); }
+      else {
+        map3d.addSource('wl-signal-post', { type: 'geojson', data: postFC });
+        map3d.addLayer({ id: 'wl-signal-post', type: 'fill-extrusion', source: 'wl-signal-post', minzoom: 14,
+          paint: { 'fill-extrusion-color': '#2b2f36', 'fill-extrusion-height': 5.5, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.96 } });
+      }
+      if (map3d.getSource('wl-signal-head')) { map3d.getSource('wl-signal-head').setData(headFC); }
+      else {
+        map3d.addSource('wl-signal-head', { type: 'geojson', data: headFC });
+        map3d.addLayer({ id: 'wl-signal-head', type: 'fill-extrusion', source: 'wl-signal-head', minzoom: 14,
+          paint: { 'fill-extrusion-color': '#d93025', 'fill-extrusion-height': 7.6, 'fill-extrusion-base': 5.5, 'fill-extrusion-opacity': 1 } });
+      }
+    } catch (e) { console.warn('3D signal posts failed', e); }
   }
 
 
@@ -26530,7 +26567,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     /* Statutory defaults for a road with no limit mapped. Only ever shown
        marked "EST", and only where the surrounding data is in mph in the
        Americas, which is to say the United States. */
-    const US_DEFAULT = { motorway: 65, trunk: 55, primary: 45, secondary: 40, tertiary: 35, unclassified: 30, road: 30, residential: 25, living_street: 15, service: 15,
+    const US_DEFAULT = { motorway: 65, trunk: 55, primary: 40, secondary: 35, tertiary: 30, unclassified: 25, road: 25, residential: 25, living_street: 15, service: 15,
       motorway_link: 45, trunk_link: 40, primary_link: 35, secondary_link: 30, tertiary_link: 25 };
     const usStyle = () => LIM.mphSeen && /^America\//.test(g('tz', () => Intl.DateTimeFormat().resolvedOptions().timeZone, '') || '');
     function routeSig31() {
@@ -26623,9 +26660,13 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       if (/\bI[- ]?\d/.test(ref) || /\binterstate\b/i.test(name)) return 65;
       if (/\bUS[- ]?\d/.test(ref) || /\bus[- ]?(hwy|highway|route)\b/i.test(name)) return 55;
       if (/\b(fwy|freeway|expressway|expy|turnpike|pkwy|parkway)\b/i.test(name)) return 55;
-      if (/\b[A-Z]{2}[- ]?\d/.test(ref)) return 50;
-      if (/\b(ave|avenue|st|street|rd|road|dr|drive|ln|lane|blvd|boulevard|way|ct|court|pl|place|ter|terrace)\b/i.test(name)) return 30;
-      return onNow.ref ? 50 : 35;
+      /* A named local street is almost always 25 in the US, so an estimate must
+         never read 50 in a 25 zone — err LOW when the road isn't clearly a
+         highway. (Real OpenStreetMap / TomTom limits are always used first;
+         this only fills the gap when no mapped limit exists.) */
+      if (/\b(ave|avenue|st|street|rd|road|dr|drive|ln|lane|blvd|boulevard|way|ct|court|pl|place|ter|terrace|cir|circle)\b/i.test(name)) return 25;
+      if (/\b[A-Z]{2}[- ]?\d/.test(ref)) return 40;        // a state route, often 40 through towns
+      return onNow.ref ? 35 : 25;                           // unknown: assume local, not a highway
     }
     function limMatch(cur) {
       const hdg = POSE.hdg != null ? POSE.hdg : headingDeg;
@@ -34549,18 +34590,25 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   function fmtMin(s){ if(s==null) return null; var m=Math.round(s/60); if(m<60) return m+' min'; var h=Math.floor(m/60); return h+' h '+(m%60)+' min'; }
 
   /* try a model endpoint if one is configured; silent fallback otherwise */
+  /* Real open-domain brain. Uses a custom endpoint if the deploy sets
+     window.WAYLYN_AI_ENDPOINT (e.g. your Python backend); otherwise defaults to
+     a free, keyless, CORS-friendly model so Whaly can answer ANYTHING — recipes,
+     facts, advice, small talk — like ChatGPT, right out of the box. Always
+     wrapped so a slow or missing network silently falls back to the local brain,
+     never a visible error. */
   function tryModel(text){
-    var ep = window.WAYLYN_AI_ENDPOINT;
-    if(!ep) return Promise.reject();
-    var sys='You are Whaly, a warm, concise in-car AI navigation companion for WayLynQ (whale/ocean theme). Answer in under 60 words. If the driver wants to go somewhere, say you are routing there.';
-    var msgs=[{role:'system',content:sys}].concat(conv.slice(-8).map(function(m){return {role:m.role==='user'?'user':'assistant',content:m.text};})).concat([{role:'user',content:text}]);
+    var custom = window.WAYLYN_AI_ENDPOINT;
+    var ep = custom || 'https://text.pollinations.ai/openai';
+    var sys = 'You are Whaly, WayLynQ\'s warm, witty in-car AI companion (whale and ocean theme; WayLynQ supports whale conservation). You can talk about ANY topic the driver raises — directions, trip ideas, recipes, facts, advice, small talk — like a helpful general AI assistant. Keep answers concise and easy to hear while driving, usually under 70 words, friendly and clear.';
+    var msgs=[{role:'system',content:sys}].concat(conv.slice(-10).map(function(m){return {role:m.role==='user'?'user':'assistant',content:m.text};})).concat([{role:'user',content:text}]);
+    var body = custom ? { messages: msgs } : { model:'openai', messages: msgs, private:true, referrer:'waylynq' };
     return new Promise(function(res,rej){
-      var done=false, to=setTimeout(function(){ if(!done){done=true;rej();} },6000);
-      fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:msgs})})
-        .then(function(r){ return r.ok?r.json():Promise.reject(); })
-        .then(function(j){ if(done)return; done=true; clearTimeout(to);
-          var t=(j&&(j.reply||j.text||(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)))||'';
-          t?res(String(t).trim()):rej();
+      var done=false, to=setTimeout(function(){ if(!done){done=true;rej();} },9000);
+      fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(function(r){ return r.ok?r.text():Promise.reject(); })
+        .then(function(raw){ if(done)return; done=true; clearTimeout(to);
+          var t=''; try{ var j=JSON.parse(raw); t=(j&&(j.reply||j.text||(j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)))||''; }catch(e){ t=raw; }
+          t=String(t||'').trim(); t?res(t):rej();
         }).catch(function(){ if(!done){done=true;clearTimeout(to);rej();} });
     });
   }
@@ -34692,15 +34740,49 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
     return { text:'I’m here for your drive and happy to chat — try "take me to Newark airport", "find the nearest charger", "plan a day in Asbury Park", or ask me for a recipe.' };
   }
 
+  /* Actions that must run reliably and instantly (never wait on a model):
+     ending a trip, closing, navigating, nearest-POI, trip status, itineraries.
+     Returns a reply with its action button, or null for anything else. */
+  function actionIntent(text){
+    var t=text.toLowerCase().trim();
+    if(/\b(cancel|end|stop|exit|quit|clear|abort|kill)\b.*\b(trip|nav|navigation|route|drive|driving|directions|journey)\b/.test(t)
+       || /^(cancel|end|stop)( it| trip| route| nav(igation)?)?$/.test(t) || /\bstop navigat/.test(t)){
+      var had=false; try{ had=!!(window.WayLyn&&window.WayLyn.hasRoute&&window.WayLyn.hasRoute()); if(window.WayLyn&&window.WayLyn.endNav) window.WayLyn.endNav(); }catch(e){}
+      return { text: had?'Done — I’ve ended the trip. Where to next?':'There’s no active trip to cancel right now.' };
+    }
+    if(/^(close( yourself)?|exit|dismiss|go away|leave me alone|never ?mind|that'?s all|bye|goodbye)\.?$/.test(t)){
+      setTimeout(close,250); return { text:'Okay, closing — tap 🐋 whenever you need me.', speak:'Okay, closing.' };
+    }
+    if(/\b(how (far|long)|eta|arrive|distance|time left|how much (longer|left)|am i close)\b/.test(t)){
+      var snap=tripSnapshot();
+      if(snap){ var d=fmtMi(snap.distance), m=fmtMin(snap.duration); var nm=snap.destName||snap.destination;
+        return { text:'You’ve got '+(d||'a bit')+' and about '+(m||'a little while')+' left'+(nm?(' to '+nm):'')+'. Doing great.' }; }
+      return null; // no trip → let the model chat about it
+    }
+    var cat=t.match(/\b(gas|fuel|coffee|food|lunch|dinner|ev|charger|charging|hospital|parking|restroom|bathroom|atm|pharmacy|hotel)\b/);
+    if(cat && /\b(nearest|closest|find|where|need|get|some|any)\b/.test(t)){
+      var word=cat[1]; return { text:'Finding the closest '+word+' and routing you there.', speak:'Finding the closest '+word+'.',
+        action:{ label:'Find '+word, fn:function(){ routeSentence('nearest '+word); close(); } } };
+    }
+    if(/\b(itinerary|plan (a|my)?\s*(day|trip|weekend|visit)|day trip)\b/.test(t)){
+      var dest=destOf(text); return { text:makeItinerary(dest), speak:'Here’s a day in '+dest+'. Want me to navigate to the first stop?',
+        action:{ label:'Start navigation', fn:function(){ routeSentence('coffee in '+dest); close(); } } };
+    }
+    if(/\b(take me|drive me|drive to|navigate|go to|directions to|route to|head to|get me to|bring me to|let'?s go to)\b/.test(t) || /^to\s+[a-z]/.test(t)){
+      var where=destOf(text); noteDest(where);
+      return { text:'On it — routing you to '+where+'. Buckle up!', speak:'Routing you to '+where+'.',
+        action:{ label:'Go to '+where, fn:function(){ routeSentence(text); close(); } } };
+    }
+    return null;
+  }
+
   function reply(text){
-    // model first (if configured), always fall back to local — never errors out
-    return tryModel(text).then(function(t){
-      // still offer routing if it reads like a destination request
-      var low=text.toLowerCase();
-      if(/\b(take me|drive|navigate|go to|directions|route|head to)\b/.test(low))
-        return { text:t, action:{ label:'Start navigation', fn:function(){ routeSentence(text); close(); } } };
-      return { text:t };
-    }).catch(function(){ return localReply(text); });
+    // 1) navigation + commands: handle locally, instantly, reliably
+    var act = actionIntent(text);
+    if(act) return Promise.resolve(act);
+    // 2) everything else: the real open-domain brain, with the local brain as a
+    //    safety net so there is never a visible error or a dead end
+    return tryModel(text).then(function(t){ return { text:t }; }).catch(function(){ return localReply(text); });
   }
 
   /* ---------------- public API + launcher ---------------- */
