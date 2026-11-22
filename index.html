@@ -2536,11 +2536,21 @@ body.shell-open { overflow:hidden; }
   #wlShell .foot-grid { grid-template-columns:1fr 1fr; }
   #wlShell .band .grid { grid-template-columns:repeat(2,1fr); gap:26px; }
   #wlShell .top-nav { display:none; position:absolute; top:74px; left:0; right:0; flex-direction:column;
-    background:#fff; border-bottom:1px solid var(--line); padding:10px; }
+    background:#fff; border-bottom:1px solid var(--line); padding:10px; order:6; }
   #wlShell .top-nav.open { display:flex; }
-  #wlShell .burger { display:block; }
+  #wlShell .burger { display:block; order:5; margin-left:8px; }
   #wlShell .top-nav button { text-align:left; }
+  /* Small/phone header: Sign In moves to the far left, and a "Click Map"
+     button sits next to the menu so the map is reachable without opening it. */
+  #wlShell .top-in { flex-wrap:nowrap; }
+  #wlShell .top-act { order:-1; margin:0 10px 0 0; }
+  #wlShell .logo { order:0; }
+  #wlShell .top-clickmap { display:inline-flex; align-items:center; gap:5px; order:4; margin-left:auto;
+    background:var(--p); color:#fff; border-radius:9px; padding:8px 13px; font-weight:700; font-size:.9rem;
+    text-decoration:none; white-space:nowrap; cursor:pointer; }
 }
+/* Click Map lives in the full nav on desktop, so hide the standalone one there. */
+@media (min-width:1001px) { #wlShell .top-clickmap { display:none; } }
 @media (max-width:620px) {
   #wlShell .g6 { grid-template-columns:repeat(2,1fr); }
   #wlShell .wrap, #wlShell .top-in { padding:0 18px; }
@@ -14112,6 +14122,22 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
      PUBLIC HOOKS (used by map popups)
   ================================================================== */
   window.WayLyn = {
+    /* Whaly's "do it all" entry: geocode the destination, measure the distance,
+       and pick the mode. Long-haul / overseas trips open Flight mode with the
+       nearest airports; everything else drives. */
+    smartTo: async (query) => {
+      try {
+        const to = await geocode(query);
+        if (!to) return { ok: false, notFound: true };
+        let from = originPlace;
+        if (!from && typeof livePosition !== 'undefined' && livePosition) from = { lat: livePosition.lat, lng: livePosition.lng, name: 'Your location', label: 'Your location' };
+        const km = from ? haversine({ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }) / 1000 : null;
+        const fly = km != null && km > 500;   // beyond a sensible drive → fly
+        destPlace = to; if (from) originPlace = from;
+        if (fly && typeof enterFlyMode === 'function') { enterFlyMode(); return { ok: true, mode: 'fly', name: to.name || to.label, km: Math.round(km) }; }
+        return { ok: true, mode: 'drive', name: to.name || to.label, km: km != null ? Math.round(km) : null };
+      } catch (e) { return { ok: false, error: true }; }
+    },
     openPlace: (lat, lng, key) => {
       const items = (poiState[key] && poiState[key].items) || [];
       const el = items.find((i) => Math.abs(i.lat - lat) < 1e-6 && Math.abs(i.lng - lng) < 1e-6);
@@ -28234,7 +28260,6 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     if (!el) return;
     el.innerHTML = '<div class="top-in">' +
       '<span class="logo" data-go="maps">' + MARK + '<b>Way<i>Lyn</i><i class="eco-q">Q</i></b></span>' +
-      '<button class="burger" id="wlBurger" aria-label="Menu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
       '<nav class="top-nav" id="wlNav">' + VIEWS.map(function (v) {
         /* No data-go, so the global click router cannot navigate to a page
            that does not exist yet. It is a label, not a destination. */
@@ -28248,7 +28273,12 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
         ? '<span class="who"><span class="ava">' + esc(u.name.trim().charAt(0).toUpperCase()) + '</span>' +
           '<button class="lnk" id="wlOut">Sign out</button></span>'
         : '<button class="b sm" data-go="landing">Sign In</button>') +
-      '</div></div>';
+      '</div>' +
+      /* A compact "Click Map" that stays visible on small/phone screens so the
+         map is one tap away without opening the menu. Hidden on desktop. */
+      '<a class="top-clickmap" data-go="maps" role="button">🗺️ Click Map</a>' +
+      '<button class="burger" id="wlBurger" aria-label="Menu"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
+      '</div>';
     var b = document.getElementById('wlBurger');
     if (b) b.addEventListener('click', function () { document.getElementById('wlNav').classList.toggle('open'); });
     var o = document.getElementById('wlOut');
@@ -34561,13 +34591,16 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   /* ---------------- voice in (wake word) ---------------- */
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition, rec=null, listening=false, armed=false;
   var WAKE=/\b(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
-  function toggleMic(){ listening?stopMic():startMic(); }
+  var mRec=null, mStream=null, mChunks=[], mTimer=null;
+  function toggleMic(){
+    if(listening){ stopMic(); return; }
+    if(SR) startMic(); else recordTranscribe();
+  }
   function startMic(){
-    if(!SR){ bubble('whaly','Voice input isn’t supported in this browser, but you can type to me.'); return; }
+    if(!SR){ recordTranscribe(); return; }
     try{
       /* Tapping the mic IS the signal to listen — so we start capturing right
-         away, no "Whaly" wake word needed (a leading "Whaly" is just dropped).
-         This is the fix for "I talk and nothing is heard". */
+         away, no "Whaly" wake word needed (a leading "Whaly" is just dropped). */
       rec=new SR(); rec.lang='en-US'; rec.continuous=true; rec.interimResults=true; armed=true;
       input.placeholder='Listening… go ahead';
       rec.onresult=function(ev){
@@ -34580,12 +34613,52 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
       rec.onerror=function(e){ var err=e&&e.error; stopMic();
         if(err==='not-allowed'||err==='service-not-allowed') bubble('whaly','I need microphone access to hear you. Allow the mic for this site in your browser, then tap 🎙️ again.');
         else if(err==='no-speech') bubble('whaly','I didn’t catch that — tap 🎙️ and try again.');
+        else recordTranscribe(); // the Web Speech backend failed — fall back to recording
       };
       rec.onend=function(){ if(listening){ try{ rec.start(); }catch(e){} } };
       rec.start(); listening=true; micBtn.classList.add('live');
-    }catch(e){ stopMic(); bubble('whaly','Couldn’t start the mic here — you can type to me instead.'); }
+    }catch(e){ listening=false; recordTranscribe(); }
   }
-  function stopMic(){ listening=false; armed=false; if(micBtn)micBtn.classList.remove('live'); if(input)input.placeholder='Ask Whaly or plan a trip…'; if(rec){ try{ rec.stop(); }catch(e){} rec=null; } }
+  /* A DIFFERENT speech path for browsers that have no Web Speech API (e.g. the
+     Tesla in-car browser): record the audio with MediaRecorder and transcribe
+     it through a speech endpoint. Set window.WAYLYN_STT_ENDPOINT to an
+     OpenAI-compatible /audio/transcriptions URL (your Whisper backend). */
+  function sttEndpoint(){ return window.WAYLYN_STT_ENDPOINT || ''; }
+  function recordTranscribe(){
+    if(!navigator.mediaDevices || !window.MediaRecorder){
+      bubble('whaly','Voice isn’t available in this browser — you can type to me and I’ll still talk back.'); return;
+    }
+    listening=true; micBtn.classList.add('live'); input.placeholder='Recording… tap 🎙️ to stop';
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      mStream=stream; mChunks=[];
+      try{ mRec=new MediaRecorder(stream); }catch(e){ stopMic(); bubble('whaly','Voice capture isn’t supported here — please type to me.'); return; }
+      mRec.ondataavailable=function(e){ if(e.data && e.data.size) mChunks.push(e.data); };
+      mRec.onstop=function(){
+        try{ mStream.getTracks().forEach(function(t){t.stop();}); }catch(e){}
+        micBtn.classList.remove('live'); listening=false; input.placeholder='Ask Whaly or plan a trip…';
+        var blob=new Blob(mChunks,{type:(mRec&&mRec.mimeType)||'audio/webm'});
+        if(!blob.size) return;
+        var ep=sttEndpoint();
+        if(!ep){ bubble('whaly','I recorded you, but this browser needs a speech endpoint to turn it into text. Ask your admin to set window.WAYLYN_STT_ENDPOINT (a Whisper URL). You can type to me in the meantime.'); return; }
+        var thinking=bubble('whaly','…');
+        var fd=new FormData(); fd.append('file',blob,'speech.webm'); fd.append('model','whisper-1');
+        fetch(ep,{method:'POST',body:fd}).then(function(r){ return r.ok?r.json():Promise.reject(); }).then(function(j){
+          var text=(j&&(j.text||j.transcript||(j.results&&j.results[0]&&j.results[0].text)))||'';
+          try{ thinking.remove(); }catch(e){}
+          text=String(text).trim();
+          if(text){ input.value=text; send(text); } else bubble('whaly','I couldn’t make that out — try again or type it.');
+        }).catch(function(){ try{ thinking.remove(); }catch(e){} bubble('whaly','Voice transcription failed — you can type to me instead.'); });
+      };
+      mRec.start();
+      mTimer=setTimeout(function(){ if(mRec && mRec.state!=='inactive') mRec.stop(); }, 8000);
+    }).catch(function(){ stopMic(); bubble('whaly','I need microphone access to hear you. Please allow the mic for this site.'); });
+  }
+  function stopMic(){
+    listening=false; armed=false; if(micBtn)micBtn.classList.remove('live'); if(input)input.placeholder='Ask Whaly or plan a trip…';
+    if(rec){ try{ rec.stop(); }catch(e){} rec=null; }
+    if(mTimer){ clearTimeout(mTimer); mTimer=null; }
+    if(mRec && mRec.state!=='inactive'){ try{ mRec.stop(); }catch(e){} }
+  }
 
   /* ---------------- sending ---------------- */
   function sendInput(){ var t=(input.value||'').trim(); if(!t) return; input.value=''; send(t); }
@@ -34799,10 +34872,13 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
       var dest=destOf(text); return { text:makeItinerary(dest), speak:'Here’s a day in '+dest+'. Want me to navigate to the first stop?',
         action:{ label:'Start navigation', fn:function(){ routeSentence('coffee in '+dest); close(); } } };
     }
+    if(/\b(fly|flight|fly to|flight to)\b/.test(t)){
+      var fwhere=destOf(text); noteDest(fwhere);
+      return { _nav:text, _fly:true, text:'Looking up flights to '+fwhere+'…' };
+    }
     if(/\b(take me|drive me|drive to|navigate|go to|directions to|route to|head to|get me to|bring me to|let'?s go to)\b/.test(t) || /^to\s+[a-z]/.test(t)){
       var where=destOf(text); noteDest(where);
-      return { text:'On it — routing you to '+where+'. Buckle up!', speak:'Routing you to '+where+'.',
-        action:{ label:'Go to '+where, fn:function(){ routeSentence(text); close(); } } };
+      return { _nav:text, text:'On it — working out the best way to '+where+'…' };
     }
     return null;
   }
@@ -34810,6 +34886,21 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   function reply(text){
     // 1) navigation + commands: handle locally, instantly, reliably
     var act = actionIntent(text);
+    if(act && act._nav){
+      // Smart handoff: far / overseas → Flight mode, otherwise drive. Whaly does it all.
+      var p = (window.WayLyn && window.WayLyn.smartTo) ? window.WayLyn.smartTo(act._nav) : Promise.resolve(null);
+      return p.then(function(r){
+        if(r && r.mode==='fly'){
+          return { text:'✈️ '+(r.name||'That')+' is about '+r.km+' km away — too far to drive, so I’ve opened Flight mode with the nearest airports. Pick your flight and I’ll map it.',
+            speak:(r.name||'That')+' is overseas, so I’ve opened flight options for you.' };
+        }
+        if(r && r.notFound){ return { text:'I couldn’t find “'+destOf(act._nav)+'”. Can you give me a city or address?' }; }
+        routeSentence(act._nav);
+        var nm = (r && r.name) || destOf(act._nav);
+        setTimeout(close, 400);
+        return { text:'On it — routing you to '+nm+'. Buckle up!', speak:'Routing you to '+nm+'.' };
+      }).catch(function(){ routeSentence(act._nav); setTimeout(close,400); return { text:'Routing you there now.' }; });
+    }
     if(act) return Promise.resolve(act);
     // 2) everything else: the real open-domain brain, with the local brain as a
     //    safety net so there is never a visible error or a dead end
@@ -35888,5 +35979,116 @@ html.wl-no3d body.navigating #map { display:block !important; }
   #wlShell .auth-side{ height:auto !important; }
 }
 </style>
+<script>
+
+/* ======================================================================
+   "Hey Whaly" — always-on wake word + persona voice (Siri / Hey Grok style)
+   Listens in the background; on "Hey Whaly" it answers out loud in Whaly's
+   voice and starts a conversation. Fully client-side.
+====================================================================== */
+(function WhalyWake(){
+  if (window.WLWake) return;
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var synth = window.speechSynthesis;
+  var K_ON = 'waylynq:wake:on';
+  function load(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:v==='1'; }catch(e){ return d; } }
+  function save(k,v){ try{ localStorage.setItem(k, v?'1':'0'); }catch(e){} }
+
+  var enabled = load(K_ON, false);
+  var rec = null, running = false, lastHandled = '', awake = false;
+
+  var GREETINGS = ['Ready to navigate!', 'Hey! What’s up?', 'I’m here — where to?',
+    'Yes? Where are we headed?', 'Hi! Tell me where to go.'];
+  function greet(){ return GREETINGS[Math.floor(Math.random()*GREETINGS.length)]; }
+  function say(t){ try{ if(window.WLWhaly && window.WLWhaly.speak) window.WLWhaly.speak(t); }catch(e){} }
+
+  var WAKE = /\b(hey|ok|okay|yo|hi)?\s*(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
+
+  /* ---- UI toggle chip ---- */
+  var chip, dot;
+  function buildChip(){
+    if (chip) return;
+    var css = document.createElement('style');
+    css.textContent =
+      '#wlWakeChip{position:fixed;left:14px;bottom:16px;z-index:99999;display:inline-flex;align-items:center;gap:8px;'+
+      'background:#0e1626;color:#eaf2ff;border:1px solid #27354e;border-radius:999px;padding:9px 14px;font:600 13px system-ui;'+
+      'cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35);user-select:none}'+
+      '#wlWakeChip .wd{width:9px;height:9px;border-radius:50%;background:#55617a;flex:0 0 auto}'+
+      '#wlWakeChip.on .wd{background:#34c759;box-shadow:0 0 0 0 rgba(52,199,120,.6);animation:wlwk 1.6s infinite}'+
+      '#wlWakeChip.awake .wd{background:#e5484d;animation:wlwk .9s infinite}'+
+      '@keyframes wlwk{0%{box-shadow:0 0 0 0 rgba(52,199,120,.5)}70%{box-shadow:0 0 0 7px rgba(52,199,120,0)}100%{box-shadow:0 0 0 0 rgba(52,199,120,0)}}'+
+      '@media(max-width:620px){#wlWakeChip{left:10px;bottom:10px;padding:8px 12px;font-size:12px}}';
+    document.head.appendChild(css);
+    chip = document.createElement('button'); chip.id='wlWakeChip'; chip.type='button';
+    chip.innerHTML = '<span class="wd"></span><span class="wl-wk-label">Hey Whaly</span>';
+    dot = chip.querySelector('.wd');
+    chip.addEventListener('click', function(){ setEnabled(!enabled); });
+    document.body.appendChild(chip);
+    reflect();
+  }
+  function reflect(){
+    if (!chip) return;
+    chip.classList.toggle('on', enabled && running);
+    chip.classList.toggle('awake', awake);
+    chip.querySelector('.wl-wk-label').textContent = !SR ? 'Voice N/A'
+      : (enabled ? (awake ? 'Listening…' : 'Hey Whaly ✓') : 'Hey Whaly');
+  }
+
+  /* ---- continuous listening ---- */
+  function start(){
+    if (!SR || running) return;
+    try{
+      rec = new SR(); rec.lang='en-US'; rec.continuous=true; rec.interimResults=true;
+      rec.onresult = function(ev){
+        var finalTxt='';
+        for (var i=ev.resultIndex;i<ev.results.length;i++){ if(ev.results[i].isFinal) finalTxt += ev.results[i][0].transcript+' '; }
+        finalTxt = finalTxt.replace(/\s+/g,' ').trim();
+        if (!finalTxt) return;
+        if (finalTxt === lastHandled) return;
+        var m = finalTxt.match(WAKE);
+        if (!m) return;
+        lastHandled = finalTxt;
+        awake = true; reflect();
+        var after = finalTxt.slice(m.index + m[0].length).replace(/^[,\s]+/,'').trim();
+        if (after && after.length > 1){
+          // "Hey Whaly, take me to the airport" — act on the command directly
+          say('On it.');
+          try{ window.WLWhaly.ask(after); }catch(e){}
+        } else {
+          // just the wake word — greet and open for a conversation
+          say(greet());
+          try{ window.WLWhaly.open(); }catch(e){}
+        }
+        setTimeout(function(){ awake=false; reflect(); }, 2500);
+      };
+      rec.onerror = function(e){ /* keep calm; onend will restart */ };
+      rec.onend = function(){ running=false; if(enabled){ setTimeout(start, 400); } reflect(); };
+      rec.start(); running = true; reflect();
+    }catch(e){ running=false; reflect(); }
+  }
+  function stop(){ enabled=false; if(rec){ try{ rec.stop(); }catch(e){} } running=false; awake=false; reflect(); }
+
+  function setEnabled(on){
+    enabled = on; save(K_ON, on);
+    if (on){ if (!SR){ reflect(); return; } start(); if (synth) try{ synth.resume(); }catch(e){} }
+    else stop();
+  }
+
+  window.WLWake = { enable:function(){ setEnabled(true); }, disable:function(){ setEnabled(false); }, enabled:function(){ return enabled; } };
+
+  function init(){
+    buildChip();
+    // If the driver had it on, resume listening after the first interaction
+    // (browsers require a gesture before granting the mic).
+    if (enabled && SR){
+      var kick = function(){ document.removeEventListener('pointerdown', kick); document.removeEventListener('keydown', kick); start(); };
+      document.addEventListener('pointerdown', kick, { once:true });
+      document.addEventListener('keydown', kick, { once:true });
+    }
+  }
+  if (document.readyState !== 'loading') init(); else document.addEventListener('DOMContentLoaded', init, { once:true });
+})();
+
+</script>
 </body>
 </html>
