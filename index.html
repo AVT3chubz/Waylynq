@@ -2538,19 +2538,35 @@ body.shell-open { overflow:hidden; }
   #wlShell .top-nav { display:none; position:absolute; top:74px; left:0; right:0; flex-direction:column;
     background:#fff; border-bottom:1px solid var(--line); padding:10px; order:6; }
   #wlShell .top-nav.open { display:flex; }
-  #wlShell .burger { display:block; order:5; margin-left:8px; }
+  #wlShell .burger { display:block; order:0; margin:0 0 0 6px; }
   #wlShell .top-nav button { text-align:left; }
-  /* Small/phone header: Sign In moves to the far left, and a "Click Map"
-     button sits next to the menu so the map is reachable without opening it. */
+  /* Small/phone header: "Click Map" + the menu sit on the LEFT (where Sign In
+     used to be), and Sign In moves to the far RIGHT. */
   #wlShell .top-in { flex-wrap:nowrap; }
-  #wlShell .top-act { order:-1; margin:0 10px 0 0; }
-  #wlShell .logo { order:0; }
-  #wlShell .top-clickmap { display:inline-flex; align-items:center; gap:5px; order:4; margin-left:auto;
+  #wlShell .top-clickmap { display:inline-flex; align-items:center; gap:5px; order:-1; margin:0;
     background:var(--p); color:#fff; border-radius:9px; padding:8px 13px; font-weight:700; font-size:.9rem;
     text-decoration:none; white-space:nowrap; cursor:pointer; }
+  #wlShell .logo { order:1; margin-left:10px; }
+  #wlShell .top-act { order:3; margin-left:auto; }
 }
 /* Click Map lives in the full nav on desktop, so hide the standalone one there. */
 @media (min-width:1001px) { #wlShell .top-clickmap { display:none; } }
+/* Narrow phones: Click Map + burger (left) + logo + Sign In (right) must all fit
+   on one row without shoving Sign In off-screen, so shrink the Click Map and the
+   logo wordmark and let the logo take up only the slack that is left. */
+@media (max-width:560px){
+  #wlShell .top-in{ gap:4px; }
+  #wlShell .top-clickmap{ padding:7px 9px; font-size:.78rem; gap:3px; }
+  #wlShell .top-in .logo{ order:1; margin-left:6px; min-width:0; flex:0 1 auto; overflow:hidden; padding:3px 7px 3px 4px; }
+  #wlShell .top-in .logo .logo-mark{ width:30px; height:30px; border-radius:9px; flex:0 0 auto; }
+  #wlShell .top-in .logo .logo-mark svg{ width:17px; height:17px; }
+  #wlShell .top-in .logo b{ font-size:1rem; white-space:nowrap; overflow:hidden; text-overflow:clip; }
+  #wlShell .top-act{ gap:7px; flex:0 0 auto; }
+}
+@media (max-width:380px){
+  #wlShell .top-clickmap{ padding:7px 8px; font-size:.72rem; }
+  #wlShell .top-in .logo b{ font-size:.92rem; }
+}
 @media (max-width:620px) {
   #wlShell .g6 { grid-template-columns:repeat(2,1fr); }
   #wlShell .wrap, #wlShell .top-in { padding:0 18px; }
@@ -9831,6 +9847,10 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   let startMarker = null, endMarker = null, clickStage = 0;
   let allRoutes = [], activeRouteIndex = 0, routeLines = [];
   let trafficSegments = [], trafficMultiplier = 1, trafficLive = false;
+  /* Weather-aware ETA: 1.0 in clear conditions, >1 when rain/snow/storms are
+     detected on the road ahead. Folded into trafficMultiplierFor() below so
+     every ETA readout picks it up without touching the ~20 read sites. */
+  let weatherMultiplier = 1;
   let originPlace = null, destPlace = null;
   let stops = [];
   let pendingAction = 'route';
@@ -10642,12 +10662,20 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     for (let i = 0; i < seg.coords.length - 1; i++) len += haversine({ lat: seg.coords[i][0], lng: seg.coords[i][1] }, { lat: seg.coords[i + 1][0], lng: seg.coords[i + 1][1] });
     return len;
   }
+  /* Clamp the weather factor to a sane advisory range so a bad reading can
+     never zero out or wildly inflate an ETA. */
+  function weatherFactor() {
+    let w = (typeof weatherMultiplier === 'number' && isFinite(weatherMultiplier)) ? weatherMultiplier : 1;
+    if (w < 1) w = 1; if (w > 1.35) w = 1.35;
+    return w;
+  }
   function trafficMultiplierFor(segs) {
-    if (!segs.length) return 1;
+    const wx = weatherFactor();
+    if (!segs.length) return wx;
     let heavy = 0, mod = 0, total = 0;
     segs.forEach((s) => { const l = segMeters(s); total += l; if (s.level === 'heavy') heavy += l; else if (s.level === 'moderate') mod += l; });
-    if (!total) return 1;
-    return 1 + (heavy / total) * 0.62 + (mod / total) * 0.24;
+    if (!total) return wx;
+    return (1 + (heavy / total) * 0.62 + (mod / total) * 0.24) * wx;
   }
   function trafficBreakdown(segs) {
     let heavy = 0, mod = 0, clear = 0, total = 0;
@@ -12232,8 +12260,8 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       elInput.value = said;
       handleSubmit();
     };
-    recognizer.onerror = () => { $('micBtn').classList.remove('listening'); showError('Did not catch that. Try again or type it in.'); };
-    recognizer.onend = () => $('micBtn').classList.remove('listening');
+    recognizer.onerror = () => { $('micBtn').classList.remove('listening'); try { if (window.WLWhaly && window.WLWhaly.resumeVoice) window.WLWhaly.resumeVoice(); } catch (e) {} showError('Did not catch that. Try again or type it in.'); };
+    recognizer.onend = () => { $('micBtn').classList.remove('listening'); try { if (window.WLWhaly && window.WLWhaly.resumeVoice) window.WLWhaly.resumeVoice(); } catch (e) {} };
   }
   // Spoken commands for the things a driver actually asks for mid-drive.
   function handleVoiceCommand(said) {
@@ -12263,6 +12291,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   $('micBtn').addEventListener('click', () => {
     if (!recognizer) { showError('This browser has no speech input. Type the destination instead.'); return; }
     hideSuggestions(); $('micBtn').classList.add('listening');
+    try { if (window.WLWhaly && window.WLWhaly.pauseVoice) window.WLWhaly.pauseVoice(); } catch (e) {}
     try { recognizer.start(); } catch (e) { /* already listening */ }
   });
   $('navMicFab').addEventListener('click', () => { $('console').style.display = ''; elInput.focus(); $('micBtn').click(); });
@@ -13400,6 +13429,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       navFollow = true;
       syncVoiceUi();
       resyncNavToActiveRoute();
+      startWeatherWatch();
 
       /* BUG 8 root cause: nothing on the HUD was computed until the first
          GPS callback arrived, which on a cold fix can be several seconds.
@@ -13437,7 +13467,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     stopSmoothProgress();
     stopCameraLoop();
     setIndicator(null);
-    stopNavWatch(); clearProgressSplit();
+    stopNavWatch(); stopWeatherWatch(); clearProgressSplit();
     allStepsOpen = false; $('stepsPanel').classList.add('hidden'); $('navSteps').classList.remove('on');
     clearTimeout(recenterTimer);
     $('controls').style.display = '';
@@ -13697,6 +13727,72 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
   }
   function stopRadar() { clearInterval(radarTimer); radarTimer = null; if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; } }
 
+  /* ------------------------------------------------------------------
+     AUTOMATIC WEATHER-AWARE RE-OPTIMIZATION  (new feature)
+     While driving, this samples the road ahead, asks Open-Meteo for the
+     current conditions at each point, and when it finds rain, snow or storms
+     it raises weatherMultiplier so the arrival time is re-timed for the
+     conditions — and gives one proactive heads-up for a rough stretch.
+  ------------------------------------------------------------------ */
+  let weatherWatchTimer = null, wxSevereNotified = '';
+  function wxCodeFactor(code) {
+    if (code >= 95) return 1.20;                     // thunderstorm
+    if (code === 75 || code === 86) return 1.24;     // heavy snow
+    if (code === 73 || code === 85) return 1.18;     // snow
+    if (code === 71) return 1.12;                    // light snow
+    if (code === 65 || code === 82) return 1.16;     // heavy rain / violent showers
+    if (code === 63 || code === 81) return 1.10;     // rain / showers
+    if (code === 80) return 1.06;                    // light showers
+    if (code >= 51 && code <= 61) return 1.05;       // drizzle / light rain
+    if (code === 45 || code === 48) return 1.03;     // fog
+    return 1.0;
+  }
+  async function assessRouteWeather() {
+    try {
+      if (!navActive() || !allRoutes[activeRouteIndex]) return;
+      const pts = (window.WayLyn && window.WayLyn.routeSamples) ? window.WayLyn.routeSamples(5, navDistAlong || 0) : [];
+      if (!pts.length) return;
+      const lats = pts.map((p) => (+p.lat).toFixed(3)).join(',');
+      const lngs = pts.map((p) => (+p.lng).toFixed(3)).join(',');
+      const url = WEATHER + '?latitude=' + lats + '&longitude=' + lngs + '&current=weather_code,precipitation&timezone=auto';
+      const res = await fetch(url);
+      const d = await res.json();
+      const list = Array.isArray(d) ? d : [d];
+      let worst = 1, worstCode = 0, worstIdx = -1;
+      list.forEach((loc, i) => {
+        const code = (loc && loc.current) ? (loc.current.weather_code || 0) : 0;
+        const f = wxCodeFactor(code);
+        if (f > worst) { worst = f; worstCode = code; worstIdx = i; }
+      });
+      weatherMultiplier = worst;
+      /* Re-bake the factor into the live ETA, matching the nav-mode formula at
+         renderRoutes() so the HUD's next tick shows the re-timed arrival. */
+      const a = allRoutes[activeRouteIndex];
+      if (a && trafficSegments) trafficMultiplier = trafficMultiplierFor(trafficSegments) * realismFactor(a);
+      /* One calm heads-up the first time a genuinely rough stretch shows up. */
+      const key = worstCode + ':' + Math.round(worst * 100);
+      if (worst >= 1.12 && key !== wxSevereNotified) {
+        wxSevereNotified = key;
+        const info = weatherInfo(worstCode);
+        const base = navRemainDur || (a ? a.duration : 0);
+        const addMin = Math.round(base * (1 - 1 / worst) / 60);
+        showBubble(info[0] + ' ' + info[1] + ' on the road ahead' +
+          (addMin > 0 ? ' — about +' + addMin + ' min, arrival re-timed' : '') + '. Drive safe.');
+      } else if (worst < 1.05) {
+        wxSevereNotified = '';
+      }
+    } catch (e) { /* weather is advisory only; it must never block navigation */ }
+  }
+  function startWeatherWatch() {
+    stopWeatherWatch();
+    assessRouteWeather();
+    weatherWatchTimer = setInterval(assessRouteWeather, 6 * 60 * 1000);
+  }
+  function stopWeatherWatch() {
+    if (weatherWatchTimer) { clearInterval(weatherWatchTimer); weatherWatchTimer = null; }
+    weatherMultiplier = 1; wxSevereNotified = '';
+  }
+
   $('qrWeather').addEventListener('click', async () => {
     const panel = $('weatherPanel');
     if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); $('qrWeather').classList.remove('active'); stopRadar(); return; }
@@ -13719,9 +13815,15 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
           new Date(times[i]).toLocaleTimeString([], { hour: 'numeric' }) + ' \u00b7 ' + ico + ' ' + desc +
           '<span class="sub num">' + Math.round(d.hourly.temperature_2m[i]) + '\u00B0F \u00b7 ' + d.hourly.precipitation_probability[i] + '% rain</span></span></div>');
       }
+      const wxAuto = navActive()
+        ? (weatherMultiplier > 1.02
+            ? '\u{1F327}\ufe0f Weather is adding about ' + Math.max(1, Math.round((navRemainDur || 0) * (1 - 1 / weatherFactor()) / 60)) + ' min \u2014 arrival auto-retimed'
+            : '\u2705 Auto re-timing on \u2014 watching the road ahead for rain &amp; snow')
+        : '\u{1F6E3}\ufe0f Auto re-timing begins when you start navigating';
       panel.innerHTML = '<div class="panel-title">Weather \u00b7 ' + esc(String((destPlace && (destPlace.name || destPlace.label)) || 'here').split(',')[0]) +
         '<button class="icon-act" id="wxHide">\u2715</button></div>' +
         '<div class="panel-item"><label style="display:flex;gap:9px;align-items:center;cursor:pointer;font-size:0.954rem;font-weight:600"><input type="checkbox" id="radarChk"> Rain radar overlay</label></div>' +
+        '<div class="panel-item"><span class="panel-item-text" style="font-size:.9rem;line-height:1.3">' + wxAuto + '</span></div>' +
         (rows.join('') || '<div class="panel-empty">No hourly data for that spot.</div>');
       $('wxHide').addEventListener('click', () => { panel.classList.add('hidden'); $('qrWeather').classList.remove('active'); stopRadar(); });
       const chk = $('radarChk');
@@ -27740,6 +27842,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     async function voiceStart() {
       if (VO.on) return;
       if (!SR && !(navigator.mediaDevices && window.MediaRecorder)) { showBubble('This browser has no microphone input. Type the trip instead.'); return; }
+      try { if (window.WLWhaly && window.WLWhaly.pauseVoice) window.WLWhaly.pauseVoice(); } catch (e) {}
       VO.on = true; VO.finalText = ''; VO.interim = ''; VO.chunks = []; VO.t0 = Date.now(); VO.armed = true;
       const panel = $('r31Voice'), mic = $('r31Mic');
       panel.removeAttribute('hidden'); mic.classList.add('on'); mic.classList.add('armed'); mic.innerHTML = ICON.stop;
@@ -27797,6 +27900,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     function voiceStop(run) {
       if (!VO.on) return;
       VO.on = false;
+      try { if (window.WLWhaly && window.WLWhaly.resumeVoice) window.WLWhaly.resumeVoice(); } catch (e) {}
       clearInterval(VO.timer); cancelAnimationFrame(VO.raf);
       const rec = VO.rec; VO.rec = null;
       g('stop recognition', () => { if (rec) { rec.onend = null; rec.stop(); } });
@@ -34589,36 +34693,110 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   function close(){ if(panel) panel.classList.remove('show'); if(synth)synth.cancel(); stopMic(); }
 
   /* ---------------- voice in (wake word) ---------------- */
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition, rec=null, listening=false, armed=false;
-  var WAKE=/\b(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
-  var mRec=null, mStream=null, mChunks=[], mTimer=null;
-  function toggleMic(){
-    if(listening){ stopMic(); return; }
-    if(SR) startMic(); else recordTranscribe();
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var WAKE=/\b(hey|ok|okay|yo|hi)?\s*(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
+  var voiceRec=null, voiceOnAir=false, wantVoice=false, directUntil=0, voicePaused=false;
+  var mRec=null, mStream=null, mChunks=[], mTimer=null, listening=false;
+  /* Phones (especially iPhone/Safari) behave differently from a laptop: they do
+     NOT reliably pop the mic-permission prompt from speech recognition alone, and
+     iOS Safari does not do continuous recognition. So on mobile we (a) explicitly
+     prime the mic with getUserMedia on a tap — the one call that always prompts —
+     and (b) listen one phrase at a time, restarting, instead of continuous. */
+  var IS_IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  var IS_MOBILE = IS_IOS || /Android|Mobile|Silk|Kindle|BlackBerry|Opera Mini/i.test(navigator.userAgent);
+  var micPermPrimed = false;
+  /* Opening (and immediately closing) an audio stream is what actually shows the
+     permission prompt on a phone. Resolves true once the mic is granted. */
+  function primeMic(){
+    if(micPermPrimed) return Promise.resolve(true);
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.resolve(!!SR);
+    return navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      micPermPrimed = true;
+      try{ stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){}
+      return true;
+    }).catch(function(){ return false; });
   }
-  function startMic(){
-    if(!SR){ recordTranscribe(); return; }
+  function setMicLive(on){ if(micBtn) micBtn.classList.toggle('live', !!on); }
+  function greetLine(){ var g=['Ready to navigate!','Hey! What’s up?','I’m here — where to?','Yes? Where are we headed?','Hi! Tell me where to go.']; return g[Math.floor(Math.random()*g.length)]; }
+
+  /* ONE always-on recognizer for everything: it hears "Hey Whaly" hands-free
+     AND the direct command after you tap the mic. Using a single recognizer is
+     what fixes the mic — two separate ones fight over the microphone and both
+     go silent. It auto-restarts and needs no button. */
+  function startVoice(force){
+    if(!SR || (!force && (voiceOnAir || voicePaused))) return;
     try{
-      /* Tapping the mic IS the signal to listen — so we start capturing right
-         away, no "Whaly" wake word needed (a leading "Whaly" is just dropped). */
-      rec=new SR(); rec.lang='en-US'; rec.continuous=true; rec.interimResults=true; armed=true;
-      input.placeholder='Listening… go ahead';
-      rec.onresult=function(ev){
+      voiceRec=new SR(); voiceRec.lang='en-US';
+      /* Continuous + interim only on desktop; iOS/Android stop after one phrase,
+         so we run single-shot and let onend restart us (pseudo-continuous). */
+      voiceRec.continuous = !IS_MOBILE;
+      voiceRec.interimResults = !IS_MOBILE;
+      voiceRec.onresult=function(ev){
+        if(!ev.results[ev.results.length-1].isFinal) return;
         var all=''; for(var i=0;i<ev.results.length;i++) all+=ev.results[i][0].transcript+' ';
-        all=all.replace(/\s+/g,' ').trim();
-        var m=all.match(WAKE); var cmd=(m&&m.index<6?all.slice(m.index+m[0].length):all).trim();
-        input.value=cmd||all;
-        if(ev.results[ev.results.length-1].isFinal){ var t=(cmd||all).trim(); stopMic(); if(t) send(t); }
+        all=all.replace(/\s+/g,' ').trim(); if(!all) return;
+        var m=all.match(WAKE);
+        if(Date.now() < directUntil){
+          directUntil=0; setMicLive(false);
+          var cmd=(m && m.index<8 ? all.slice(m.index+m[0].length) : all).replace(/^[,\s]+/,'').trim();
+          if(cmd) send(cmd);
+          return;
+        }
+        if(m){
+          var after=all.slice(m.index+m[0].length).replace(/^[,\s]+/,'').trim();
+          open();
+          if(after && after.length>1){ say('On it.'); send(after); } else { say(greetLine()); }
+        }
       };
-      rec.onerror=function(e){ var err=e&&e.error; stopMic();
-        if(err==='not-allowed'||err==='service-not-allowed') bubble('whaly','I need microphone access to hear you. Allow the mic for this site in your browser, then tap 🎙️ again.');
-        else if(err==='no-speech') bubble('whaly','I didn’t catch that — tap 🎙️ and try again.');
-        else recordTranscribe(); // the Web Speech backend failed — fall back to recording
+      voiceRec.onerror=function(e){
+        voiceOnAir=false;
+        var err = e && e.error;
+        if(err==='not-allowed' || err==='service-not-allowed'){
+          /* Permission was refused/blocked — stop retrying and tell the driver
+             exactly how to fix it instead of failing silently. */
+          wantVoice=false; micPermPrimed=false; setMicLive(false); directUntil=0;
+          bubble('whaly', IS_IOS
+            ? 'I can’t hear you yet. On iPhone: tap 🎙️ and choose Allow, and make sure Settings ▸ Safari ▸ Microphone is set to Allow. Then tap 🎙️ again.'
+            : 'I can’t hear you — the mic looks blocked. Tap 🎙️ and choose Allow for this site, then try again.');
+        }
+        /* 'no-speech' / 'aborted' / 'network' just fall through to onend, which
+           restarts listening. */
       };
-      rec.onend=function(){ if(listening){ try{ rec.start(); }catch(e){} } };
-      rec.start(); listening=true; micBtn.classList.add('live');
-    }catch(e){ listening=false; recordTranscribe(); }
+      voiceRec.onend=function(){ voiceOnAir=false; if(wantVoice && !voicePaused) setTimeout(startVoice, IS_MOBILE?250:400); };
+      voiceRec.start(); voiceOnAir=true; wantVoice=true;
+    }catch(e){ voiceOnAir=false; }
   }
+  function toggleMic(){
+    /* No Web Speech API at all (e.g. some in-car browsers): record + transcribe. */
+    if(!SR){ if(listening) stopMic(); else recordTranscribe(); return; }
+    /* Tapping again while already in a listen window cancels it. */
+    if(Date.now() < directUntil){
+      directUntil=0; setMicLive(false); if(input) input.placeholder='Ask Whaly or plan a trip…';
+      if(IS_MOBILE && voiceRec){ try{ voiceRec.stop(); }catch(e){} voiceOnAir=false; }
+      return;
+    }
+    setMicLive(true); if(input) input.placeholder = micPermPrimed ? 'Listening… go ahead' : 'Getting the mic ready…';
+    /* Prime the mic (shows the permission prompt on phones) BEFORE starting the
+       recognizer. On a laptop this resolves instantly; on a phone it's the step
+       that was missing, which is why the mic never activated there. */
+    primeMic().then(function(ok){
+      if(!ok){
+        setMicLive(false); if(input) input.placeholder='Ask Whaly or plan a trip…';
+        bubble('whaly', IS_IOS
+          ? 'I need microphone access to hear you. On iPhone, allow the mic for this site (Settings ▸ Safari ▸ Microphone ▸ Allow), then tap 🎙️ again.'
+          : 'I need microphone access to hear you. Please allow the mic for this site, then tap 🎙️ again.');
+        return;
+      }
+      /* Fresh recognizer so a stuck/denied/paused earlier attempt can’t block this
+         tap — clear every guard flag unconditionally before (re)starting. */
+      if(voiceRec){ try{ voiceRec.stop(); }catch(e){} }
+      voicePaused=false; wantVoice=true; voiceOnAir=false; voiceRec=null;
+      directUntil=Date.now()+ (IS_MOBILE?12000:10000);
+      setMicLive(true); if(input) input.placeholder='Listening… go ahead';
+      setTimeout(function(){ startVoice(true); }, IS_MOBILE?150:0);
+    });
+  }
+  function startMic(){ toggleMic(); }
   /* A DIFFERENT speech path for browsers that have no Web Speech API (e.g. the
      Tesla in-car browser): record the audio with MediaRecorder and transcribe
      it through a speech endpoint. Set window.WAYLYN_STT_ENDPOINT to an
@@ -34654,11 +34832,33 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
     }).catch(function(){ stopMic(); bubble('whaly','I need microphone access to hear you. Please allow the mic for this site.'); });
   }
   function stopMic(){
-    listening=false; armed=false; if(micBtn)micBtn.classList.remove('live'); if(input)input.placeholder='Ask Whaly or plan a trip…';
-    if(rec){ try{ rec.stop(); }catch(e){} rec=null; }
+    listening=false; directUntil=0; if(micBtn)micBtn.classList.remove('live'); if(input)input.placeholder='Ask Whaly or plan a trip…';
     if(mTimer){ clearTimeout(mTimer); mTimer=null; }
     if(mRec && mRec.state!=='inactive'){ try{ mRec.stop(); }catch(e){} }
   }
+  /* Begin always-on "Hey Whaly" listening. On a laptop we start after the first
+     tap/keypress anywhere (browsers require one gesture). On a phone we do NOT
+     prompt on a random tap — we start hands-free only if the mic is ALREADY
+     granted; otherwise the first 🎙️ tap primes permission and listening then
+     continues hands-free for the rest of the session. */
+  (function(){
+    if(!SR) return;
+    var started=false;
+    function begin(){ if(started||voiceOnAir) return; started=true; try{ startVoice(); }catch(e){} }
+    var kick=function(){
+      if(!IS_MOBILE){
+        document.removeEventListener('pointerdown',kick,true); document.removeEventListener('keydown',kick,true);
+        begin(); return;
+      }
+      if(navigator.permissions && navigator.permissions.query){
+        navigator.permissions.query({name:'microphone'}).then(function(st){
+          if(st && st.state==='granted'){ micPermPrimed=true; begin(); }
+        }).catch(function(){});
+      }
+    };
+    document.addEventListener('pointerdown',kick,true);
+    document.addEventListener('keydown',kick,true);
+  })();
 
   /* ---------------- sending ---------------- */
   function sendInput(){ var t=(input.value||'').trim(); if(!t) return; input.value=''; send(t); }
@@ -34908,7 +35108,13 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
   }
 
   /* ---------------- public API + launcher ---------------- */
-  window.WLWhaly = { open:open, close:close, ask:function(t){ open(); setTimeout(function(){ send(t); },120); }, speak:speak };
+  /* Other mic buttons (main search, one-prompt) call pauseVoice before they
+     start so the always-on listener releases the microphone, then resumeVoice
+     when they finish — so every mic in the app works, never fighting the wake
+     listener for the same microphone. */
+  window.WLWhaly = { open:open, close:close, ask:function(t){ open(); setTimeout(function(){ send(t); },120); }, speak:speak,
+    pauseVoice:function(){ voicePaused=true; if(voiceRec){ try{ voiceRec.stop(); }catch(e){} } },
+    resumeVoice:function(){ voicePaused=false; setTimeout(startVoice, 600); } };
 
   /* add a Whaly entry to the POI dock rail, next to AR/Forum/etc. */
   function addRailButton(){
@@ -35916,8 +36122,62 @@ html body.navigating.r31-menu-open #navMode #r31Compass { visibility: hidden; }
   transform:rotate(45deg); transform-origin:left center;
   box-shadow:0 0 0 1px rgba(255,255,255,.7);
 }
-/* Keep the wordmark legible even when it sits over the live map. */
-.logo b, .logo i, .auth-logo b, .auth-logo i { text-shadow:0 1px 2px rgba(0,0,0,.22); }
+/* The header logo sits over the live map, so at night "Way" (dark text) used to
+   vanish on the dark map. Put it in a light box so the wordmark is ALWAYS
+   readable, day or night, with fixed text colors. */
+#wlShell .top-in .logo{ background:rgba(255,255,255,.95); border-radius:12px; padding:4px 12px 4px 6px;
+  box-shadow:0 2px 9px rgba(0,0,0,.2); }
+#wlShell .top-in .logo b{ color:#0d1b2a !important; text-shadow:none !important; }
+#wlShell .top-in .logo b i:not(.eco-q){ color:#1f6feb !important; }
+.auth-logo b, .auth-logo i { text-shadow:0 1px 2px rgba(0,0,0,.22); }
+/* The MAPS-APP wordmark (#brand, top-left when you first open the map) sits over
+   the live map too. At night its "Way"/"Q" text (var(--text-bright)) went dark and
+   vanished, leaving only the bright "Lyn". Give it the same light box with fixed
+   text colors so the whole WayLynQ reads clearly, day or night. */
+#brand{ background:rgba(255,255,255,.95) !important; border-radius:12px !important;
+  padding:5px 13px 5px 9px !important; box-shadow:0 2px 10px rgba(0,0,0,.22) !important; }
+#brand, #brand > span{ color:#0d1b2a !important; text-shadow:none !important; }
+#brand .lyn{ color:#1f6feb !important; }
+#brand .mark .mark-ring, #brand .mark path{ stroke:#1f6feb; }
+#brand .mark path[fill]{ fill:#1f6feb; }
+
+/* Mobile navigation POI rail: keep it the SAME vertical side-rail as the regular
+   (wider) screen — icon + label on every button at the regular size — NOT a
+   crammed single row. This is the authoritative last word, so it wins over the
+   various narrow-phone rules that previously hid the labels, shrank the buttons
+   to icon-only, or flipped the rail horizontal. Colors stay theme-aware, exactly
+   like the regular-screen rail (readable light card by day, dark by night). */
+@media (max-width:760px){
+  body.navigating #dock,
+  body.navigating #dock.nav-shift{
+    position:fixed !important;
+    left:max(10px, env(safe-area-inset-left)) !important; right:auto !important;
+    top:clamp(210px, 32vh, 280px) !important;
+    bottom:calc(200px + env(safe-area-inset-bottom)) !important;
+    width:min(206px, 62vw) !important; max-width:min(206px, 62vw) !important;
+    height:auto !important; transform:none !important; display:block !important; z-index:4960 !important;
+  }
+  body.navigating #quick-rail{
+    display:flex !important; flex-direction:column !important; align-items:stretch !important;
+    width:100% !important; height:100% !important; max-height:100% !important;
+    overflow-x:hidden !important; overflow-y:auto !important;
+    padding:6px !important; gap:3px !important; border-radius:18px !important;
+  }
+  body.navigating #quick-rail .qr-btn{
+    flex:0 0 auto !important; width:100% !important; min-width:0 !important;
+    height:47px !important; min-height:47px !important;
+    padding:0 13px !important; gap:12px !important;
+    flex-direction:row !important; justify-content:flex-start !important; border-radius:12px !important;
+  }
+  body.navigating #quick-rail .qr-ico{ font-size:1.42rem !important; line-height:1 !important; filter:none !important; }
+  body.navigating #quick-rail .qr-label{
+    display:inline-flex !important; font-size:.86rem !important; font-weight:600 !important;
+    white-space:nowrap !important; overflow:hidden !important; text-overflow:ellipsis !important; min-width:0 !important;
+  }
+  body.navigating #quick-rail .qr-divider{
+    width:calc(100% - 18px) !important; height:1px !important; margin:3px 9px !important; align-self:center !important;
+  }
+}
 
 /* Constrained / blob-worker-blocked browsers (Tesla, sandbox): force the solid
    2D map during navigation instead of the 3D engine that crashes them. */
@@ -35979,116 +36239,5 @@ html.wl-no3d body.navigating #map { display:block !important; }
   #wlShell .auth-side{ height:auto !important; }
 }
 </style>
-<script>
-
-/* ======================================================================
-   "Hey Whaly" — always-on wake word + persona voice (Siri / Hey Grok style)
-   Listens in the background; on "Hey Whaly" it answers out loud in Whaly's
-   voice and starts a conversation. Fully client-side.
-====================================================================== */
-(function WhalyWake(){
-  if (window.WLWake) return;
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  var synth = window.speechSynthesis;
-  var K_ON = 'waylynq:wake:on';
-  function load(k,d){ try{ var v=localStorage.getItem(k); return v==null?d:v==='1'; }catch(e){ return d; } }
-  function save(k,v){ try{ localStorage.setItem(k, v?'1':'0'); }catch(e){} }
-
-  var enabled = load(K_ON, false);
-  var rec = null, running = false, lastHandled = '', awake = false;
-
-  var GREETINGS = ['Ready to navigate!', 'Hey! What’s up?', 'I’m here — where to?',
-    'Yes? Where are we headed?', 'Hi! Tell me where to go.'];
-  function greet(){ return GREETINGS[Math.floor(Math.random()*GREETINGS.length)]; }
-  function say(t){ try{ if(window.WLWhaly && window.WLWhaly.speak) window.WLWhaly.speak(t); }catch(e){} }
-
-  var WAKE = /\b(hey|ok|okay|yo|hi)?\s*(whaly|whaley|whale|wailey|waylee|waylyn|wally)\b/i;
-
-  /* ---- UI toggle chip ---- */
-  var chip, dot;
-  function buildChip(){
-    if (chip) return;
-    var css = document.createElement('style');
-    css.textContent =
-      '#wlWakeChip{position:fixed;left:14px;bottom:16px;z-index:99999;display:inline-flex;align-items:center;gap:8px;'+
-      'background:#0e1626;color:#eaf2ff;border:1px solid #27354e;border-radius:999px;padding:9px 14px;font:600 13px system-ui;'+
-      'cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35);user-select:none}'+
-      '#wlWakeChip .wd{width:9px;height:9px;border-radius:50%;background:#55617a;flex:0 0 auto}'+
-      '#wlWakeChip.on .wd{background:#34c759;box-shadow:0 0 0 0 rgba(52,199,120,.6);animation:wlwk 1.6s infinite}'+
-      '#wlWakeChip.awake .wd{background:#e5484d;animation:wlwk .9s infinite}'+
-      '@keyframes wlwk{0%{box-shadow:0 0 0 0 rgba(52,199,120,.5)}70%{box-shadow:0 0 0 7px rgba(52,199,120,0)}100%{box-shadow:0 0 0 0 rgba(52,199,120,0)}}'+
-      '@media(max-width:620px){#wlWakeChip{left:10px;bottom:10px;padding:8px 12px;font-size:12px}}';
-    document.head.appendChild(css);
-    chip = document.createElement('button'); chip.id='wlWakeChip'; chip.type='button';
-    chip.innerHTML = '<span class="wd"></span><span class="wl-wk-label">Hey Whaly</span>';
-    dot = chip.querySelector('.wd');
-    chip.addEventListener('click', function(){ setEnabled(!enabled); });
-    document.body.appendChild(chip);
-    reflect();
-  }
-  function reflect(){
-    if (!chip) return;
-    chip.classList.toggle('on', enabled && running);
-    chip.classList.toggle('awake', awake);
-    chip.querySelector('.wl-wk-label').textContent = !SR ? 'Voice N/A'
-      : (enabled ? (awake ? 'Listening…' : 'Hey Whaly ✓') : 'Hey Whaly');
-  }
-
-  /* ---- continuous listening ---- */
-  function start(){
-    if (!SR || running) return;
-    try{
-      rec = new SR(); rec.lang='en-US'; rec.continuous=true; rec.interimResults=true;
-      rec.onresult = function(ev){
-        var finalTxt='';
-        for (var i=ev.resultIndex;i<ev.results.length;i++){ if(ev.results[i].isFinal) finalTxt += ev.results[i][0].transcript+' '; }
-        finalTxt = finalTxt.replace(/\s+/g,' ').trim();
-        if (!finalTxt) return;
-        if (finalTxt === lastHandled) return;
-        var m = finalTxt.match(WAKE);
-        if (!m) return;
-        lastHandled = finalTxt;
-        awake = true; reflect();
-        var after = finalTxt.slice(m.index + m[0].length).replace(/^[,\s]+/,'').trim();
-        if (after && after.length > 1){
-          // "Hey Whaly, take me to the airport" — act on the command directly
-          say('On it.');
-          try{ window.WLWhaly.ask(after); }catch(e){}
-        } else {
-          // just the wake word — greet and open for a conversation
-          say(greet());
-          try{ window.WLWhaly.open(); }catch(e){}
-        }
-        setTimeout(function(){ awake=false; reflect(); }, 2500);
-      };
-      rec.onerror = function(e){ /* keep calm; onend will restart */ };
-      rec.onend = function(){ running=false; if(enabled){ setTimeout(start, 400); } reflect(); };
-      rec.start(); running = true; reflect();
-    }catch(e){ running=false; reflect(); }
-  }
-  function stop(){ enabled=false; if(rec){ try{ rec.stop(); }catch(e){} } running=false; awake=false; reflect(); }
-
-  function setEnabled(on){
-    enabled = on; save(K_ON, on);
-    if (on){ if (!SR){ reflect(); return; } start(); if (synth) try{ synth.resume(); }catch(e){} }
-    else stop();
-  }
-
-  window.WLWake = { enable:function(){ setEnabled(true); }, disable:function(){ setEnabled(false); }, enabled:function(){ return enabled; } };
-
-  function init(){
-    buildChip();
-    // If the driver had it on, resume listening after the first interaction
-    // (browsers require a gesture before granting the mic).
-    if (enabled && SR){
-      var kick = function(){ document.removeEventListener('pointerdown', kick); document.removeEventListener('keydown', kick); start(); };
-      document.addEventListener('pointerdown', kick, { once:true });
-      document.addEventListener('keydown', kick, { once:true });
-    }
-  }
-  if (document.readyState !== 'loading') init(); else document.addEventListener('DOMContentLoaded', init, { once:true });
-})();
-
-</script>
 </body>
 </html>
