@@ -10875,6 +10875,88 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     };
   }
 
+  /* ==================================================================
+     AIRPORT TERMINAL AWARENESS
+     When a route lands on an airport, Whaly asks which terminal and then
+     re-routes straight to that terminal's doors.
+  ================================================================== */
+  function isAirportPlace(place) {
+    if (!place || place._isTerminal) return false;
+    if (place.klass === 'aeroway' && /aerodrome|airport/.test(String(place.category || ''))) return true;
+    const n = String(place.name || place.label || '').toLowerCase();
+    // Avoid false hits on airport roads, hotels, parking, rail links, etc.
+    if (/\b(road|rd|street|st\.?|ave|avenue|blvd|motel|hotel|inn|lodge|parking|garage|lot|rail|station|shuttle|diner|cafe|restaurant|bar|mall|plaza)\b/.test(n)) return false;
+    return /\bairport\b/.test(n) || /\bintl\.?\b/.test(n);
+  }
+  // Pull the airport's terminals from OpenStreetMap (nearest-first, de-duped,
+  // ordered so "Terminal 1, 2, 3…" read naturally).
+  async function airportTerminals(lat, lng) {
+    const q = '[out:json][timeout:25];('
+      + 'node["aeroway"="terminal"](around:4500,' + lat + ',' + lng + ');'
+      + 'way["aeroway"="terminal"](around:4500,' + lat + ',' + lng + ');'
+      + 'relation["aeroway"="terminal"](around:4500,' + lat + ',' + lng + ');'
+      + ');out center tags;';
+    let data;
+    try { data = await overpass(q, true); } catch (e) { return []; }
+    const out = [];
+    ((data && data.elements) || []).forEach((e) => {
+      const t = e.tags || {};
+      const la = e.lat != null ? e.lat : (e.center && e.center.lat);
+      const lo = e.lon != null ? e.lon : (e.center && e.center.lon);
+      if (la == null || lo == null) return;
+      let nm = t.name || '';
+      if (!nm && t.ref) nm = 'Terminal ' + t.ref;
+      if (!nm) nm = 'Terminal';
+      out.push({ name: nm, ref: String(t.ref || ''), lat: la, lng: lo, dist: haversine({ lat: lat, lng: lng }, { lat: la, lng: lo }) });
+    });
+    const seen = {}, uniq = [];
+    out.sort((a, b) => a.dist - b.dist).forEach((x) => {
+      const k = x.name.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!seen[k]) { seen[k] = 1; uniq.push(x); }
+    });
+    uniq.sort((a, b) => {
+      const na = parseFloat(a.ref || (a.name.match(/\d+/) || [''])[0]);
+      const nb = parseFloat(b.ref || (b.name.match(/\d+/) || [''])[0]);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return a.name.localeCompare(b.name);
+    });
+    return uniq;
+  }
+  // Match a spoken/typed answer ("terminal 4", "T4", "4", "international") to a terminal.
+  function matchTerminal(text, terminals) {
+    if (!terminals || !terminals.length) return null;
+    const t = String(text || '').toLowerCase().trim();
+    if (!t) return null;
+    let m = t.match(/\bterminal\s*([0-9]{1,2}[a-z]?|[a-z])\b/) || t.match(/\bt\s*-?\s*([0-9]{1,2}[a-z]?)\b/);
+    let tok = m ? m[1] : null;
+    if (!tok) { const only = t.match(/^([0-9]{1,2}[a-z]?|[a-z])$/); if (only) tok = only[1]; }
+    if (tok) {
+      const hit = terminals.find((x) => {
+        const ref = (x.ref || '').toLowerCase();
+        const nm = x.name.toLowerCase().replace(/terminal/g, '').trim();
+        return ref === tok || nm === tok || nm.split(/\s+/).indexOf(tok) >= 0;
+      });
+      if (hit) return hit;
+    }
+    const named = terminals.find((x) => {
+      const nm = x.name.toLowerCase();
+      return nm.indexOf(t) >= 0 || (t.length > 3 && t.indexOf(nm) >= 0);
+    });
+    if (named) return named;
+    if (/\bdepart|check.?in/.test(t)) return terminals[0];
+    return null;
+  }
+  // Fired from planRoute: if the destination is an airport, hand off to Whaly to
+  // ask which terminal. Never throws into the routing path.
+  function maybeAskTerminal(place) {
+    try {
+      if (!isAirportPlace(place)) return;
+      if (window.WLWhaly && typeof window.WLWhaly.askAirportTerminal === 'function') {
+        window.WLWhaly.askAirportTerminal({ name: place.name || place.label || 'the airport', lat: place.lat, lng: place.lng });
+      }
+    } catch (e) { /* advisory only */ }
+  }
+
   async function googlePlaceSearch(q, bias) {
     // Places API (New) supports browser CORS. Only runs when a key is set.
     const body = { textQuery: q, maxResultCount: 6 };
@@ -11298,6 +11380,7 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
     allRoutes = routes;
     activeRouteIndex = pickBestRouteIndex(routes);
     renderRoutes(); renderAltRoutes();
+    maybeAskTerminal(to);   // airport destination → Whaly asks which terminal
 
     showLocked(to.name || to.label, from.label, mode, src, stops.length);
     elInput.value = ''; hideSuggestions();
@@ -14247,6 +14330,8 @@ window.L&&window.L.maplibreGL||document.write('<scr'+'ipt src="https://cdn.jsdel
       else if (el) showPlaceCard(poiToPlace(key, el));
     },
     routeTo: routeTo,
+    airportTerminals: airportTerminals,
+    matchTerminal: matchTerminal,
     /* Nearby lives in the shell, above the map, and had no way to see the
        route - so it could only ever search one circle around a single point.
        Everything past the first few miles of a long trip was invisible. */
@@ -34862,7 +34947,70 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
 
   /* ---------------- sending ---------------- */
   function sendInput(){ var t=(input.value||'').trim(); if(!t) return; input.value=''; send(t); }
+  /* ---------------- airport terminal flow ----------------
+     When a route lands on an airport, Whaly asks which terminal and then
+     routes straight to that terminal. While waiting for the answer, the next
+     thing the driver says/types is read as their terminal choice. */
+  var pendingTerminal=null, lastTermAskAt=0;
+  function askAirportTerminal(airport){
+    if(!airport || airport.lat==null) return;
+    var now=Date.now();
+    // don't double-ask for the same airport within a few seconds
+    if(pendingTerminal && pendingTerminal.airport===airport.name && now-lastTermAskAt<8000) return;
+    if(now-lastTermAskAt<4000 && pendingTerminal) return;
+    lastTermAskAt=now;
+    var W=window.WayLyn;
+    var p=(W && W.airportTerminals) ? W.airportTerminals(airport.lat,airport.lng) : Promise.resolve([]);
+    p.then(function(terms){
+      if(!terms || !terms.length){ return; }               // no terminal data → stay on the airport
+      if(terms.length===1){
+        try{ W.routeTo({lat:terms[0].lat,lng:terms[0].lng,name:airport.name+' — '+terms[0].name,label:terms[0].name,_isTerminal:true}); }catch(e){}
+        open(); var one='There’s just one terminal at '+airport.name+' — routing you right to '+terms[0].name+'. 🧳';
+        bubble('whaly',one); remember('whaly',one); speak(one); return;
+      }
+      pendingTerminal={ airport:airport.name, terminals:terms, at:Date.now() };
+      open();
+      var names=terms.slice(0,8).map(function(x){return x.name;});
+      var list=names.length>1 ? (names.slice(0,-1).join(', ')+' or '+names[names.length-1]) : names[0];
+      var q='You’re headed to '+airport.name+'. Which terminal — '+list+'? Say or type the one you need and I’ll route you right to its doors. (Say “skip” for the airport itself.)';
+      bubble('whaly',q); remember('whaly',q); speak('Which terminal are you flying from?');
+      try{ directUntil=Date.now()+20000; setMicLive(true); }catch(e){}   // let a spoken answer be heard hands-free
+    }).catch(function(){});
+  }
+  function handleTerminalReply(text){
+    var pt=pendingTerminal;
+    bubble('user',text); remember('user',text);
+    if(/\b(skip|forget it|just the airport|the airport|no thanks|nevermind|never mind|cancel|stop)\b/i.test(text)){
+      pendingTerminal=null;
+      var m='No problem — I’ll keep you routed to '+pt.airport+' itself.'; bubble('whaly',m); remember('whaly',m); speak(m); return;
+    }
+    var hit=(window.WayLyn && window.WayLyn.matchTerminal) ? window.WayLyn.matchTerminal(text,pt.terminals) : null;
+    if(hit){
+      pendingTerminal=null;
+      try{ window.WayLyn.routeTo({lat:hit.lat,lng:hit.lng,name:pt.airport+' — '+hit.name,label:hit.name,_isTerminal:true}); }catch(e){}
+      var done='Perfect — routing you to '+hit.name+' at '+pt.airport+'. See you at the curb! 🧳';
+      bubble('whaly',done); remember('whaly',done); speak('Routing you to '+hit.name+'.'); setTimeout(close,600); return;
+    }
+    // Not a terminal — if it reads like a brand-new request, drop terminal mode and answer normally.
+    if(/\b(route|take me|navigate|go to|drive|directions|what|how|why|when|who|where|weather|food|gas|coffee|hungry|recipe|play|call)\b/i.test(text) || text.split(/\s+/).length>6){
+      pendingTerminal=null;
+      var typing=bubble('whaly','…');
+      reply(text).then(function(res){ typing.textContent=res.text; remember('whaly',res.text); if(res.action) addAction(typing,res.action.label,res.action.fn); speak(res.speak||res.text); log.scrollTop=log.scrollHeight; }).catch(function(){ typing.textContent='Hmm, I lost that one. Try again?'; });
+      return;
+    }
+    // Otherwise, gently re-ask.
+    var names=pt.terminals.slice(0,8).map(function(x){return x.name;}).join(', ');
+    var m2='Which terminal? I’ve got: '+names+'. (or say “skip” for the airport)';
+    bubble('whaly',m2); remember('whaly',m2); speak('Which terminal?');
+    try{ directUntil=Date.now()+20000; setMicLive(true); }catch(e){}
+  }
+
   function send(text){
+    // If Whaly just asked which terminal, read this as the answer.
+    if(pendingTerminal){
+      profile.count=(profile.count||0)+1; save(K_PROF,profile);
+      handleTerminalReply(text); log.scrollTop=log.scrollHeight; return;
+    }
     bubble('user',text); remember('user',text);
     profile.count=(profile.count||0)+1; save(K_PROF,profile);
     var typing=bubble('whaly','…');
@@ -35113,6 +35261,7 @@ window.addEventListener('load',()=>{install(); setTimeout(install,500);},{once:t
      when they finish — so every mic in the app works, never fighting the wake
      listener for the same microphone. */
   window.WLWhaly = { open:open, close:close, ask:function(t){ open(); setTimeout(function(){ send(t); },120); }, speak:speak,
+    askAirportTerminal:askAirportTerminal,
     pauseVoice:function(){ voicePaused=true; if(voiceRec){ try{ voiceRec.stop(); }catch(e){} } },
     resumeVoice:function(){ voicePaused=false; setTimeout(startVoice, 600); } };
 
